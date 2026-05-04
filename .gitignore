@@ -1,0 +1,17 @@
+.DS_Store
+__pycache__/
+*.py[cod]
+*$py.class
+
+.pytest_cache/
+.coverage
+htmlcov/
+
+.venv/
+venv/
+env/
+
+emotion-state.json
+*.local.json
+*.tmp
+*.log
