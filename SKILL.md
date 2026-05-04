@@ -82,9 +82,9 @@ python3 {baseDir}/scripts/emotion_engine_utils.py pre_turn_decay <state_file>
 python3 {baseDir}/scripts/emotion_engine_utils.py appraise <state_file> <message...>
 ```
 
-The helper returns a suggested appraisal label, trust-modulated PAD delta, and suggested target PAD. Treat it as advisory, not absolute. Adjust for context, relationship history, personality baseline, sarcasm, playfulness, and the user's emotional intent.
+The helper returns a suggested appraisal label, trust-modulated PAD delta, and suggested target PAD. Treat it as advisory, not absolute. The LLM is responsible for the final contextual judgment. Adjust for conversation history, relationship history, personality baseline, sarcasm, playfulness, and the user's emotional intent.
 
-3. Choose the final P, A, D values. Each dimension should usually shift at most ±0.15 per turn. P stays in -1..1; A and D stay in 0..1.
+3. Choose the final P, A, D values. The Python helper may suggest a direction, but the final update comes from your contextual judgment. Each dimension should usually shift at most ±0.15 per turn. P stays in -1..1; A and D stay in 0..1.
 
 4. Record the turn with a compact emotional memory:
 

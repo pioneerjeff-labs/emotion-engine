@@ -1,6 +1,6 @@
 # Emotion Engine
 
-Emotion Engine is an experimental OpenClaw skill for giving conversational agents a compact, persistent emotional state. It combines PAD emotion values, a slow-moving trust coefficient, deterministic appraisal helpers, chat-first configuration, and situation-aware emotional memories.
+Emotion Engine is an experimental OpenClaw skill for giving conversational agents a compact, persistent emotional state. It combines PAD emotion values, a slow-moving trust coefficient, chat-first configuration, deterministic helper tools, and situation-aware emotional memories.
 
 Emotion Engine is part of PioneerJeff Labs (PJL), a small open-source lab exploring agent continuity, memory, and personal AI.
 
@@ -11,10 +11,22 @@ Status: experimental / v0.1-ready.
 - Maintains emotional state using the PAD model: Pleasure, Arousal, and Dominance.
 - Applies time-based decay so emotion drifts back toward a personality baseline.
 - Tracks trust as a separate relationship coefficient that changes slowly over time.
-- Appraises user messages with deterministic keyword-based helper logic.
+- Provides deterministic appraisal helpers as optional guardrails, not as the source of truth.
 - Records compact emotion logs that preserve meaning without saving full transcripts.
 - Supports natural-language style configuration, tuning, pause/resume, and status checks.
 - Extracts session patterns such as conflict, repair, volatility, and suppression.
+
+## Design Boundary
+
+Emotion Engine is not a chatbot and does not generate assistant replies by itself. It is a state layer for an LLM-powered agent.
+
+The intended split is:
+
+- The LLM understands context, decides the final appraisal, chooses the final PAD update, writes compact emotional memory, and generates the actual reply.
+- The Python helper stores state, clamps values, applies decay, records logs, extracts session patterns, and updates trust slowly.
+- The deterministic `appraise` command is only an advisory fallback for testing or simple integrations. A real agent should treat it as a hint, not as the final emotional judgment.
+
+In short: Python maintains continuity; the LLM makes the contextual judgment.
 
 ## Quick Start
 
@@ -40,13 +52,15 @@ Example vibe:
 
 You can also skip configuration and use the default warm, steady style.
 
-## Try Without OpenClaw
+## State Lifecycle Check
 
-If you do not have an OpenClaw environment yet, run the local simulator:
+If you do not have an OpenClaw environment yet, run the local lifecycle checker:
 
 ```bash
 python3 scripts/simulate_openclaw_session.py --style "温柔但不讨好，有一点自己的边界"
 ```
+
+This script does not call an LLM and does not generate AI replies. It uses the deterministic helper as a stand-in so you can verify that the state lifecycle works: configure, session start, decay, record turn, session end, trust update, and emotion log.
 
 You can pass custom turns:
 
@@ -58,9 +72,13 @@ python3 scripts/simulate_openclaw_session.py \
   --turn "对，这样更像 MVP，我们先按这个做"
 ```
 
-The simulator runs the same lifecycle that OpenClaw should trigger: session start, in-session decay, appraisal, turn recording, session end, trust update, and recent emotion log.
-
 By default the simulation is ephemeral and does not write a state file. Add `--state ./emotion-state.sim.json` if you want to inspect or resume the simulated state.
+
+Use `--json` when you want the raw debug output:
+
+```bash
+python3 scripts/simulate_openclaw_session.py --json
+```
 
 ## Manual Install
 

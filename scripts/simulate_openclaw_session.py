@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """
-simulate_openclaw_session.py — Local lifecycle simulator for Emotion Engine.
+simulate_openclaw_session.py — Local state lifecycle checker for Emotion Engine.
 
-Use this when OpenClaw is not installed yet. It runs the same core lifecycle:
-configure -> session_start -> pre_turn_decay -> appraise -> record_turn
--> session_end -> trust update.
+Use this when OpenClaw is not installed yet. It does not call an LLM and does
+not generate assistant replies. It uses the deterministic appraisal helper as
+a stand-in so you can verify the state lifecycle:
+configure -> session_start -> pre_turn_decay -> advisory appraisal ->
+record_turn -> session_end -> trust update.
 """
 
 import argparse
@@ -56,6 +58,111 @@ def print_json(label, value):
     print(json.dumps(value, indent=2, ensure_ascii=False))
 
 
+def pad_line(emotion):
+    return (
+        f"P={emotion['pleasure']:.4f}, "
+        f"A={emotion['arousal']:.4f}, "
+        f"D={emotion['dominance']:.4f}"
+    )
+
+
+def describe_delta(delta):
+    parts = []
+    if delta["P"] > 0.02:
+        parts.append("warmer")
+    elif delta["P"] < -0.02:
+        parts.append("more guarded")
+    if delta["A"] > 0.02:
+        parts.append("more energized")
+    elif delta["A"] < -0.02:
+        parts.append("calmer")
+    if delta["D"] > 0.02:
+        parts.append("more bounded")
+    elif delta["D"] < -0.02:
+        parts.append("softer")
+    return ", ".join(parts) if parts else "mostly unchanged"
+
+
+def format_delta(delta):
+    return ", ".join(f"{key} {value:+.4f}" for key, value in delta.items())
+
+
+def summarize_patterns(patterns):
+    if not patterns.get("sufficient_data"):
+        return f"Only {patterns.get('turn_count', 0)} turn(s), so there is not enough trajectory data yet."
+
+    notes = [f"{patterns['turn_count']} turns analyzed"]
+    if patterns.get("v_shape"):
+        notes.append("conflict followed by repair")
+    elif patterns.get("had_conflict"):
+        notes.append("conflict detected")
+    else:
+        notes.append("no conflict detected")
+
+    if patterns.get("sustained_negative"):
+        notes.append("sustained negative trend")
+    elif patterns.get("avg_pleasure_delta", 0) > 0:
+        notes.append("slightly positive emotional trend")
+    else:
+        notes.append("mostly stable emotional trend")
+
+    if patterns.get("dominance_suppressed"):
+        notes.append("dominance appears suppressed")
+    else:
+        notes.append("boundaries remain stable")
+
+    return "; ".join(notes) + "."
+
+
+def print_human_header(state):
+    status = engine.public_status(state)
+    print("# Emotion Engine State Lifecycle Check")
+    print()
+    print("This is not an AI chat demo. No assistant reply is generated here.")
+    print("The deterministic appraisal helper is used only as a stand-in for LLM judgment.")
+    print("In a real integration, the LLM decides the final appraisal, PAD update, memory, and reply.")
+    print()
+    print(f"Configured style: {status['style']}")
+    print(f"Initial status: {status['summary']} | trust tier: {status['trust_tier']}")
+
+
+def print_human_turn(idx, message, appraisal, before, after, preview):
+    delta = engine.emotion_delta(before, after)
+    print()
+    print(f"Turn {idx}")
+    print(f"User input: {message}")
+    print(f"Advisory helper: {appraisal['appraisal']} ({appraisal['cue']})")
+    print(f"Advisory PAD shift: {format_delta(appraisal['actual_delta'])}")
+    print(f"Simulated final PAD: {pad_line(after)}")
+    print(f"State effect: {describe_delta(delta)}")
+    print(f"Response guidance preview for the LLM: {preview}")
+    print("Real integration note: an LLM should make the final contextual decision before record_turn.")
+
+
+def print_human_footer(state, patterns, trust_before, trust_delta, args):
+    status = engine.public_status(state)
+    print()
+    print("Session Summary")
+    print(f"Pattern summary: {summarize_patterns(patterns)}")
+    print(f"Trust update: {trust_before:.4f} -> {state['trust']:.4f} (raw delta {trust_delta})")
+    print(f"Final status: {status['summary']} | {status['trust_tier']}")
+    if args.state:
+        print(f"Saved state file: {args.state}")
+    else:
+        print("State was not saved. Add --state emotion-state.sim.json to inspect or resume it.")
+
+    print()
+    print("Recent compact emotion memories")
+    for entry in state.get("emotion_log", [])[-5:]:
+        event = entry.get("event_type", "event")
+        situation = entry.get("situation", "(no situation)")
+        appraisal = entry.get("appraisal")
+        if appraisal:
+            print(f"- {event}: {appraisal}; {situation}")
+        else:
+            print(f"- {event}: {situation}")
+
+
 def run_simulation(args):
     if args.resume and not args.state:
         raise SystemExit("--resume requires --state")
@@ -75,19 +182,24 @@ def run_simulation(args):
 
     turns = args.turn or DEFAULT_TURNS
 
-    print_json("Initial Status", engine.public_status(state))
+    if args.json:
+        print_json("Initial Status", engine.public_status(state))
+    else:
+        print_human_header(state)
 
     state = engine.session_start(state)
-    print_json("Session Start", {
-        "emotion": state["emotion"],
-        "trust": state["trust"],
-        "session_count": state["session_count"],
-    })
+    if args.json:
+        print_json("Session Start", {
+            "emotion": state["emotion"],
+            "trust": state["trust"],
+            "session_count": state["session_count"],
+        })
 
     for idx, message in enumerate(turns, 1):
         state = engine.apply_in_session_decay(state)
         appraisal = engine.appraise_message(state, message)
         suggested = appraisal["suggested"]
+        before = state["emotion"].copy()
         state = engine.record_turn(
             state,
             suggested["P"],
@@ -100,39 +212,48 @@ def run_simulation(args):
             follow_up_bias=tone_preview(state),
             salience=0.45,
         )
-        print_json(f"Turn {idx}", {
-            "user": message,
-            "appraisal": appraisal["appraisal"],
-            "actual_delta": appraisal["actual_delta"],
-            "emotion": state["emotion"],
-            "tone_preview": tone_preview(state),
-        })
+        if args.json:
+            print_json(f"Turn {idx}", {
+                "user": message,
+                "advisory_appraisal": appraisal["appraisal"],
+                "advisory_delta": appraisal["actual_delta"],
+                "simulated_final_emotion": state["emotion"],
+                "tone_preview": tone_preview(state),
+                "note": "In real integration, the LLM should decide final appraisal and PAD before record_turn.",
+            })
+        else:
+            print_human_turn(idx, message, appraisal, before, state["emotion"], tone_preview(state))
 
     state, patterns = engine.session_end(state)
     trust_delta = choose_trust_delta(patterns)
+    trust_before = state["trust"]
     if trust_delta:
         state = engine.apply_trust_delta(state, trust_delta)
 
     if args.state:
         engine.save_state(args.state, state)
 
-    print_json("Session End", {
-        "patterns": patterns,
-        "trust_delta": trust_delta,
-        "final_status": engine.public_status(state),
-        "state_file": args.state,
-        "saved": bool(args.state),
-    })
-    print_json("Recent Emotion Log", state.get("emotion_log", [])[-5:])
+    if args.json:
+        print_json("Session End", {
+            "patterns": patterns,
+            "trust_delta": trust_delta,
+            "final_status": engine.public_status(state),
+            "state_file": args.state,
+            "saved": bool(args.state),
+        })
+        print_json("Recent Emotion Log", state.get("emotion_log", [])[-5:])
+    else:
+        print_human_footer(state, patterns, trust_before, trust_delta, args)
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Simulate an OpenClaw Emotion Engine session locally.")
+    parser = argparse.ArgumentParser(description="Check the Emotion Engine state lifecycle locally.")
     parser.add_argument("--state", help="Optional state file to read/write. Omit for an ephemeral simulation.")
     parser.add_argument("--resume", action="store_true", help="Resume from --state instead of starting fresh.")
     parser.add_argument("--style", help="Natural-language character vibe, e.g. 温柔但不讨好.")
     parser.add_argument("--soul-file", help="Path to SOUL.md-like character description.")
     parser.add_argument("--turn", action="append", help="User turn to simulate. Can be repeated.")
+    parser.add_argument("--json", action="store_true", help="Print raw JSON debug output.")
     args = parser.parse_args()
     run_simulation(args)
 

@@ -7,6 +7,7 @@
 - Added repository-level license, ignore rules, contribution notes, and security policy.
 - Updated README usage paths for a GitHub repository root.
 - Added a minimal standard-library test suite.
+- Clarified that the lifecycle checker is not an AI chat demo and that LLMs make the final contextual emotion judgment.
 
 ## 0.1.0
 
