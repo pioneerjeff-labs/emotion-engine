@@ -34,6 +34,24 @@ class PromptPreviewTest(unittest.TestCase):
         self.assertIn("LLM task", guidance)
         self.assertIn("Treat this as a hint", guidance)
 
+    def test_chinese_guidance_uses_chinese_labels(self):
+        state = engine.apply_configuration(
+            engine.default_state(),
+            "冷静可靠，有清晰边界",
+            "test",
+        )
+
+        guidance = prompt_preview.build_guidance(
+            state,
+            "谢谢你，上一版清楚很多。",
+            "zh-CN",
+        )
+
+        self.assertIn("当前连续性状态", guidance)
+        self.assertIn("辅助评价", guidance)
+        self.assertIn("大模型任务", guidance)
+        self.assertIn("这只是提示，不是最终判断", guidance)
+
     def test_json_payload_contains_responsibilities(self):
         payload = prompt_preview.build_json_payload(
             engine.default_state(),

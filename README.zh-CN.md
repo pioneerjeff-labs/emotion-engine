@@ -1,16 +1,16 @@
 # Emotion Engine
 
-**给 LLM Agent 使用的情绪连续性状态层。**
+**给大模型智能体使用的情绪连续性状态层。**
 
 [English](README.md) | [中文](README.zh-CN.md)
 
-大多数 AI Agent 可以在单轮对话里表现得不错，但它们很难把“互动的情绪线索”持续带到下一轮、下一天、下一次会话。它可能上一轮很温暖，下一轮又像完全重置；它也很难记住上一次互动到底是协作、紧张、修复，还是悬而未决。
+大多数 AI 智能体可以在单轮对话里表现得不错，但它们很难把“互动的情绪线索”持续带到下一轮、下一天、下一次会话。它可能上一轮很温暖，下一轮又像完全重置；它也很难记住上一次互动到底是协作、紧张、修复，还是悬而未决。
 
-Emotion Engine 给 LLM Agent 提供一个小而可检查的连续性层：情绪状态、信任、时间衰减、边界感，以及紧凑的情绪记忆。LLM 仍然负责理解上下文和生成回复；Emotion Engine 负责把这些判断保存下来，让它们能被后续会话继续使用。
+Emotion Engine 给大模型智能体提供一个小而可检查的连续性层：情绪状态、信任、时间衰减、边界感，以及紧凑的情绪记忆。大模型仍然负责理解上下文和生成回复；Emotion Engine 负责把这些判断保存下来，让它们能被后续会话继续使用。
 
-Emotion Engine 是 PioneerJeff Labs (PJL) 的第一个开源项目。PJL 关注 agent continuity、memory 和 personal AI。
+Emotion Engine 是 PioneerJeff Labs (PJL) 的第一个开源项目。PJL 关注智能体连续性、记忆和个人 AI。
 
-状态：experimental / v0.1。
+状态：实验性 / v0.1。
 
 ## 它解决什么问题
 
@@ -22,79 +22,80 @@ Emotion Engine 是 PioneerJeff Labs (PJL) 的第一个开源项目。PJL 关注 
 
 - 上一次会话整体是协作的
 - 信任略有增长，但关系仍然处在早期
-- 用户的 challenge 被理解为建设性反馈，而不是攻击
+- 用户的挑战被理解为建设性反馈，而不是攻击
 - 下一轮回复应该更温暖、更稳定，也更有边界
 
 ## 你可以用它做什么
 
 - 做跨会话情绪一致的角色 Agent
 - 做带有温和、用户可控关系记忆的个人助手
-- 做不保存完整隐私 transcript、但仍然有连续感的 AI companion
+- 做不保存完整对话原文、但仍然有连续感的 AI 伴侣
 - 做情绪会随时间变化的游戏 NPC 或叙事 Agent
-- 做 affective computing、agent memory、人机互动相关的研究原型
+- 做情感计算、智能体记忆、人机互动相关的研究原型
 
 ## 它怎么工作
 
 ```text
 用户消息
-  -> LLM 理解上下文和情绪含义
-  -> LLM 决定最终 appraisal、PAD 更新和回复
-  -> Emotion Engine 保存状态、trust 和紧凑记忆
-  -> 后续 prompt 可以获得连续性 guidance
+  -> 大模型理解上下文和情绪含义
+  -> 大模型决定最终评价、PAD 更新和回复
+  -> Emotion Engine 保存状态、信任和紧凑记忆
+  -> 后续提示词可以获得连续性上下文
 ```
 
 这个职责边界很重要：
 
-- **LLM** 负责理解上下文、做最终判断、生成回复。
-- **Python helper** 负责保存状态、限制数值范围、执行衰减、记录日志、提取 session pattern、缓慢更新 trust。
-- `appraise` 命令只是 fallback 或调试辅助，不是真实集成里的最终判断器。
+- **大模型**负责理解上下文、做最终判断、生成回复。
+- **Python 工具**负责保存状态、限制数值范围、执行衰减、记录日志、提取会话模式、缓慢更新信任。
+- `appraise` 命令只是备用建议或调试辅助，不是真实集成里的最终判断器。
 
-一句话：**LLM 做判断，Emotion Engine 负责记住。**
+一句话：**大模型做判断，Emotion Engine 负责记住。**
 
 ## 不安装 OpenClaw 也能试
 
 运行本地生命周期检查：
 
 ```bash
-python3 scripts/check_state_lifecycle.py --style "warm but not over-compliant, with clear boundaries"
+python3 scripts/check_state_lifecycle.py --style "温柔但不讨好，有清晰边界"
 ```
 
 你也可以传入中文模拟对话：
 
 ```bash
 python3 scripts/check_state_lifecycle.py \
-  --style "warm but not over-compliant, with clear boundaries" \
+  --style "温柔但不讨好，有清晰边界" \
   --turn "谢谢你，刚才那个版本清楚很多了" \
-  --turn "我想 challenge 一下，这个设计是不是还有点空？" \
-  --turn "对，这样更像 MVP，我们先按这个做"
+  --turn "我想认真挑战一下这个设计，它是不是还是有点抽象？" \
+  --turn "对，这样更像最小可行版本，我们先按这个方向推进"
 ```
 
-这个脚本不会调用 LLM，也不会生成 AI 回复。它只是验证状态层能否正常工作：配置、session start、衰减、辅助 appraisal、记录 turn、session end、trust update 和 emotion log。
+这个脚本不会调用大模型，也不会生成 AI 回复。它只是验证状态层能否正常工作：配置、会话开始、衰减、辅助评价、记录轮次、会话结束、信任更新和情绪日志。
 
-如果你想看它会给 LLM 什么样的上下文提示：
+如果你想看它会给大模型什么样的上下文提示：
 
 ```bash
 python3 scripts/prompt_preview.py \
-  --style "calm, reliable, and clearly bounded" \
-  --message "Thanks, the last version is much clearer. I want to challenge one part of the design."
+  --lang zh-CN \
+  --style "冷静可靠，有清晰边界" \
+  --message "谢谢你，上一版清楚很多。我想认真挑战一下其中一个设计点。"
 ```
 
-这会输出类似这样的 guidance：
+这会输出类似这样的提示：
 
 ```text
-Current continuity state:
-- Tone: warm, steady, firm
-- Trust tier: New
-- Style: mildly warm; calm; strongly bounded
+当前连续性状态：
+- 语气倾向：平稳、冷静、有边界
+- 信任阶段：新关系
+- 风格描述：冷静可靠，有清晰边界
 
-Advisory appraisal:
-- The helper sees this message as collaboration.
+辅助评价：
+- 规则工具暂时把这句话看作：协作。
 
-LLM task:
-- Interpret the message using full context.
-- Decide the final appraisal and PAD update.
-- Generate a natural reply shaped by the current state.
-- Record a compact emotional memory after the turn.
+大模型任务：
+- 结合完整上下文理解用户消息。
+- 决定最终评价和 PAD 更新。
+- 生成受当前连续性状态影响的自然回复。
+- 回复后记录一条紧凑情绪记忆。
 ```
 
 ## OpenClaw 快速安装
@@ -110,25 +111,25 @@ LLM task:
 - 把 skill 复制到 OpenClaw workspace
 - 如果没有 state 文件，就创建 `emotion-state.json`
 - 如果已有 state 文件，会保留原状态
-- 让你用一句话描述 Agent 的风格
+- 让你用一句话描述智能体的风格
 - 打印自然语言状态，方便确认它已经工作
 
-英文风格示例：
+风格示例：
 
 ```text
-warm but not over-compliant, with clear boundaries
+温柔但不讨好，有清晰边界
 ```
 
 ## 核心概念
 
 Emotion Engine 会保存和更新：
 
-- **PAD state**：Pleasure、Arousal、Dominance
-- **Trust**：缓慢变化的关系系数
-- **Personality baseline**：Agent 自然回落的基线状态
-- **Emotion trajectory**：单次会话内的数值轨迹
-- **Emotion log**：紧凑情绪记忆，不保存完整 transcript
-- **Session patterns**：冲突、修复、波动、压制、trust 信号
+- **PAD 状态**：愉悦度、唤醒度、主导感
+- **信任系数**：缓慢变化的关系系数
+- **人格基线**：智能体自然回落的基线状态
+- **情绪轨迹**：单次会话内的数值轨迹
+- **情绪日志**：紧凑情绪记忆，不保存完整对话原文
+- **会话模式**：冲突、修复、波动、压制、信任信号
 
 更多细节见 [Concepts](docs/CONCEPTS.md)。
 

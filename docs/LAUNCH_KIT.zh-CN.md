@@ -8,23 +8,23 @@
 
 ## 简短描述
 
-一个轻量的 AI Agent 情绪连续性状态层：PAD 状态、trust、时间衰减和紧凑情绪日志。
+一个轻量的 AI 智能体情绪连续性状态层：PAD 状态、信任、时间衰减和紧凑情绪日志。
 
 ## 中文发布文案
 
 我发布了 PioneerJeff Labs 的第一个开源项目：Emotion Engine。
 
-它不是一个聊天机器人，而是给 LLM Agent 使用的“情绪连续性状态层”：PAD 情绪状态、trust、时间衰减、紧凑情绪日志。
+它不是一个聊天机器人，而是给大模型智能体使用的“情绪连续性状态层”：PAD 情绪状态、信任、时间衰减、紧凑情绪日志。
 
-我的目标是让长期运行的个人助手/角色 Agent 不只是记住事实，也能保留一种可解释、可迁移、用户可控的互动连续性。
+我的目标是让长期运行的个人助手或角色智能体不只是记住事实，也能保留一种可解释、可迁移、用户可控的互动连续性。
 
 Repo: https://github.com/pioneerjeff-labs/emotion-engine
 
 ## 中文组织介绍
 
-PioneerJeff Labs (PJL) 关注 agent continuity、memory 和 personal AI，目标是构建小而清晰、可检查、可迁移的个人 AI 基础组件。
+PioneerJeff Labs (PJL) 关注智能体连续性、记忆和个人 AI，目标是构建小而清晰、可检查、可迁移的个人 AI 基础组件。
 
-第一个项目 Emotion Engine 探索的是情绪连续性：一个 LLM Agent 如何在不假装识别真实人类情绪的前提下，携带 mood、trust、边界和紧凑情绪记忆跨会话延续。
+第一个项目 Emotion Engine 探索的是情绪连续性：一个大模型智能体如何在不假装识别真实人类情绪的前提下，携带情绪状态、信任、边界和紧凑情绪记忆跨会话延续。
 
 ## 不要这样表述
 
