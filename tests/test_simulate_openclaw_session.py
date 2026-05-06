@@ -7,6 +7,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
 SCRIPT = SCRIPTS / "simulate_openclaw_session.py"
+CHECKER = SCRIPTS / "check_state_lifecycle.py"
 
 sys.path.insert(0, str(SCRIPTS))
 spec = importlib.util.spec_from_file_location("simulate_openclaw_session", SCRIPT)
@@ -33,6 +34,9 @@ class SimulateOpenClawSessionTest(unittest.TestCase):
         formatted = simulator.format_delta({"P": 0.1, "A": -0.02, "D": 0.0})
 
         self.assertEqual(formatted, "P +0.1000, A -0.0200, D +0.0000")
+
+    def test_clearer_checker_entrypoint_exists(self):
+        self.assertTrue(CHECKER.exists())
 
 
 if __name__ == "__main__":

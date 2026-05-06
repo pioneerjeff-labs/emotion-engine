@@ -8,6 +8,7 @@
 - Updated README usage paths for a GitHub repository root.
 - Added a minimal standard-library test suite.
 - Clarified that the lifecycle checker is not an AI chat demo and that LLMs make the final contextual emotion judgment.
+- Reworked README positioning for a clearer public launch story and added a launch kit.
 
 ## 0.1.0
 
