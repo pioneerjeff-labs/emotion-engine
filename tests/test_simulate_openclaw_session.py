@@ -1,6 +1,9 @@
 import importlib.util
+import argparse
+import io
 import sys
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
 
 
@@ -37,6 +40,29 @@ class SimulateOpenClawSessionTest(unittest.TestCase):
 
     def test_clearer_checker_entrypoint_exists(self):
         self.assertTrue(CHECKER.exists())
+
+    def test_chinese_lifecycle_output_uses_chinese_labels(self):
+        args = argparse.Namespace(
+            state=None,
+            resume=False,
+            style="温柔但不讨好，有清晰边界",
+            soul_file=None,
+            turn=["谢谢你，刚才那个版本清楚很多了"],
+            lang="zh-CN",
+            json=False,
+        )
+
+        output = io.StringIO()
+        with redirect_stdout(output):
+            simulator.run_simulation(args)
+
+        text = output.getvalue()
+        self.assertIn("状态生命周期检查", text)
+        self.assertIn("用户输入", text)
+        self.assertIn("辅助评价", text)
+        self.assertIn("会话总结", text)
+        self.assertNotIn("User input", text)
+        self.assertNotIn("Session Summary", text)
 
 
 if __name__ == "__main__":
