@@ -1,0 +1,34 @@
+# Emotion Engine 发布素材
+
+这个文档用于中文发布文案、PioneerJeff Labs 中文介绍和后续内容包装。
+
+## 一句话介绍
+
+给 LLM Agent 使用的情绪连续性状态层。
+
+## 简短描述
+
+一个轻量的 AI Agent 情绪连续性状态层：PAD 状态、trust、时间衰减和紧凑情绪日志。
+
+## 中文发布文案
+
+我发布了 PioneerJeff Labs 的第一个开源项目：Emotion Engine。
+
+它不是一个聊天机器人，而是给 LLM Agent 使用的“情绪连续性状态层”：PAD 情绪状态、trust、时间衰减、紧凑情绪日志。
+
+我的目标是让长期运行的个人助手/角色 Agent 不只是记住事实，也能保留一种可解释、可迁移、用户可控的互动连续性。
+
+Repo: https://github.com/pioneerjeff-labs/emotion-engine
+
+## 中文组织介绍
+
+PioneerJeff Labs (PJL) 关注 agent continuity、memory 和 personal AI，目标是构建小而清晰、可检查、可迁移的个人 AI 基础组件。
+
+第一个项目 Emotion Engine 探索的是情绪连续性：一个 LLM Agent 如何在不假装识别真实人类情绪的前提下，携带 mood、trust、边界和紧凑情绪记忆跨会话延续。
+
+## 不要这样表述
+
+- 不要说它能识别用户真实情绪。
+- 不要把它包装成心理健康工具。
+- 不要暗示 Python 脚本在真实集成里负责最终情绪判断。
+- 不要把它包装成操控依恋或优化关系的工具。

@@ -1,6 +1,6 @@
 # Emotion Engine Launch Kit
 
-Use this as the public packaging source for GitHub, social posts, demos, and the PioneerJeff Labs organization profile.
+Use this as the public packaging source for GitHub, launch posts, demos, and the PioneerJeff Labs organization profile.
 
 ## One-Liner
 
@@ -62,16 +62,6 @@ I just released Emotion Engine, the first open-source project from PioneerJeff L
 It is a lightweight state layer for emotionally continuous LLM agents: PAD state, trust, decay, and compact emotion logs.
 
 The idea is simple: the LLM still decides what happened and how to respond, but Emotion Engine gives it a persistent inner state to carry forward across sessions.
-
-Repo: https://github.com/pioneerjeff-labs/emotion-engine
-
-## Chinese Launch Post Draft
-
-我发布了 PioneerJeff Labs 的第一个开源项目：Emotion Engine。
-
-它不是一个聊天机器人，而是给 LLM Agent 使用的“情绪连续性状态层”：PAD 情绪状态、trust、时间衰减、紧凑情绪日志。
-
-我的目标是让长期运行的个人助手/角色 Agent 不只是记住事实，也能保留一种可解释、可迁移、用户可控的互动连续性。
 
 Repo: https://github.com/pioneerjeff-labs/emotion-engine
 

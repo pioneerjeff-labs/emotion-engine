@@ -9,6 +9,7 @@
 - Added a minimal standard-library test suite.
 - Clarified that the lifecycle checker is not an AI chat demo and that LLMs make the final contextual emotion judgment.
 - Reworked README positioning for a clearer public launch story and added a launch kit.
+- Added separate English and Chinese README files, concept docs, integration docs, and prompt guidance preview.
 
 ## 0.1.0
 

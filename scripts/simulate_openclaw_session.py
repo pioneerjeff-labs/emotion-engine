@@ -16,9 +16,9 @@ import emotion_engine_utils as engine
 
 
 DEFAULT_TURNS = [
-    "谢谢你，刚才那个版本已经清楚很多了。",
-    "这里我想 challenge 一下，这个设计是不是还有点空？",
-    "对，我觉得这样更靠谱，我们先按 MVP 做。",
+    "Thanks, the last version is much clearer.",
+    "I want to challenge one part of the design. Is it still a bit too abstract?",
+    "Yes, this feels more like an MVP. Let's move forward with this version.",
 ]
 
 

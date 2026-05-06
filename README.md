@@ -2,27 +2,31 @@
 
 **Emotional continuity for LLM agents.**
 
-Most AI agents respond well in the moment, but they do not carry an emotional thread across time. They can sound warm in one turn, blank in the next, and forget what a relationship has been feeling like.
+[English](README.md) | [Chinese](README.zh-CN.md)
 
-Emotion Engine gives an agent a small, inspectable inner state: mood, trust, decay, and compact emotional memories. The LLM still decides what happened and how to respond; Emotion Engine makes that judgment persistent.
+[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+
+Most AI agents can respond well in the moment, but they do not carry an emotional thread across time. They may sound warm in one turn, blank in the next, and forget whether the last interaction felt collaborative, tense, repaired, or unresolved.
+
+Emotion Engine gives an LLM-powered agent a small, inspectable continuity layer: mood, trust, decay, boundaries, and compact emotional memories. The LLM still decides what happened and how to respond. Emotion Engine makes that judgment persistent.
 
 Emotion Engine is part of PioneerJeff Labs (PJL), a small open-source lab exploring agent continuity, memory, and personal AI.
 
 Status: experimental / v0.1.
 
-[![License: MIT](https://img.shields.io/badge/license-MIT-green.svg)](LICENSE)
-[![Python](https://img.shields.io/badge/python-3.9%2B-blue.svg)](https://www.python.org/)
+## The Problem
 
-## Why This Exists
+Long-running agents need more than chat history.
 
-Long-running agents need more than chat history. They need a compact way to remember the emotional shape of interaction:
+Chat history stores what happened. Emotion Engine stores how the interaction has been feeling.
 
-- Did the user challenge the agent in a collaborative way, or in a hostile way?
-- Did a conflict get repaired?
-- Is trust slowly growing, or should the agent become more guarded?
-- Should the next reply be warmer, calmer, firmer, or more careful?
+Without a continuity layer, an agent often treats every session as emotionally fresh. With Emotion Engine, an agent can carry forward lightweight signals such as:
 
-Emotion Engine is a lightweight state layer for that kind of continuity.
+- the last session was collaborative
+- trust has grown slightly, but the relationship is still early
+- a challenge felt productive rather than hostile
+- the next response should be warm, steady, and clearly bounded
 
 ## What You Can Build
 
@@ -32,89 +36,59 @@ Emotion Engine is a lightweight state layer for that kind of continuity.
 - Game NPCs or narrative agents whose mood evolves over time.
 - Research prototypes for affective computing, agent memory, and human-agent interaction.
 
-## What It Is
-
-Emotion Engine stores and updates:
-
-- **PAD state**: Pleasure, Arousal, Dominance.
-- **Trust**: a slow-moving relationship coefficient.
-- **Personality baseline**: where the agent naturally drifts back to.
-- **Emotion trajectory**: numeric state during a session.
-- **Emotion log**: compact emotional memories, not full transcripts.
-- **Session patterns**: conflict, repair, volatility, suppression, and trust signals.
-
-## What It Is Not
-
-Emotion Engine is not a chatbot. It does not generate replies by itself.
-
-It is also not an emotion detector, mental health tool, or psychological assessment system. It models fictional or agent-internal continuity, not a real person's emotional state.
-
-## How It Fits With An LLM
+## How It Works
 
 ```text
 User message
-  -> LLM interprets context and emotional meaning
-  -> Emotion Engine stores PAD / trust / compact memory
-  -> LLM uses current state as response guidance
-  -> Emotion Engine records what changed and why
+  -> LLM interprets the context
+  -> LLM decides the final emotional meaning and response
+  -> Emotion Engine stores PAD state, trust, and compact memory
+  -> Future prompts receive continuity guidance
 ```
 
-The intended split:
+The split is intentional:
 
-- The **LLM** understands context, decides the final appraisal, chooses the final PAD update, writes compact emotional memory, and generates the actual reply.
-- The **Python helper** stores state, clamps values, applies decay, records logs, extracts session patterns, and updates trust slowly.
-- The deterministic `appraise` command is only an advisory fallback for testing or simple integrations. Treat it as a hint, not as the final emotional judgment.
+- The **LLM** makes the contextual judgment and generates the reply.
+- The **Python helper** persists state, applies decay, records logs, extracts session patterns, and updates trust slowly.
+- The deterministic `appraise` helper is only a fallback or debugging aid. It is not the source of truth in a real integration.
 
-In short: Python maintains continuity; the LLM makes the contextual judgment.
+In short: **the LLM decides; Emotion Engine remembers.**
 
-## Try It Without OpenClaw
+## Quick Demo
 
-You can run a local state lifecycle check without installing OpenClaw:
+Run a local lifecycle check without installing OpenClaw:
 
 ```bash
-python3 scripts/check_state_lifecycle.py --style "温柔但不讨好，有一点自己的边界"
+python3 scripts/check_state_lifecycle.py --style "warm but not over-compliant, with clear boundaries"
 ```
 
-This does not call an LLM and does not generate AI replies. It checks that the state layer works: configure, session start, decay, advisory appraisal, record turn, session end, trust update, and emotion log.
+This does not call an LLM and does not generate assistant replies. It checks that the state layer works: configure, session start, decay, advisory appraisal, record turn, session end, trust update, and emotion log.
 
-Example output:
+To see the kind of guidance an LLM integration would receive:
+
+```bash
+python3 scripts/prompt_preview.py \
+  --style "calm, reliable, and clearly bounded" \
+  --message "Thanks, the last version is much clearer. I want to challenge one part of the design."
+```
+
+Example guidance:
 
 ```text
-# Emotion Engine State Lifecycle Check
+Current continuity state:
+- Tone: warm, steady, firm
+- Trust tier: New
+- Style: mildly warm; calm; strongly bounded
 
-This is not an AI chat demo. No assistant reply is generated here.
-The deterministic appraisal helper is used only as a stand-in for LLM judgment.
+Advisory appraisal:
+- The helper sees this message as collaboration.
 
-Turn 1
-User input: 谢谢你，刚才那个版本已经清楚很多了。
-Advisory helper: warmth
-State effect: warmer, more energized, more bounded
-Response guidance preview for the LLM: warm but clearly bounded
-
-Session Summary
-Pattern summary: 3 turns analyzed; no conflict detected; slightly positive emotional trend; boundaries remain stable.
-Trust update: 0.1000 -> 0.1180
+LLM task:
+- Interpret the message using full context.
+- Decide the final appraisal and PAD update.
+- Generate a natural reply shaped by the current state.
+- Record a compact emotional memory after the turn.
 ```
-
-Pass your own simulated turns:
-
-```bash
-python3 scripts/check_state_lifecycle.py \
-  --style "冷静可靠，有边界感" \
-  --turn "谢谢你，刚才那个版本清楚很多了" \
-  --turn "我想 challenge 一下，这个设计是不是还有点空？" \
-  --turn "对，这样更像 MVP，我们先按这个做"
-```
-
-Save the state if you want to inspect or resume it:
-
-```bash
-python3 scripts/check_state_lifecycle.py \
-  --style "温柔但不讨好，有一点自己的边界" \
-  --state emotion-state.sim.json
-```
-
-Use `--json` for raw debug output.
 
 ## OpenClaw Quick Start
 
@@ -129,26 +103,42 @@ The setup helper:
 - copies the skill into your OpenClaw workspace
 - creates `emotion-state.json` if missing
 - preserves existing state if one already exists
-- lets you describe the vibe in one sentence
+- lets you describe the agent's style in one sentence
 - prints a natural-language status so you can see it is working
 
-Example vibe:
+Example style:
 
 ```text
-温柔但不讨好，有一点自己的边界
+warm but not over-compliant, with clear boundaries
 ```
 
-## Manual Install
+## Core Concepts
 
-```bash
-mkdir -p ~/.openclaw/workspace/skills/emotion-engine/scripts
-cp SKILL.md README.md emotion-state-template.json setup.sh ~/.openclaw/workspace/skills/emotion-engine/
-cp scripts/*.py ~/.openclaw/workspace/skills/emotion-engine/scripts/
-python3 ~/.openclaw/workspace/skills/emotion-engine/scripts/emotion_engine_utils.py init ~/.openclaw/workspace/emotion-state.json
-python3 ~/.openclaw/workspace/skills/emotion-engine/scripts/emotion_engine_utils.py configure ~/.openclaw/workspace/emotion-state.json --style "冷静可靠，有边界感"
-```
+Emotion Engine stores and updates:
 
-## Core Commands
+- **PAD state**: Pleasure, Arousal, Dominance.
+- **Trust**: a slow-moving relationship coefficient.
+- **Personality baseline**: where the agent naturally drifts back to.
+- **Emotion trajectory**: numeric state during a session.
+- **Emotion log**: compact emotional memories, not full transcripts.
+- **Session patterns**: conflict, repair, volatility, suppression, and trust signals.
+
+Read more in [Concepts](docs/CONCEPTS.md).
+
+## Integration
+
+The typical integration loop is:
+
+1. Load the current state.
+2. Apply session or turn decay.
+3. Let the LLM interpret the user message and choose the final emotional update.
+4. Record the turn with compact memory.
+5. Use the updated state as guidance for future replies.
+6. At session end, extract patterns and update trust.
+
+See [Integration Guide](docs/INTEGRATION.md) for the full sequence.
+
+## CLI
 
 ```bash
 python3 scripts/emotion_engine_utils.py init <state_file>
@@ -168,49 +158,11 @@ python3 scripts/emotion_engine_utils.py update_trust <state_file> <trust_delta>
 python3 scripts/emotion_engine_utils.py recent_log <state_file> 5
 ```
 
-`emotion_trajectory` is numeric and session-local. `emotion_log` is long-lived and interpretive: it stores situation-aware emotional memories, not full transcripts.
+## What It Is Not
 
-`clear_log` and `reset` are available for control, but they intentionally erase local emotional history.
+Emotion Engine is not a chatbot and does not generate replies by itself.
 
-## Chat-First Configuration
-
-MVP configuration is chat-first, not a separate UI. A user can say:
-
-- "风格设成温柔但不讨好"
-- "根据这个 SOUL.md 配一下"
-- "更冷静一点"
-- "别那么顺从"
-- "暂停情绪记录"
-- "恢复情绪引擎"
-- "现在状态怎么样"
-
-The skill maps those intents to `configure`, `tune`, `pause`, `resume`, or `status`.
-
-For important events, add only the memory fields that help future behavior:
-
-```bash
-python3 scripts/emotion_engine_utils.py record_turn <state_file> <P> <A> <D> \
-  --appraisal collaboration \
-  --situation user challenged the design and invited a stronger revision \
-  --lens calm mentor treats direct critique as useful signal \
-  --meaning disagreement feels safe and productive \
-  --impact pleasure rose, dominance stabilized \
-  --open-loop false \
-  --follow-up be more precise next turn \
-  --salience 0.65
-```
-
-## Personality Presets
-
-Edit the `personality_baseline` in your `emotion-state.json`:
-
-| Character type | Pleasure | Arousal | Dominance |
-|---|---:|---:|---:|
-| Cheerful friend | 0.3 | 0.5 | 0.5 |
-| Tsundere | -0.1 | 0.6 | 0.7 |
-| Calm mentor | 0.2 | 0.2 | 0.6 |
-| Shy introvert | 0.0 | 0.2 | 0.3 |
-| Energetic companion | 0.4 | 0.7 | 0.5 |
+It is also not an emotion detector, mental health tool, or psychological assessment system. It models fictional or agent-internal continuity, not a real person's emotional state.
 
 ## Project Structure
 
@@ -222,13 +174,12 @@ emotion-engine/
 ├── scripts/
 │   ├── emotion_engine_utils.py
 │   ├── check_state_lifecycle.py
+│   ├── prompt_preview.py
 │   └── simulate_openclaw_session.py
 ├── tests/
-│   ├── test_emotion_engine_utils.py
-│   └── test_simulate_openclaw_session.py
 ├── docs/
-│   └── LAUNCH_KIT.md
 ├── README.md
+├── README.zh-CN.md
 ├── LICENSE
 ├── CHANGELOG.md
 ├── CONTRIBUTING.md
@@ -238,10 +189,10 @@ emotion-engine/
 ## Roadmap
 
 - Clearer LLM integration examples.
-- Prompt-preview mode that shows the exact guidance an LLM would receive.
 - Optional real chat demo using an API key or local model.
 - More appraisal examples and tests.
-- A portable state format for future memory migration work.
+- Portable state format for future memory migration work.
+- Better examples for character agents, personal assistants, and game NPCs.
 
 ## Safety And Ethics
 
