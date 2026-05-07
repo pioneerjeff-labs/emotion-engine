@@ -9,16 +9,16 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 SCRIPTS = ROOT / "scripts"
-SCRIPT = SCRIPTS / "simulate_openclaw_session.py"
+SCRIPT = SCRIPTS / "simulate_state_lifecycle.py"
 CHECKER = SCRIPTS / "check_state_lifecycle.py"
 
 sys.path.insert(0, str(SCRIPTS))
-spec = importlib.util.spec_from_file_location("simulate_openclaw_session", SCRIPT)
+spec = importlib.util.spec_from_file_location("simulate_state_lifecycle", SCRIPT)
 simulator = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(simulator)
 
 
-class SimulateOpenClawSessionTest(unittest.TestCase):
+class SimulateStateLifecycleTest(unittest.TestCase):
     def test_pattern_summary_is_human_readable(self):
         summary = simulator.summarize_patterns({
             "sufficient_data": True,

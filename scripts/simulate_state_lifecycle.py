@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """
-simulate_openclaw_session.py — Local state lifecycle checker for Emotion Engine.
+simulate_state_lifecycle.py — Local state lifecycle checker for Emotion Engine.
 
-Use this when OpenClaw is not installed yet. It does not call an LLM and does
-not generate assistant replies. It uses the deterministic appraisal helper as
-a stand-in so you can verify the state lifecycle:
+Use this when an agent runtime is not installed yet. It does not call an LLM
+and does not generate assistant replies. It uses the deterministic appraisal
+helper as a stand-in so you can verify the state lifecycle:
 configure -> session_start -> pre_turn_decay -> advisory appraisal ->
 record_turn -> session_end -> trust update.
 """

@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
 emotion_engine_utils.py — State, decay, appraisal, and pattern tools
-for Emotion Engine.
+for the Emotion Engine OpenClaw skill.
 
 Usage:
   python3 emotion_engine_utils.py init <state_file>

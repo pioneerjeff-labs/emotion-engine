@@ -35,18 +35,18 @@ The state includes current PAD emotion, personality baseline, trust, session cou
 There is no separate UI in the MVP. Configuration happens through chat intent or the command-line helper. The user should not need to understand PAD numbers.
 
 Primary chat flow:
-- If the user says a vibe like "温柔但不讨好" or "冷静可靠，有边界感", run `configure --style`.
+- If the user describes a vibe like "warm but not over-compliant" or "calm, reliable, and clearly bounded", run `configure --style`.
 - If the user provides or points to SOUL.md, run `configure --soul-file`.
-- If the user later says "更温柔一点", "更冷静一点", "别那么顺从", or "太强势了", run `tune`.
+- If the user later says "make it warmer", "make it calmer", "make it less compliant", or "that feels too forceful", run `tune`.
 - If the user asks whether it is working, run `status`.
 - If the user wants temporary privacy/control, run `pause` or `resume`.
 
 Commands:
 
 ```bash
-python3 {baseDir}/scripts/emotion_engine_utils.py configure <state_file> --style "温柔但不讨好，有一点自己的边界"
+python3 {baseDir}/scripts/emotion_engine_utils.py configure <state_file> --style "warm but not over-compliant, with clear boundaries"
 python3 {baseDir}/scripts/emotion_engine_utils.py configure <state_file> --soul-file ./SOUL.md
-python3 {baseDir}/scripts/emotion_engine_utils.py tune <state_file> "更冷静一点"
+python3 {baseDir}/scripts/emotion_engine_utils.py tune <state_file> "make it calmer"
 python3 {baseDir}/scripts/emotion_engine_utils.py status <state_file>
 python3 {baseDir}/scripts/emotion_engine_utils.py pause <state_file>
 python3 {baseDir}/scripts/emotion_engine_utils.py resume <state_file>
@@ -226,10 +226,10 @@ When the user types `/emotion-engine`, run `status` and display a brief natural-
 Example: "I'm feeling pretty calm and content right now. There is a little rapport built up, but it still feels early."
 
 If the user types natural-language control after the slash command, map it to the command-line helper:
-- `/emotion-engine 更温柔一点` -> `tune`
-- `/emotion-engine 风格：冷静可靠，有边界感` -> `configure --style`
-- `/emotion-engine 暂停` -> `pause`
-- `/emotion-engine 恢复` -> `resume`
+- `/emotion-engine make it warmer` -> `tune`
+- `/emotion-engine style: calm, reliable, and clearly bounded` -> `configure --style`
+- `/emotion-engine pause` -> `pause`
+- `/emotion-engine resume` -> `resume`
 
 ## Customization
 

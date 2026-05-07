@@ -24,7 +24,7 @@ if [ "$SCRIPT_DIR" != "$DEST" ]; then
   cp "$SCRIPT_DIR/SKILL.md" "$DEST/"
   cp "$SCRIPT_DIR/README.md" "$DEST/"
   cp "$SCRIPT_DIR/emotion-state-template.json" "$DEST/"
-  cp "$SCRIPT_DIR/setup.sh" "$DEST/"
+  cp "$SCRIPT_DIR/install.sh" "$DEST/"
   if [ -f "$SCRIPT_DIR/LICENSE" ]; then
     cp "$SCRIPT_DIR/LICENSE" "$DEST/"
   fi
@@ -55,4 +55,4 @@ fi
 
 printf "\nEmotion Engine is installed.\n"
 printf "You can later tune it in chat, or run:\n"
-printf "  python3 %s/scripts/emotion_engine_utils.py tune %s \"更温柔一点\"\n" "$DEST" "$STATE_FILE"
+printf "  python3 %s/scripts/emotion_engine_utils.py tune %s \"make it warmer\"\n" "$DEST" "$STATE_FILE"

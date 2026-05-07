@@ -105,12 +105,25 @@ python3 scripts/prompt_preview.py \
 - 回复后记录一条紧凑情绪记忆。
 ```
 
+## 我应该用哪一份？
+
+| 需求 | 使用位置 |
+|---|---|
+| 核心状态引擎和本地演示 | [scripts](scripts) |
+| OpenClaw skill | [integrations/openclaw](integrations/openclaw) |
+| Claude Skill / Claude Code 包 | [integrations/claude-skill](integrations/claude-skill) |
+
+仓库根目录是 Emotion Engine 项目本体；具体平台适配都放在 `integrations/` 下面。
+
 ## OpenClaw 快速安装
 
-在仓库根目录运行：
+OpenClaw 版本在 [integrations/openclaw](integrations/openclaw)。
+
+用于本地 OpenClaw 安装：
 
 ```bash
-./setup.sh
+cd integrations/openclaw/emotion-engine
+./install.sh
 ```
 
 安装脚本会：

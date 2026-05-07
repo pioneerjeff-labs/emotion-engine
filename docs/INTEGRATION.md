@@ -4,7 +4,7 @@ This guide describes how to use Emotion Engine as a state layer in an LLM-powere
 
 Ready-to-adapt starter integrations:
 
-- OpenClaw: repository root `SKILL.md` plus `setup.sh`
+- OpenClaw: [integrations/openclaw](../integrations/openclaw)
 - Claude Skill: [integrations/claude-skill](../integrations/claude-skill)
 
 ## Minimal Loop

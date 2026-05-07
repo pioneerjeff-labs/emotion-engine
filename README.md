@@ -94,19 +94,30 @@ LLM task:
 - Record a compact emotional memory after the turn.
 ```
 
+## Which Package Should I Use?
+
+| Need | Use |
+|---|---|
+| Core state engine and local demos | [scripts](scripts) |
+| OpenClaw skill | [integrations/openclaw](integrations/openclaw) |
+| Claude Skill / Claude Code package | [integrations/claude-skill](integrations/claude-skill) |
+
+The repository root is the Emotion Engine project. Platform-specific packages live under `integrations/`.
+
 ## Integrations
 
 ### OpenClaw
 
-Use the repository root as an OpenClaw skill:
+The OpenClaw-compatible package lives in [integrations/openclaw](integrations/openclaw).
 
-From the repository root:
+For local OpenClaw installation:
 
 ```bash
-./setup.sh
+cd integrations/openclaw/emotion-engine
+./install.sh
 ```
 
-The setup helper:
+The installer:
 
 - copies the skill into your OpenClaw workspace
 - creates `emotion-state.json` if missing
@@ -200,15 +211,14 @@ Starter logo assets live in [assets](assets). Brand guidance lives in [Brand Not
 
 ```text
 emotion-engine/
-├── SKILL.md
 ├── emotion-state-template.json
-├── setup.sh
 ├── scripts/
 │   ├── emotion_engine_utils.py
 │   ├── check_state_lifecycle.py
 │   ├── prompt_preview.py
-│   └── simulate_openclaw_session.py
+│   └── simulate_state_lifecycle.py
 ├── integrations/
+│   ├── openclaw/
 │   └── claude-skill/
 ├── tests/
 ├── docs/

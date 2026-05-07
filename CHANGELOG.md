@@ -13,6 +13,7 @@
 - Added a Claude Skill integration package.
 - Added initial project and lab logo assets.
 - Removed the previous lab acronym from launch-facing copy.
+- Moved platform-specific packages under `integrations/openclaw` and `integrations/claude-skill`.
 
 ## 0.1.0
 
