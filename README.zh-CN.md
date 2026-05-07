@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/emotion-engine-logo.svg" alt="Emotion Engine" width="620">
+</p>
+
 # Emotion Engine
 
 **给大模型智能体使用的情绪连续性状态层。**
@@ -8,7 +12,7 @@
 
 Emotion Engine 给大模型智能体提供一个小而可检查的连续性层：情绪状态、信任、时间衰减、边界感，以及紧凑的情绪记忆。大模型仍然负责理解上下文和生成回复；Emotion Engine 负责把这些判断保存下来，让它们能被后续会话继续使用。
 
-Emotion Engine 是 PioneerJeff Labs (PJL) 的第一个开源项目。PJL 关注智能体连续性、记忆和个人 AI。
+Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 关注智能体连续性、记忆和个人 AI。
 
 状态：实验性 / v0.1。
 
@@ -123,6 +127,26 @@ python3 scripts/prompt_preview.py \
 温柔但不讨好，有清晰边界
 ```
 
+## Claude Skill 快速安装
+
+Claude 版本在 [integrations/claude-skill](integrations/claude-skill)。
+
+用于 Claude Code：
+
+```bash
+cd integrations/claude-skill/emotion-engine
+./install.sh
+```
+
+构建可上传的 Claude Skills 压缩包：
+
+```bash
+cd integrations/claude-skill
+./package_claude_skill.sh
+```
+
+这会生成 `emotion-engine-claude-skill.zip`。它是发布产物，不需要提交到仓库。
+
 ## 核心概念
 
 Emotion Engine 会保存和更新：
@@ -141,6 +165,10 @@ Emotion Engine 会保存和更新：
 Emotion Engine 不是聊天机器人，也不会自己生成回复。
 
 它也不是情绪识别器、心理健康工具或心理评估系统。它建模的是虚构角色或 Agent 内部的连续性，不是真实用户的心理状态。
+
+## 品牌资产
+
+初版 logo 资产在 [assets](assets)。品牌处理建议在 [品牌说明](docs/BRAND.zh-CN.md)。
 
 ## 安全与伦理
 

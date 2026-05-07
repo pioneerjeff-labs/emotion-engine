@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/emotion-engine-logo.svg" alt="Emotion Engine" width="620">
+</p>
+
 # Emotion Engine
 
 **Emotional continuity for LLM agents.**
@@ -11,7 +15,7 @@ Most AI agents can respond well in the moment, but they do not carry an emotiona
 
 Emotion Engine gives an LLM-powered agent a small, inspectable continuity layer: mood, trust, decay, boundaries, and compact emotional memories. The LLM still decides what happened and how to respond. Emotion Engine makes that judgment persistent.
 
-Emotion Engine is part of PioneerJeff Labs (PJL), a small open-source lab exploring agent continuity, memory, and personal AI.
+Emotion Engine is part of PioneerJeff Labs, a small open-source lab exploring agent continuity, memory, and personal AI.
 
 Status: experimental / v0.1.
 
@@ -90,7 +94,11 @@ LLM task:
 - Record a compact emotional memory after the turn.
 ```
 
-## OpenClaw Quick Start
+## Integrations
+
+### OpenClaw
+
+Use the repository root as an OpenClaw skill:
 
 From the repository root:
 
@@ -111,6 +119,26 @@ Example style:
 ```text
 warm but not over-compliant, with clear boundaries
 ```
+
+### Claude Skill
+
+The Claude-compatible package lives in [integrations/claude-skill](integrations/claude-skill).
+
+For Claude Code:
+
+```bash
+cd integrations/claude-skill/emotion-engine
+./install.sh
+```
+
+To build a Claude Skills upload zip:
+
+```bash
+cd integrations/claude-skill
+./package_claude_skill.sh
+```
+
+This creates `emotion-engine-claude-skill.zip`. The zip is a generated release artifact, so it is not committed to the repository.
 
 ## Core Concepts
 
@@ -164,6 +192,10 @@ Emotion Engine is not a chatbot and does not generate replies by itself.
 
 It is also not an emotion detector, mental health tool, or psychological assessment system. It models fictional or agent-internal continuity, not a real person's emotional state.
 
+## Brand Assets
+
+Starter logo assets live in [assets](assets). Brand guidance lives in [Brand Notes](docs/BRAND.md).
+
 ## Project Structure
 
 ```text
@@ -176,8 +208,11 @@ emotion-engine/
 │   ├── check_state_lifecycle.py
 │   ├── prompt_preview.py
 │   └── simulate_openclaw_session.py
+├── integrations/
+│   └── claude-skill/
 ├── tests/
 ├── docs/
+├── assets/
 ├── README.md
 ├── README.zh-CN.md
 ├── LICENSE

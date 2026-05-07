@@ -18,11 +18,13 @@
 
 我的目标是让长期运行的个人助手或角色智能体不只是记住事实，也能保留一种可解释、可迁移、用户可控的互动连续性。
 
+目前仓库包含本地生命周期检查工具，以及 OpenClaw 和 Claude Skills 的初版集成。
+
 Repo: https://github.com/pioneerjeff-labs/emotion-engine
 
 ## 中文组织介绍
 
-PioneerJeff Labs (PJL) 关注智能体连续性、记忆和个人 AI，目标是构建小而清晰、可检查、可迁移的个人 AI 基础组件。
+PioneerJeff Labs 关注智能体连续性、记忆和个人 AI，目标是构建小而清晰、可检查、可迁移的个人 AI 基础组件。
 
 第一个项目 Emotion Engine 探索的是情绪连续性：一个大模型智能体如何在不假装识别真实人类情绪的前提下，携带情绪状态、信任、边界和紧凑情绪记忆跨会话延续。
 

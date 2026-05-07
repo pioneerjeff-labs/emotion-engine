@@ -27,6 +27,7 @@ personal-ai
 affective-computing
 emotion-modeling
 openclaw
+claude
 python
 ```
 
@@ -36,7 +37,7 @@ Open tools for agent continuity, memory, and personal AI.
 
 ## Organization Profile Draft
 
-PioneerJeff Labs (PJL) builds small, inspectable tools for agent continuity, memory, and personal AI.
+PioneerJeff Labs builds small, inspectable tools for agent continuity, memory, and personal AI.
 
 The first project, Emotion Engine, explores emotional continuity: how an LLM-powered agent can carry mood, trust, boundaries, and compact emotional memory across sessions without pretending to diagnose real human emotion.
 
@@ -62,6 +63,8 @@ I just released Emotion Engine, the first open-source project from PioneerJeff L
 It is a lightweight state layer for emotionally continuous LLM agents: PAD state, trust, decay, and compact emotion logs.
 
 The idea is simple: the LLM still decides what happened and how to respond, but Emotion Engine gives it a persistent inner state to carry forward across sessions.
+
+It includes a local lifecycle checker plus starter integrations for OpenClaw and Claude Skills.
 
 Repo: https://github.com/pioneerjeff-labs/emotion-engine
 

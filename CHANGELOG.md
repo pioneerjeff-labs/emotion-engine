@@ -3,13 +3,16 @@
 ## Unreleased
 
 - Prepared the project for an initial open-source release.
-- Aligned project metadata with PioneerJeff Labs (PJL).
+- Aligned project metadata with PioneerJeff Labs.
 - Added repository-level license, ignore rules, contribution notes, and security policy.
 - Updated README usage paths for a GitHub repository root.
 - Added a minimal standard-library test suite.
 - Clarified that the lifecycle checker is not an AI chat demo and that LLMs make the final contextual emotion judgment.
 - Reworked README positioning for a clearer public launch story and added a launch kit.
 - Added separate English and Chinese README files, concept docs, integration docs, and prompt guidance preview.
+- Added a Claude Skill integration package.
+- Added initial project and lab logo assets.
+- Removed the previous lab acronym from launch-facing copy.
 
 ## 0.1.0
 
