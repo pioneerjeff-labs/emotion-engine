@@ -2,11 +2,23 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
-cd "$SCRIPT_DIR"
+REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../.." && pwd)
 
 OUTPUT="emotion-engine-openclaw-skill.zip"
 PYTHON=${PYTHON:-python3}
-rm -f "$OUTPUT"
+STAGE=$(mktemp -d "${TMPDIR:-/tmp}/emotion-engine-openclaw.XXXXXX")
+PACKAGE="$STAGE/emotion-engine"
+trap 'rm -rf "$STAGE"' EXIT
 
-"$PYTHON" -m zipfile -c "$OUTPUT" emotion-engine
+rm -f "$SCRIPT_DIR/$OUTPUT"
+mkdir -p "$PACKAGE/scripts"
+
+cp "$SCRIPT_DIR/emotion-engine/SKILL.md" "$PACKAGE/"
+cp "$SCRIPT_DIR/emotion-engine/README.md" "$PACKAGE/"
+cp "$SCRIPT_DIR/emotion-engine/install.sh" "$PACKAGE/"
+cp "$REPO_ROOT/scripts/emotion_engine_utils.py" "$PACKAGE/scripts/"
+cp "$REPO_ROOT/emotion-state-template.json" "$PACKAGE/"
+cp "$REPO_ROOT/LICENSE" "$PACKAGE/"
+
+(cd "$STAGE" && "$PYTHON" -m zipfile -c "$SCRIPT_DIR/$OUTPUT" emotion-engine)
 printf "Created %s\n" "$SCRIPT_DIR/$OUTPUT"

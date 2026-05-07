@@ -5,10 +5,10 @@ This is the Claude-compatible package for Emotion Engine.
 It contains:
 
 - `SKILL.md` for Claude Skills.
-- `scripts/emotion_engine_utils.py`, the shared Emotion Engine core.
 - `scripts/claude_emotion.sh`, a Claude Code wrapper that manages state path and initialization.
-- `emotion-state-template.json`.
 - `install.sh` for personal Claude Code installation.
+
+When installed or packaged, the shared Emotion Engine core, state template, and license are copied from the repository root.
 
 ## Install For Claude Code
 

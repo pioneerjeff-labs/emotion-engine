@@ -10,12 +10,10 @@ integrations/openclaw/
 │   ├── SKILL.md
 │   ├── README.md
 │   ├── install.sh
-│   ├── emotion-state-template.json
-│   ├── LICENSE
-│   └── scripts/
-│       └── emotion_engine_utils.py
 └── package_openclaw_skill.sh
 ```
+
+The shared core, license, and state template are kept once at the repository root. The installer and packaging script copy them into the installed/generated OpenClaw package.
 
 ## Install
 

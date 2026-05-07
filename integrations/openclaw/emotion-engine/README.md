@@ -5,9 +5,9 @@ This is the OpenClaw-compatible package for Emotion Engine.
 It contains:
 
 - `SKILL.md` for OpenClaw.
-- `scripts/emotion_engine_utils.py`, the shared Emotion Engine core.
-- `emotion-state-template.json`.
 - `install.sh` for local OpenClaw installation.
+
+When installed or packaged, the shared Emotion Engine core, state template, and license are copied from the repository root.
 
 ## Install
 

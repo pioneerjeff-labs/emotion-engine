@@ -10,13 +10,12 @@ integrations/claude-skill/
 │   ├── SKILL.md
 │   ├── README.md
 │   ├── install.sh
-│   ├── emotion-state-template.json
-│   ├── LICENSE
 │   └── scripts/
-│       ├── claude_emotion.sh
-│       └── emotion_engine_utils.py
+│       └── claude_emotion.sh
 └── package_claude_skill.sh
 ```
+
+The shared core, license, and state template are kept once at the repository root. The installer and packaging script copy them into the installed/generated Claude package.
 
 ## Claude Code Install
 

@@ -2,6 +2,7 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../../.." && pwd)
 WORKSPACE=${OPENCLAW_WORKSPACE:-"$HOME/.openclaw/workspace"}
 
 if [ -t 0 ]; then
@@ -17,21 +18,32 @@ DEST="$SKILLS_DIR/emotion-engine"
 STATE_FILE="$WORKSPACE/emotion-state.json"
 PYTHON=${PYTHON:-python3}
 
+CORE_SCRIPT="$SCRIPT_DIR/scripts/emotion_engine_utils.py"
+STATE_TEMPLATE="$SCRIPT_DIR/emotion-state-template.json"
+LICENSE_FILE="$SCRIPT_DIR/LICENSE"
+
+if [ ! -f "$CORE_SCRIPT" ]; then
+  CORE_SCRIPT="$REPO_ROOT/scripts/emotion_engine_utils.py"
+fi
+if [ ! -f "$STATE_TEMPLATE" ]; then
+  STATE_TEMPLATE="$REPO_ROOT/emotion-state-template.json"
+fi
+if [ ! -f "$LICENSE_FILE" ]; then
+  LICENSE_FILE="$REPO_ROOT/LICENSE"
+fi
+
 mkdir -p "$SKILLS_DIR"
 
 if [ "$SCRIPT_DIR" != "$DEST" ]; then
   mkdir -p "$DEST/scripts"
   cp "$SCRIPT_DIR/SKILL.md" "$DEST/"
   cp "$SCRIPT_DIR/README.md" "$DEST/"
-  cp "$SCRIPT_DIR/emotion-state-template.json" "$DEST/"
   cp "$SCRIPT_DIR/install.sh" "$DEST/"
-  if [ -f "$SCRIPT_DIR/LICENSE" ]; then
-    cp "$SCRIPT_DIR/LICENSE" "$DEST/"
+  cp "$CORE_SCRIPT" "$DEST/scripts/emotion_engine_utils.py"
+  cp "$STATE_TEMPLATE" "$DEST/emotion-state-template.json"
+  if [ -f "$LICENSE_FILE" ]; then
+    cp "$LICENSE_FILE" "$DEST/"
   fi
-  for FILE in "$SCRIPT_DIR"/scripts/*.py; do
-    [ -e "$FILE" ] || continue
-    cp "$FILE" "$DEST/scripts/"
-  done
 fi
 
 if [ ! -f "$STATE_FILE" ]; then
