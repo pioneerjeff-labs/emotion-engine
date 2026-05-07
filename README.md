@@ -103,6 +103,7 @@ LLM task:
 | Claude Skill / Claude Code package | [integrations/claude-skill](integrations/claude-skill) |
 
 The repository root is the Emotion Engine project. Platform-specific packages live under `integrations/`.
+The two first-party runtime integrations are OpenClaw and Claude Skill.
 
 ## Integrations
 
@@ -130,6 +131,15 @@ Example style:
 ```text
 warm but not over-compliant, with clear boundaries
 ```
+
+To build an OpenClaw upload zip:
+
+```bash
+cd integrations/openclaw
+./package_openclaw_skill.sh
+```
+
+This creates `emotion-engine-openclaw-skill.zip`.
 
 ### Claude Skill
 

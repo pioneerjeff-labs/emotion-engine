@@ -2,7 +2,7 @@
 
 ## Lab Brand
 
-Use **PioneerJeff Labs** publicly. Avoid the acronym **PJL** in public-facing copy; it is short, but it is less distinctive and harder to turn into a memorable mark.
+Use **PioneerJeff Labs** publicly. Avoid short lab acronyms in public-facing copy; the full name is more distinctive and easier to turn into a memorable mark.
 
 Recommended positioning:
 
@@ -21,7 +21,7 @@ Logo direction:
 
 - Prefer a full wordmark: `PioneerJeff Labs`.
 - Use a small pathfinding or continuity mark beside the wordmark.
-- Do not design around the initials `PJL`.
+- Do not design around initials.
 
 Starter asset:
 

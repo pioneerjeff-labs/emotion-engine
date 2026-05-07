@@ -114,6 +114,7 @@ python3 scripts/prompt_preview.py \
 | Claude Skill / Claude Code 包 | [integrations/claude-skill](integrations/claude-skill) |
 
 仓库根目录是 Emotion Engine 项目本体；具体平台适配都放在 `integrations/` 下面。
+目前一等支持的两个运行环境是 OpenClaw 和 Claude Skill。
 
 ## OpenClaw 快速安装
 
@@ -139,6 +140,15 @@ cd integrations/openclaw/emotion-engine
 ```text
 温柔但不讨好，有清晰边界
 ```
+
+构建可上传的 OpenClaw 压缩包：
+
+```bash
+cd integrations/openclaw
+./package_openclaw_skill.sh
+```
+
+这会生成 `emotion-engine-openclaw-skill.zip`。
 
 ## Claude Skill 快速安装
 
