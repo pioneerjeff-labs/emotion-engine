@@ -2,8 +2,8 @@
   <title id="title">Emotion Engine mark</title>
   <desc id="desc">A continuous emotional state curve connecting three PAD nodes.</desc>
   <rect width="128" height="128" rx="28" fill="#101820"/>
-  <path d="M26 76 C40 47 56 43 68 64 C80 85 95 87 104 53" fill="none" stroke="#5FE1B5" stroke-width="9" stroke-linecap="round"/>
-  <circle cx="26" cy="76" r="9" fill="#FF6B6B"/>
+  <path d="M32 75 C43 49 56 43 68 64 C80 85 95 87 104 53" fill="none" stroke="#5FE1B5" stroke-width="9" stroke-linecap="round"/>
+  <circle cx="32" cy="75" r="9" fill="#FF6B6B"/>
   <circle cx="68" cy="64" r="9" fill="#FFD166"/>
   <circle cx="104" cy="53" r="9" fill="#6AA7FF"/>
 </svg>
