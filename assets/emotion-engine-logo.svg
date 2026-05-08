@@ -4,9 +4,8 @@
   <rect width="760" height="180" rx="28" fill="#FFFFFF"/>
   <g transform="translate(38 26)">
     <rect width="128" height="128" rx="28" fill="#101820"/>
-    <path d="M0 85.3 L128 45.5" fill="none" stroke="#6AA7FF" stroke-width="4" opacity=".32"/>
     <path d="M26 76 C40 47 56 43 68 64 C80 85 95 87 104 53" fill="none" stroke="#5FE1B5" stroke-width="9" stroke-linecap="round"/>
-    <circle cx="30" cy="76" r="9" fill="#FF6B6B"/>
+    <circle cx="26" cy="76" r="9" fill="#FF6B6B"/>
     <circle cx="68" cy="64" r="9" fill="#FFD166"/>
     <circle cx="104" cy="53" r="9" fill="#6AA7FF"/>
   </g>
