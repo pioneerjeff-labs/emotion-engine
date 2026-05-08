@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-labelledby="title desc">
+  <title id="title">Emotion Engine extended mark</title>
+  <desc id="desc">An edge-to-edge emotional state curve connecting three PAD nodes.</desc>
+  <defs>
+    <clipPath id="markClip">
+      <rect width="128" height="128" rx="28"/>
+    </clipPath>
+  </defs>
+  <rect width="128" height="128" rx="28" fill="#101820"/>
+  <g clip-path="url(#markClip)">
+    <path d="M-8 88 C8 85 18 78 30 76 C45 72 52 45 68 64 C82 80 94 74 104 53 C111 39 122 38 136 44" fill="none" stroke="#5FE1B5" stroke-width="9" stroke-linecap="round"/>
+  </g>
+  <circle cx="30" cy="76" r="9" fill="#FF6B6B"/>
+  <circle cx="68" cy="64" r="9" fill="#FFD166"/>
+  <circle cx="104" cy="53" r="9" fill="#6AA7FF"/>
+</svg>
