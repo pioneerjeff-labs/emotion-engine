@@ -10,7 +10,7 @@
     </defs>
     <rect width="128" height="128" rx="28" fill="#101820"/>
     <g clip-path="url(#logoMarkClip)">
-      <path d="M-8 88 C8 85 18 78 30 76 C45 72 52 45 68 64 C82 80 94 74 104 53 C111 39 122 38 136 44" fill="none" stroke="#5FE1B5" stroke-width="9" stroke-linecap="round"/>
+      <path d="M-8 84 C8 82 18 78 30 76 C44 73 54 48 68 64 C82 80 92 60 104 53 C116 46 126 43 136 42" fill="none" stroke="#5FE1B5" stroke-width="9" stroke-linecap="round"/>
     </g>
     <circle cx="30" cy="76" r="9" fill="#FF6B6B"/>
     <circle cx="68" cy="64" r="9" fill="#FFD166"/>
