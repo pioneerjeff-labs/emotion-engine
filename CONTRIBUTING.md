@@ -28,7 +28,7 @@ You can also run a quick manual flow:
 
 ```bash
 python3 scripts/emotion_engine_utils.py init emotion-state.json
-python3 scripts/emotion_engine_utils.py configure emotion-state.json --style "冷静可靠，有边界感"
+python3 scripts/emotion_engine_utils.py configure emotion-state.json --style "calm, reliable, and clearly bounded"
 python3 scripts/emotion_engine_utils.py appraise emotion-state.json "thank you for the help"
 python3 scripts/emotion_engine_utils.py validate emotion-state.json
 ```
