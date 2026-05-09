@@ -1,7 +1,7 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 180" role="img" aria-labelledby="title desc">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 620 180" role="img" aria-labelledby="title desc">
   <title id="title">Emotion Engine logo</title>
   <desc id="desc">Emotion Engine wordmark with a continuous signal mark.</desc>
-  <rect width="760" height="180" rx="28" fill="#FFFFFF"/>
+  <rect width="620" height="180" rx="28" fill="#FFFFFF"/>
   <g transform="translate(38 26)">
     <rect width="128" height="128" rx="28" fill="#101820"/>
     <path d="M28 75 C39 49 52 43 64 64 C76 85 91 87 100 53" fill="none" stroke="#5FE1B5" stroke-width="9" stroke-linecap="round"/>
@@ -9,6 +9,6 @@
     <circle cx="64" cy="64" r="9" fill="#FFD166"/>
     <circle cx="100" cy="53" r="9" fill="#6AA7FF"/>
   </g>
-  <text x="198" y="85" fill="#101820" font-family="ui-rounded, SF Pro Rounded, Nunito Sans, Avenir Next, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="46" font-weight="700" letter-spacing="0">Emotion Engine</text>
-  <text x="200" y="127" fill="#4E5D66" font-family="ui-rounded, SF Pro Rounded, Nunito Sans, Avenir Next, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="21" font-weight="450" letter-spacing="0">Emotional continuity for LLM agents</text>
+  <text x="198" y="85" fill="#101820" font-family="Avenir Next, Avenir, Helvetica Neue, Arial, sans-serif" font-size="46" font-weight="700" letter-spacing="0">Emotion Engine</text>
+  <text x="200" y="127" fill="#4E5D66" font-family="Avenir Next, Avenir, Helvetica Neue, Arial, sans-serif" font-size="21" font-weight="450" letter-spacing="0">Emotional continuity for LLM agents</text>
 </svg>

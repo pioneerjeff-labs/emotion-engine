@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/emotion-engine-logo.svg" alt="Emotion Engine" width="620">
+  <img src="assets/emotion-engine-logo.svg" alt="Emotion Engine" width="540">
 </p>
 
 # Emotion Engine
