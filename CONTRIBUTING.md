@@ -2,7 +2,7 @@
 
 Thanks for considering a contribution to Emotion Engine.
 
-Emotion Engine is maintained by PioneerJeff Labs, a small open-source lab exploring agent continuity, memory, and personal AI.
+Emotion Engine is maintained by PioneerJeff Labs, an open-source lab building reusable infrastructure layers for creative AI applications.
 
 ## Project Goals
 

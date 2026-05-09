@@ -15,6 +15,7 @@
 - Removed the previous lab acronym from launch-facing copy.
 - Moved platform-specific packages under `integrations/openclaw` and `integrations/claude-skill`.
 - Removed duplicate integration copies of the shared core; package scripts now assemble self-contained release zips from the root source.
+- Refined PioneerJeff Labs positioning around reusable infrastructure layers for creative AI applications.
 
 ## 0.1.0
 

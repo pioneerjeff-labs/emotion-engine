@@ -33,15 +33,15 @@ python
 
 ## PioneerJeff Labs Description
 
-Open tools for agent continuity, memory, and personal AI.
+Open infrastructure layers for creative AI applications.
 
 ## Organization Profile Draft
 
-PioneerJeff Labs builds small, inspectable tools for agent continuity, memory, and personal AI.
+PioneerJeff Labs builds small, inspectable infrastructure layers for creative AI applications.
 
-The first project, Emotion Engine, explores emotional continuity: how an LLM-powered agent can carry mood, trust, boundaries, and compact emotional memory across sessions without pretending to diagnose real human emotion.
+The first project, Emotion Engine, explores emotional continuity as a reusable state layer: how an LLM-powered agent can carry mood, trust, boundaries, and compact emotional memory across sessions without pretending to diagnose real human emotion.
 
-Future projects will explore long-term memory, migration, and user-owned assistant state.
+Future projects may approach similar foundation-layer problems from memory, migration, agent state, creative tooling, or other concrete application needs.
 
 ## Project Positioning
 
@@ -51,7 +51,7 @@ The LLM makes the contextual judgment. Emotion Engine stores the continuity.
 
 ## Who It Is For
 
-- Developers building character agents or personal assistants.
+- Developers building application-layer AI products that need reusable state, memory, or interaction layers.
 - Researchers exploring affective computing and agent memory.
 - Creators designing believable AI companions or narrative agents.
 - Builders who want emotional continuity without storing full private transcripts.
@@ -79,5 +79,5 @@ Repo: https://github.com/pioneerjeff-labs/emotion-engine
 
 - A short demo video showing the state lifecycle checker.
 - A diagram showing LLM judgment vs Python state persistence.
-- A blog post: "Why personal AI needs continuity beyond chat history."
-- A follow-up project teaser: portable long-term memory for personal assistants.
+- A blog post: "Why AI applications need reusable state layers below the chat UI."
+- A follow-up project teaser: portable long-term memory as an application-ready foundation layer.

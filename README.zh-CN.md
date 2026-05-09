@@ -12,7 +12,7 @@
 
 Emotion Engine 给大模型智能体提供一个小而可检查的连续性层：情绪状态、信任、时间衰减、边界感，以及紧凑的情绪记忆。大模型仍然负责理解上下文和生成回复；Emotion Engine 负责把这些判断保存下来，让它们能被后续会话继续使用。
 
-Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 关注智能体连续性、记忆和个人 AI。
+Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 关注面向创意 AI 应用的可复用底层基础设施层。
 
 状态：实验性 / v0.1。
 

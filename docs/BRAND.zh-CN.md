@@ -7,25 +7,21 @@
 推荐定位：
 
 ```text
-PioneerJeff Labs builds small, inspectable tools for agent continuity, memory, and personal AI.
+PioneerJeff Labs builds reusable infrastructure layers for creative AI applications.
 ```
 
 品牌结构：
 
-- **PioneerJeff Labs** 是实验室和项目集合的母品牌。
+- **PioneerJeff Labs** 是可复用 AI 基础设施项目集合的母品牌。
 - **Emotion Engine** 是独立项目名。
-- 后续项目也应该有各自独立的名字，归在 PioneerJeff Labs 下面。
+- 后续项目也应该有各自独立的名字，并把具体创意和真实需求沉淀成可复用的底层能力层。
 - **Jeff** 或 **PioneerJeff** 更适合作为创始人/人格线索，不必强行放进每个项目名里。
 
 Logo 方向：
 
-- 用完整 wordmark：`PioneerJeff Labs`。
-- 旁边配一个“路径 / 连续性 / 探索”的小图形。
+- 组织级头像和 wordmark 资产不要放在这个项目仓库里。
+- Lab 级图形可以用“闪光点 / 灵感 / 可复用底层能力”的方向，但不要直接复用 Emotion Engine 的项目图标。
 - 不围绕缩写字母设计。
-
-初版资产：
-
-- [PioneerJeff Labs wordmark](../assets/pioneerjeff-labs-wordmark.svg)
 
 ## Emotion Engine 品牌
 

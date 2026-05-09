@@ -15,7 +15,7 @@ Most AI agents can respond well in the moment, but they do not carry an emotiona
 
 Emotion Engine gives an LLM-powered agent a small, inspectable continuity layer: mood, trust, decay, boundaries, and compact emotional memories. The LLM still decides what happened and how to respond. Emotion Engine makes that judgment persistent.
 
-Emotion Engine is part of PioneerJeff Labs, a small open-source lab exploring agent continuity, memory, and personal AI.
+Emotion Engine is part of PioneerJeff Labs, an open-source lab building reusable infrastructure layers for creative AI applications.
 
 Status: experimental / v0.1.
 
