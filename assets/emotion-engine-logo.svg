@@ -11,8 +11,4 @@
   </g>
   <text x="198" y="82" fill="#101820" font-family="ui-rounded, SF Pro Rounded, Nunito Sans, Avenir Next, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="42" font-weight="700" letter-spacing="0">Emotion Engine</text>
   <text x="200" y="124" fill="#4E5D66" font-family="ui-rounded, SF Pro Rounded, Nunito Sans, Avenir Next, system-ui, -apple-system, BlinkMacSystemFont, Segoe UI, sans-serif" font-size="21" font-weight="450" letter-spacing="0">Emotional continuity for LLM agents</text>
-  <path d="M200 144 H568" stroke="#E4EAEE" stroke-width="2" stroke-linecap="round"/>
-  <circle cx="604" cy="144" r="5" fill="#FF6B6B"/>
-  <circle cx="626" cy="144" r="5" fill="#FFD166"/>
-  <circle cx="648" cy="144" r="5" fill="#6AA7FF"/>
 </svg>
