@@ -11,9 +11,10 @@
 - Reworked README positioning for a clearer public launch story and added a launch kit.
 - Added separate English and Chinese README files, concept docs, integration docs, and prompt guidance preview.
 - Added a Claude Skill integration package.
-- Added initial project and lab logo assets.
+- Added a Hermes Agent integration package.
+- Added initial project logo assets.
 - Removed the previous lab acronym from launch-facing copy.
-- Moved platform-specific packages under `integrations/openclaw` and `integrations/claude-skill`.
+- Moved platform-specific packages under `integrations/openclaw`, `integrations/claude-skill`, and `integrations/hermes`.
 - Removed duplicate integration copies of the shared core; package scripts now assemble self-contained release zips from the root source.
 - Refined PioneerJeff Labs positioning around reusable infrastructure layers for creative AI applications.
 

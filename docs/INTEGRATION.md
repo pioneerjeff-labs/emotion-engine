@@ -6,6 +6,7 @@ Ready-to-adapt starter integrations:
 
 - OpenClaw: [integrations/openclaw](../integrations/openclaw)
 - Claude Skill: [integrations/claude-skill](../integrations/claude-skill)
+- Hermes Agent: [integrations/hermes](../integrations/hermes)
 
 ## Minimal Loop
 

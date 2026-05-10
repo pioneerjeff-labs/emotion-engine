@@ -60,7 +60,7 @@ In short: **the LLM decides; Emotion Engine remembers.**
 
 ## Quick Demo
 
-Run a local lifecycle check without installing OpenClaw:
+Run a local lifecycle check without installing any agent runtime:
 
 ```bash
 python3 scripts/check_state_lifecycle.py --style "warm but not over-compliant, with clear boundaries"
@@ -101,9 +101,10 @@ LLM task:
 | Core state engine and local demos | [scripts](scripts) |
 | OpenClaw skill | [integrations/openclaw](integrations/openclaw) |
 | Claude Skill / Claude Code package | [integrations/claude-skill](integrations/claude-skill) |
+| Hermes Agent skill package | [integrations/hermes](integrations/hermes) |
 
 The repository root is the Emotion Engine project. Platform-specific packages live under `integrations/`.
-The two first-party runtime integrations are OpenClaw and Claude Skill.
+The first-party starter integrations are OpenClaw, Claude Skill, and Hermes Agent.
 
 ## Integrations
 
@@ -160,6 +161,26 @@ cd integrations/claude-skill
 ```
 
 This creates `emotion-engine-claude-skill.zip`. The zip is a generated release artifact, so it is not committed to the repository.
+
+### Hermes Agent
+
+The Hermes-compatible package lives in [integrations/hermes](integrations/hermes).
+
+For local Hermes installation:
+
+```bash
+cd integrations/hermes/emotion-engine
+./install.sh
+```
+
+To build a Hermes skill zip:
+
+```bash
+cd integrations/hermes
+./package_hermes_skill.sh
+```
+
+This creates `emotion-engine-hermes-skill.zip`. The zip is a generated release artifact, so it is not committed to the repository.
 
 ## Core Concepts
 
@@ -229,7 +250,8 @@ emotion-engine/
 │   └── simulate_state_lifecycle.py
 ├── integrations/
 │   ├── openclaw/
-│   └── claude-skill/
+│   ├── claude-skill/
+│   └── hermes/
 ├── tests/
 ├── docs/
 ├── assets/

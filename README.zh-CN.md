@@ -55,7 +55,7 @@ Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 
 
 一句话：**大模型做判断，Emotion Engine 负责记住。**
 
-## 不安装 OpenClaw 也能试
+## 不安装任何 Agent 运行环境也能试
 
 运行本地生命周期检查：
 
@@ -110,11 +110,12 @@ python3 scripts/prompt_preview.py \
 | 需求 | 使用位置 |
 |---|---|
 | 核心状态引擎和本地演示 | [scripts](scripts) |
-| OpenClaw skill | [integrations/openclaw](integrations/openclaw) |
-| Claude Skill / Claude Code 包 | [integrations/claude-skill](integrations/claude-skill) |
+| OpenClaw 集成包 | [integrations/openclaw](integrations/openclaw) |
+| Claude Skill / Claude Code 集成包 | [integrations/claude-skill](integrations/claude-skill) |
+| Hermes Agent 集成包 | [integrations/hermes](integrations/hermes) |
 
 仓库根目录是 Emotion Engine 项目本体；具体平台适配都放在 `integrations/` 下面。
-目前一等支持的两个运行环境是 OpenClaw 和 Claude Skill。
+目前提供的初版平台集成是 OpenClaw、Claude Skill 和 Hermes Agent。
 
 ## OpenClaw 快速安装
 
@@ -169,6 +170,26 @@ cd integrations/claude-skill
 ```
 
 这会生成 `emotion-engine-claude-skill.zip`。它是发布产物，不需要提交到仓库。
+
+## Hermes Agent 快速安装
+
+Hermes 版本在 [integrations/hermes](integrations/hermes)。
+
+用于本地 Hermes 安装：
+
+```bash
+cd integrations/hermes/emotion-engine
+./install.sh
+```
+
+构建 Hermes skill 压缩包：
+
+```bash
+cd integrations/hermes
+./package_hermes_skill.sh
+```
+
+这会生成 `emotion-engine-hermes-skill.zip`。它是发布产物，不需要提交到仓库。
 
 ## 核心概念
 
