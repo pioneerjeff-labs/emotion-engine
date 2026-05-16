@@ -94,11 +94,36 @@ LLM task:
 - Record a compact emotional memory after the turn.
 ```
 
+## Web Demo
+
+A scripted side-by-side web demo lives in [demo](demo). It compares a baseline assistant with one using an Emotion Engine state packet.
+
+Open it directly:
+
+```text
+demo/index.html
+```
+
+Or serve the repository locally:
+
+```bash
+python3 -m http.server 4173 --bind 127.0.0.1
+```
+
+Then visit:
+
+```text
+http://127.0.0.1:4173/demo/
+```
+
+The web demo is explanatory and scripted. It does not call an LLM or infer a real user's emotional state.
+
 ## Which Package Should I Use?
 
 | Need | Use |
 |---|---|
 | Core state engine and local demos | [scripts](scripts) |
+| Scripted web demo for product explanation | [demo](demo) |
 | OpenClaw skill | [integrations/openclaw](integrations/openclaw) |
 | Claude Skill / Claude Code package | [integrations/claude-skill](integrations/claude-skill) |
 | Hermes Agent skill package | [integrations/hermes](integrations/hermes) |
@@ -254,6 +279,7 @@ emotion-engine/
 │   └── hermes/
 ├── tests/
 ├── docs/
+├── demo/
 ├── assets/
 ├── README.md
 ├── README.zh-CN.md

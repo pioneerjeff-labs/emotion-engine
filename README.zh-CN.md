@@ -105,11 +105,36 @@ python3 scripts/prompt_preview.py \
 - 回复后记录一条紧凑情绪记忆。
 ```
 
+## 网页演示
+
+仓库里也有一个脚本化的并排网页演示：[demo](demo)。它会对比普通“逻辑记忆”助手和接入 Emotion Engine 状态包后的助手。
+
+可以直接打开：
+
+```text
+demo/index.html
+```
+
+也可以在仓库根目录启动本地服务：
+
+```bash
+python3 -m http.server 4173 --bind 127.0.0.1
+```
+
+然后访问：
+
+```text
+http://127.0.0.1:4173/demo/
+```
+
+这个网页演示是解释性、脚本化的，不会调用大模型，也不会推断真实用户的情绪状态。
+
 ## 我应该用哪一份？
 
 | 需求 | 使用位置 |
 |---|---|
 | 核心状态引擎和本地演示 | [scripts](scripts) |
+| 用于产品解释的脚本化网页演示 | [demo](demo) |
 | OpenClaw 集成包 | [integrations/openclaw](integrations/openclaw) |
 | Claude Skill / Claude Code 集成包 | [integrations/claude-skill](integrations/claude-skill) |
 | Hermes Agent 集成包 | [integrations/hermes](integrations/hermes) |

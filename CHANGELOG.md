@@ -10,6 +10,7 @@
 - Clarified that the lifecycle checker is not an AI chat demo and that LLMs make the final contextual emotion judgment.
 - Reworked README positioning for a clearer public launch story and added a launch kit.
 - Added separate English and Chinese README files, concept docs, integration docs, and prompt guidance preview.
+- Added a scripted side-by-side web demo for launch screenshots and product explanation.
 - Added a Claude Skill integration package.
 - Added a Hermes Agent integration package.
 - Added initial project logo assets.

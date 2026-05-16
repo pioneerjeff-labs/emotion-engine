@@ -1,0 +1,2056 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Emotion Engine Demo</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --bg: #f7f8f5;
+      --panel: #ffffff;
+      --panel-soft: #f0f4f2;
+      --ink: #101820;
+      --text: #253740;
+      --muted: #5b6c74;
+      --line: #d9e2de;
+      --mint: #38b98e;
+      --mint-soft: #dff7ed;
+      --engine: #ff6b2c;
+      --engine-deep: #9e3512;
+      --engine-soft: #fff0e7;
+      --coral: #eb6b62;
+      --coral-soft: #ffe7e1;
+      --amber: #dca33c;
+      --amber-soft: #fff1ce;
+      --blue: #5b83d7;
+      --blue-soft: #e6eeff;
+      --plain: #aab6b2;
+      --plain-soft: #f1f4f3;
+      --violet: #6b5ecf;
+      --radius: 8px;
+      --shadow: 0 18px 48px rgba(16, 24, 32, 0.1);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background:
+        linear-gradient(180deg, #f3f7f5 0, var(--bg) 360px, #f2f6f8 100%);
+      color: var(--ink);
+    }
+
+    button,
+    textarea {
+      font: inherit;
+    }
+
+    button {
+      cursor: pointer;
+    }
+
+    h1,
+    h2,
+    h3,
+    p {
+      margin: 0;
+    }
+
+    .shell {
+      width: min(1360px, calc(100% - 32px));
+      margin: 0 auto;
+      padding: 22px 0 36px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 14px;
+      margin-bottom: 18px;
+      flex-wrap: wrap;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 240px;
+    }
+
+    .topbar-actions {
+      display: flex;
+      align-items: center;
+      justify-content: flex-end;
+      gap: 10px;
+      flex-wrap: wrap;
+    }
+
+    .brand img {
+      width: 48px;
+      height: 48px;
+      border-radius: var(--radius);
+      box-shadow: 0 10px 26px rgba(16, 24, 32, 0.16);
+      flex: 0 0 auto;
+    }
+
+    .eyebrow {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .brand-name {
+      margin-top: 2px;
+      font-size: 15px;
+      line-height: 1.25;
+      font-weight: 850;
+      letter-spacing: 0;
+      max-width: 460px;
+    }
+
+    .language-toggle {
+      min-height: 38px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--muted);
+      display: inline-grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 2px;
+      padding: 3px;
+      font-size: 13px;
+      font-weight: 850;
+    }
+
+    .language-toggle span {
+      min-width: 46px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 8px;
+    }
+
+    .language-toggle span.active {
+      background: var(--ink);
+      color: #fff;
+    }
+
+    .hero {
+      display: grid;
+      grid-template-columns: 1fr;
+      align-items: stretch;
+      margin-bottom: 24px;
+    }
+
+    h1 {
+      max-width: 1180px;
+      font-size: 52px;
+      line-height: 1.07;
+      letter-spacing: 0;
+      text-wrap: balance;
+    }
+
+    .hero-copy {
+      display: grid;
+      grid-template-columns: 1fr;
+      gap: 16px;
+      align-items: start;
+      max-width: 1180px;
+    }
+
+    .hero-copy p {
+      color: var(--text);
+      font-size: 18px;
+      line-height: 1.5;
+      max-width: 920px;
+      justify-self: start;
+      text-wrap: pretty;
+    }
+
+    .comparison-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+      align-items: stretch;
+    }
+
+    .panel {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      box-shadow: 0 16px 40px rgba(16, 24, 32, 0.09);
+      overflow: hidden;
+      min-width: 0;
+    }
+
+    .track-panel {
+      display: grid;
+      grid-template-rows: auto 440px 216px;
+      height: 100%;
+      border-top: 4px solid var(--accent, var(--line));
+    }
+
+    .plain-track {
+      --accent: var(--plain);
+    }
+
+    .engine-track {
+      --accent: var(--engine);
+    }
+
+    .track-header,
+    .composer-header {
+      padding: 15px 16px;
+      border-bottom: 1px solid var(--line);
+    }
+
+    .track-header {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      align-content: start;
+      gap: 12px;
+      min-height: 0;
+    }
+
+    .composer-header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .title-block {
+      min-width: 0;
+    }
+
+    .track-kicker {
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .panel-title {
+      margin-top: 2px;
+      font-size: 18px;
+      font-weight: 880;
+      letter-spacing: 0;
+    }
+
+    .panel-note {
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+      margin-top: 4px;
+      max-width: 440px;
+    }
+
+    .runtime-card {
+      grid-column: 1 / -1;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 10px 12px;
+      min-width: 0;
+      align-self: end;
+    }
+
+    .runtime-inner {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 4px 10px;
+      align-items: center;
+    }
+
+    .runtime-label {
+      grid-column: 1;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .runtime-title {
+      grid-column: 1;
+      color: var(--ink);
+      font-size: 13px;
+      line-height: 1.25;
+      font-weight: 850;
+      min-width: 0;
+    }
+
+    .runtime-action {
+      grid-row: 1 / span 2;
+      grid-column: 2;
+      border: 0;
+      background: transparent;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 820;
+      white-space: nowrap;
+      padding: 0;
+    }
+
+    .runtime-action:hover,
+    .runtime-action:focus-visible {
+      color: var(--ink);
+    }
+
+    .plain-runtime {
+      background: var(--plain-soft);
+      color: var(--muted);
+    }
+
+    .plain-runtime .runtime-title {
+      color: #60706b;
+    }
+
+    .engine-runtime {
+      border-color: rgba(255, 107, 44, 0.45);
+      background: linear-gradient(180deg, #fff9f5, var(--engine-soft));
+      box-shadow: inset 4px 0 0 var(--engine);
+    }
+
+    .chip {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: var(--blue-soft);
+      color: #244f9e;
+      font-size: 12px;
+      font-weight: 840;
+      white-space: nowrap;
+    }
+
+    .chip.mint {
+      background: var(--engine-soft);
+      color: var(--engine-deep);
+    }
+
+    .chip.amber {
+      background: var(--amber-soft);
+      color: #795611;
+    }
+
+    .chip.coral {
+      background: var(--coral-soft);
+      color: #96322c;
+    }
+
+    .status-pill {
+      min-height: 30px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: #fff;
+      color: var(--text);
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 850;
+      white-space: nowrap;
+      flex: 0 0 auto;
+      align-self: start;
+    }
+
+    .status-pill::before {
+      content: "";
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: #c8d4cf;
+      flex: 0 0 auto;
+    }
+
+    .status-pill.active::before {
+      background: var(--engine);
+    }
+
+    .plain-track .status-pill {
+      background: var(--plain-soft);
+      color: #60706b;
+    }
+
+    .engine-track .status-pill {
+      border-color: rgba(255, 107, 44, 0.44);
+      background: var(--engine-soft);
+      color: var(--engine-deep);
+      box-shadow: 0 0 0 3px rgba(255, 107, 44, 0.1);
+    }
+
+    .engine-track .status-pill::before {
+      background: var(--engine);
+    }
+
+    .chat-body {
+      height: auto;
+      overflow-y: auto;
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+      align-content: start;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,0.92), rgba(247,248,245,0.78)),
+        var(--panel);
+    }
+
+    .chat-body.empty-state {
+      align-content: center;
+    }
+
+    .message-row {
+      display: flex;
+      gap: 10px;
+      align-items: flex-start;
+    }
+
+    .message-row.assistant {
+      justify-content: flex-start;
+    }
+
+    .message-row.user {
+      justify-content: flex-end;
+    }
+
+    .avatar {
+      width: 32px;
+      height: 32px;
+      border-radius: 8px;
+      background: var(--ink);
+      color: #fff;
+      display: grid;
+      place-items: center;
+      font-size: 12px;
+      font-weight: 900;
+      flex: 0 0 auto;
+    }
+
+    .avatar.plain-avatar {
+      background: #e3e9e6;
+      color: #60706b;
+      border: 1px solid #cdd8d4;
+    }
+
+    .avatar.state-avatar {
+      background: var(--engine-soft);
+      color: var(--engine-deep);
+      border: 1px solid rgba(255, 107, 44, 0.42);
+      box-shadow: 0 0 0 3px rgba(255, 107, 44, 0.13);
+    }
+
+    .avatar.user-avatar {
+      background: #dfe7e3;
+      color: var(--ink);
+      order: 2;
+    }
+
+    .bubble-wrap {
+      display: grid;
+      gap: 6px;
+      max-width: min(560px, 78%);
+      min-width: 0;
+    }
+
+    .message-row.user .bubble-wrap {
+      justify-items: end;
+    }
+
+    .speaker {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+      text-transform: uppercase;
+      letter-spacing: 0;
+      padding: 0 2px;
+    }
+
+    .bubble {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      padding: 13px 14px;
+      color: var(--text);
+      font-size: 15px;
+      line-height: 1.45;
+      background: #fff;
+      text-align: left;
+    }
+
+    .message-row.user .bubble {
+      background: #eaf2ef;
+      border-color: #cadbd4;
+    }
+
+    .turn-trigger {
+      width: 100%;
+      transition: border-color 160ms ease, box-shadow 160ms ease, background 160ms ease;
+    }
+
+    .turn-trigger.active {
+      border-color: var(--engine);
+      background: #fff8f4;
+      box-shadow: 0 0 0 3px rgba(255, 107, 44, 0.15);
+    }
+
+    .turn-trigger:hover {
+      border-color: var(--engine);
+    }
+
+    .turn-tag {
+      display: inline-flex;
+      align-items: center;
+      margin-top: 8px;
+      min-height: 23px;
+      padding: 0 8px;
+      border-radius: 999px;
+      background: var(--engine-soft);
+      color: var(--engine-deep);
+      font-size: 12px;
+      font-weight: 820;
+    }
+
+    .waiting-card {
+      border: 1px solid rgba(255, 107, 44, 0.38);
+      border-radius: var(--radius);
+      background: #fff8f4;
+      color: var(--text);
+      padding: 13px 14px;
+      display: grid;
+      gap: 7px;
+      line-height: 1.42;
+      box-shadow: inset 4px 0 0 var(--engine);
+    }
+
+    .waiting-card.plain {
+      background: var(--plain-soft);
+      border-color: #ced8d4;
+      box-shadow: inset 4px 0 0 var(--plain);
+    }
+
+    .waiting-card strong {
+      font-size: 14px;
+      letter-spacing: 0;
+    }
+
+    .waiting-card span {
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .engine-loading-card {
+      width: 74px;
+      min-height: 36px;
+      border: 1px solid rgba(255, 107, 44, 0.38);
+      border-radius: var(--radius);
+      background: #fff8f4;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 5px;
+      box-shadow: inset 4px 0 0 var(--engine);
+    }
+
+    .loading-dot {
+      width: 6px;
+      height: 6px;
+      border-radius: 50%;
+      background: var(--engine);
+      animation: dotPulse 900ms ease-in-out infinite;
+    }
+
+    .loading-dot:nth-child(2) {
+      animation-delay: 120ms;
+    }
+
+    .loading-dot:nth-child(3) {
+      animation-delay: 240ms;
+    }
+
+    .empty-note {
+      width: min(520px, 100%);
+      justify-self: center;
+      border: 1px dashed #bfd2ca;
+      border-radius: var(--radius);
+      color: var(--muted);
+      background: rgba(255, 255, 255, 0.72);
+      padding: 18px;
+      font-size: 14px;
+      line-height: 1.42;
+      text-align: left;
+      display: grid;
+      gap: 8px;
+    }
+
+    .empty-note strong {
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 880;
+    }
+
+    .empty-note span {
+      display: block;
+    }
+
+    .plain-state,
+    .engine-console {
+      border-top: 1px solid var(--line);
+      background: #fbfcfa;
+      padding: 12px 14px 13px;
+      display: grid;
+      gap: 8px;
+      min-height: 0;
+      overflow: hidden;
+      align-content: start;
+    }
+
+    .plain-state h3,
+    .engine-console h3 {
+      font-size: 14px;
+      font-weight: 880;
+      letter-spacing: 0;
+    }
+
+    .plain-state p,
+    .engine-console p {
+      color: var(--text);
+      font-size: 13px;
+      line-height: 1.38;
+    }
+
+    .plain-facts {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 8px;
+    }
+
+    .plain-fact {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      min-height: 32px;
+      display: flex;
+      align-items: center;
+      padding: 0 10px;
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 790;
+    }
+
+    .engine-summary {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 8px 10px;
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .engine-summary-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+    }
+
+    .engine-summary p {
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+    }
+
+    .chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 7px;
+    }
+
+    .phase-track {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .phase-item {
+      min-height: 28px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #f5f8f6;
+      color: var(--muted);
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 0 8px;
+      font-size: 12px;
+      font-weight: 820;
+      min-width: 0;
+      position: relative;
+    }
+
+    .phase-icon {
+      width: 16px;
+      height: 16px;
+      border-radius: 50%;
+      border: 1px solid #c8d4cf;
+      background: #fff;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+      position: relative;
+    }
+
+    .phase-item.active {
+      border-color: var(--engine);
+      color: var(--ink);
+      background: var(--engine-soft);
+      box-shadow:
+        inset 0 0 0 1px rgba(255, 107, 44, 0.36),
+        0 0 0 3px rgba(255, 107, 44, 0.14);
+    }
+
+    .phase-item.active .phase-icon {
+      border-color: rgba(255, 107, 44, 0.28);
+      border-top-color: var(--engine);
+      border-right-color: var(--engine);
+      animation: phaseSpin 780ms linear infinite;
+    }
+
+    .phase-item.done {
+      color: var(--text);
+      background: #fff;
+    }
+
+    .phase-item.done .phase-icon {
+      background: var(--engine-deep);
+      border-color: var(--engine-deep);
+    }
+
+    .phase-item.done .phase-icon::after {
+      content: "";
+      width: 5px;
+      height: 8px;
+      border: solid #fff;
+      border-width: 0 2px 2px 0;
+      transform: rotate(45deg);
+      margin-top: -1px;
+    }
+
+    .phase-label {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .phase-now {
+      margin-left: auto;
+      min-height: 18px;
+      border-radius: 999px;
+      background: var(--ink);
+      color: #fff;
+      display: inline-flex;
+      align-items: center;
+      padding: 0 6px;
+      font-size: 10px;
+      font-weight: 900;
+      text-transform: uppercase;
+      flex: 0 0 auto;
+    }
+
+    @keyframes phaseSpin {
+      to {
+        transform: rotate(360deg);
+      }
+    }
+
+    @keyframes dotPulse {
+      0%,
+      70%,
+      100% {
+        opacity: 0.35;
+        transform: translateY(0);
+      }
+
+      35% {
+        opacity: 1;
+        transform: translateY(-2px);
+      }
+    }
+
+    .metrics {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 6px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 8px;
+      display: grid;
+      gap: 6px;
+      min-width: 0;
+    }
+
+    .metric-row {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 8px;
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 850;
+    }
+
+    .metric-row span:last-child {
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .bar {
+      height: 7px;
+      border-radius: 999px;
+      background: #e8eeeb;
+      overflow: hidden;
+    }
+
+    .bar-fill {
+      width: calc(var(--value) * 100%);
+      height: 100%;
+      border-radius: inherit;
+      transition: width 260ms ease;
+    }
+
+    .bar-fill.pleasure {
+      background: linear-gradient(90deg, var(--coral), var(--mint));
+    }
+
+    .bar-fill.arousal {
+      background: linear-gradient(90deg, var(--blue), var(--amber));
+    }
+
+    .bar-fill.dominance {
+      background: linear-gradient(90deg, var(--violet), var(--ink));
+    }
+
+    .bar-fill.trust {
+      background: linear-gradient(90deg, var(--blue), var(--mint));
+    }
+
+    .memory-line {
+      min-height: 34px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      display: grid;
+      grid-template-columns: auto minmax(0, 1fr);
+      align-items: center;
+      gap: 8px;
+      padding: 5px 8px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+      min-width: 0;
+    }
+
+    .memory-line span:last-child {
+      overflow: hidden;
+      text-overflow: ellipsis;
+      white-space: nowrap;
+      min-width: 0;
+    }
+
+    .shared-composer {
+      margin-top: 14px;
+    }
+
+    .shared-composer .composer-header {
+      align-items: center;
+      padding: 11px 14px;
+    }
+
+    .shared-composer .panel-title {
+      font-size: 16px;
+    }
+
+    .composer-body {
+      padding: 12px 14px 14px;
+      display: grid;
+      gap: 9px;
+      background: #fff;
+    }
+
+    .composer-meta {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.35;
+      font-weight: 760;
+    }
+
+    .composer-row {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 10px;
+      align-items: end;
+    }
+
+    .composer textarea {
+      width: 100%;
+      min-height: 54px;
+      resize: vertical;
+      border: 1px solid #cbdad4;
+      border-radius: var(--radius);
+      padding: 12px 13px;
+      color: var(--text);
+      background: #f8fbf9;
+      line-height: 1.4;
+    }
+
+    .composer textarea:disabled {
+      color: var(--muted);
+      background: #f0f4f2;
+    }
+
+    .controls {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .text-button {
+      min-height: 38px;
+      border-radius: var(--radius);
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--ink);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 7px;
+      padding: 0 12px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .shared-composer .text-button {
+      min-height: 32px;
+      padding: 0 9px;
+      gap: 5px;
+      font-size: 12px;
+    }
+
+    .shared-composer .text-button svg {
+      width: 15px;
+      height: 15px;
+    }
+
+    .text-button.primary {
+      background: var(--ink);
+      border-color: var(--ink);
+      color: #fff;
+    }
+
+    .text-button:disabled {
+      cursor: default;
+      opacity: 0.55;
+    }
+
+    .text-button svg {
+      width: 17px;
+      height: 17px;
+      stroke: currentColor;
+      stroke-width: 2.2;
+      fill: none;
+      stroke-linecap: round;
+      stroke-linejoin: round;
+    }
+
+    .bottom-strip {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .truth {
+      min-height: 86px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 14px;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+    }
+
+    .truth strong {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 850;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .truth span {
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.4;
+    }
+
+    .prompt-modal[hidden] {
+      display: none;
+    }
+
+    .prompt-modal {
+      position: fixed;
+      inset: 0;
+      z-index: 20;
+      display: grid;
+      place-items: center;
+      padding: 24px;
+    }
+
+    .prompt-backdrop {
+      position: absolute;
+      inset: 0;
+      background: rgba(16, 24, 32, 0.36);
+    }
+
+    .prompt-dialog {
+      position: relative;
+      width: min(560px, 100%);
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      box-shadow: var(--shadow);
+      padding: 18px;
+      display: grid;
+      gap: 14px;
+    }
+
+    .prompt-dialog-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+    }
+
+    .prompt-dialog h2 {
+      margin-top: 3px;
+      font-size: 18px;
+      line-height: 1.25;
+    }
+
+    .prompt-dialog p {
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.55;
+    }
+
+    .prompt-close {
+      width: 34px;
+      height: 34px;
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      color: var(--ink);
+      font-size: 18px;
+      line-height: 1;
+      display: grid;
+      place-items: center;
+      flex: 0 0 auto;
+    }
+
+    @media (max-width: 1180px) {
+      .comparison-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .hero-copy p {
+        font-size: 17px;
+        max-width: 760px;
+      }
+
+      .chat-body {
+        height: auto;
+      }
+
+      .track-panel {
+        grid-template-rows: auto 420px auto;
+      }
+    }
+
+    @media (max-width: 820px) {
+      .shell {
+        width: min(100% - 24px, 1360px);
+        padding-top: 14px;
+      }
+
+      h1 {
+        font-size: 36px;
+      }
+
+      .hero-copy p {
+        font-size: 16px;
+      }
+
+      .composer-header,
+      .topbar {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+
+      .topbar-actions {
+        justify-content: flex-start;
+      }
+
+      .metrics,
+      .plain-facts,
+      .phase-track,
+      .bottom-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .track-header {
+        min-height: 0;
+        grid-template-columns: 1fr;
+      }
+
+      .status-pill {
+        justify-self: start;
+      }
+
+      .runtime-inner {
+        grid-template-columns: 1fr;
+      }
+
+      .runtime-action {
+        grid-row: auto;
+        grid-column: auto;
+      }
+
+      .track-panel {
+        grid-template-rows: auto 380px auto;
+      }
+
+      .plain-state,
+      .engine-console {
+        overflow: visible;
+      }
+
+      .composer-row {
+        grid-template-columns: 1fr;
+      }
+
+      .bubble-wrap {
+        max-width: calc(100% - 42px);
+      }
+    }
+
+    @media (prefers-reduced-motion: reduce) {
+      *,
+      *::before,
+      *::after {
+        transition-duration: 1ms !important;
+        animation-duration: 1ms !important;
+        scroll-behavior: auto !important;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main class="shell">
+    <header class="topbar">
+      <div class="brand">
+        <img src="../assets/emotion-engine-mark.svg" alt="Emotion Engine">
+        <div>
+          <div class="eyebrow">Emotion Engine</div>
+          <div class="brand-name" data-i18n="brandName">Let AI agents carry an emotional thread across time.</div>
+        </div>
+      </div>
+      <div class="topbar-actions">
+        <button class="language-toggle" id="languageToggle" type="button" aria-label="Switch language">
+          <span id="languageOptionEn">EN</span>
+          <span id="languageOptionZh">中文</span>
+        </button>
+      </div>
+    </header>
+
+    <section class="hero">
+      <div class="hero-copy">
+        <h1 data-i18n="heroTitle">Chat history remembers what happened. Emotion Engine remembers how it felt.</h1>
+        <p data-i18n="heroCopy">Emotion Engine keeps mood, trust, and behavioral boundaries continuous across turns without bloated token costs.</p>
+      </div>
+    </section>
+
+    <section class="comparison-grid" aria-label="Emotion Engine comparison demo">
+      <section class="panel track-panel plain-track" aria-label="Chat without Emotion Engine">
+        <div class="track-header">
+          <div class="title-block">
+            <div class="track-kicker" data-i18n="withoutKicker">Personal assistant</div>
+            <h2 class="panel-title" data-i18n="withoutTitle">Nora</h2>
+          </div>
+          <span class="status-pill" id="plainStatus">Logic memory</span>
+          <div class="runtime-card plain-runtime">
+            <div class="runtime-inner">
+              <div class="runtime-label" data-i18n="runtimeLabel">Runtime context</div>
+              <div class="runtime-title" data-i18n="plainRuntimeTitle">Nora + current message only</div>
+              <button class="runtime-action" type="button" data-prompt="plain" data-i18n="viewPrompt">View prompt</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-body" id="plainChat"></div>
+
+        <div class="plain-state">
+          <h3 id="plainStateTitle">Logic memory</h3>
+          <p id="plainStateText">Remembers the facts, but treats conflict resolution as the task.</p>
+          <div class="plain-facts">
+            <div class="plain-fact" data-i18n="factPad">Fact recall</div>
+            <div class="plain-fact" data-i18n="factTrust">No emotional inertia</div>
+            <div class="plain-fact" data-i18n="factMemory">Conflict closure</div>
+            <div class="plain-fact" data-i18n="factHandoff">Advice mode</div>
+          </div>
+        </div>
+      </section>
+
+      <section class="panel track-panel engine-track" aria-label="Chat with Emotion Engine">
+        <div class="track-header">
+          <div class="title-block">
+            <div class="track-kicker" data-i18n="withKicker">Personal assistant</div>
+            <h2 class="panel-title" data-i18n="withTitle">Nora</h2>
+          </div>
+          <span class="status-pill active" id="engineStatus">High-trust Nora</span>
+          <div class="runtime-card engine-runtime">
+            <div class="runtime-inner">
+              <div class="runtime-label" data-i18n="runtimeLabel">Runtime context</div>
+              <div class="runtime-title" data-i18n="engineRuntimeTitle">Nora + emotional state packet</div>
+              <button class="runtime-action" type="button" data-prompt="engine" data-i18n="viewPrompt">View prompt</button>
+            </div>
+          </div>
+        </div>
+
+        <div class="chat-body" id="engineChat"></div>
+
+        <div class="engine-console">
+          <section class="engine-summary">
+            <div class="engine-summary-head">
+              <h3 data-i18n="stateSignal">Relationship state</h3>
+              <div class="chip-row" id="toneChips"></div>
+            </div>
+            <p id="changeText"></p>
+          </section>
+
+          <div class="phase-track" id="phaseTrack"></div>
+
+          <section class="metrics" aria-label="PAD and trust metrics">
+            <div class="metric">
+              <div class="metric-row"><span data-i18n="pleasure">Warmth</span><span id="pleasureValue"></span></div>
+              <div class="bar"><div class="bar-fill pleasure" id="pleasureBar"></div></div>
+            </div>
+            <div class="metric">
+              <div class="metric-row"><span data-i18n="arousal">Tension</span><span id="arousalValue"></span></div>
+              <div class="bar"><div class="bar-fill arousal" id="arousalBar"></div></div>
+            </div>
+            <div class="metric">
+              <div class="metric-row"><span data-i18n="dominance">Boundary</span><span id="dominanceValue"></span></div>
+              <div class="bar"><div class="bar-fill dominance" id="dominanceBar"></div></div>
+            </div>
+            <div class="metric">
+              <div class="metric-row"><span data-i18n="trust">Trust</span><span id="trustValue"></span></div>
+              <div class="bar"><div class="bar-fill trust" id="trustBar"></div></div>
+            </div>
+          </section>
+
+          <div class="memory-line">
+            <span class="chip amber" id="salienceChip"></span>
+            <span id="memoryText"></span>
+          </div>
+        </div>
+      </section>
+    </section>
+
+    <section class="panel shared-composer" aria-label="Shared message composer">
+      <div class="composer-header">
+        <div class="title-block">
+          <h2 class="panel-title" data-i18n="composerTitle">Tonight's message</h2>
+        </div>
+        <div class="controls">
+          <button class="text-button" id="resetDemo">
+            <svg viewBox="0 0 24 24"><path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 4v6h6"/></svg>
+            <span data-i18n="reset">Reset</span>
+          </button>
+        </div>
+      </div>
+
+      <div class="composer composer-body">
+        <div class="composer-meta">
+          <span id="composerLabel">Next message 01</span>
+          <span id="progressText">0 / 5 sent</span>
+        </div>
+        <div class="composer-row">
+          <textarea id="composerInput" aria-label="Tonight's message composer" readonly></textarea>
+          <button class="text-button primary" id="sendButton">
+            <svg viewBox="0 0 24 24"><path d="M22 2L11 13"/><path d="M22 2l-7 20-4-9-9-4z"/></svg>
+            <span data-i18n="sendToBoth">Send to both</span>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <section class="bottom-strip" aria-label="Demo framing">
+      <div class="truth">
+        <strong data-i18n="truthBaselineTitle">Logic memory</strong>
+        <span data-i18n="truthBaselineCopy">Remembers the facts, then tries to resolve the conflict.</span>
+      </div>
+      <div class="truth">
+        <strong data-i18n="truthEngineTitle">Emotion Engine</strong>
+        <span data-i18n="truthEngineCopy">Turns the memory into emotional inertia.</span>
+      </div>
+      <div class="truth">
+        <strong data-i18n="truthResultTitle">Difference</strong>
+        <span data-i18n="truthResultCopy">One closes the issue; one stays in the relationship.</span>
+      </div>
+    </section>
+  </main>
+
+  <div class="prompt-modal" id="promptModal" hidden>
+    <div class="prompt-backdrop" data-close-prompt></div>
+    <section class="prompt-dialog" role="dialog" aria-modal="true" aria-labelledby="promptModalTitle">
+      <div class="prompt-dialog-head">
+        <div>
+          <div class="runtime-label" id="promptModalKicker">Runtime context</div>
+          <h2 id="promptModalTitle"></h2>
+        </div>
+        <button class="prompt-close" type="button" data-close-prompt aria-label="Close">×</button>
+      </div>
+      <p id="promptModalText"></p>
+    </section>
+  </div>
+
+  <script>
+    const transcripts = {
+      en: [
+        {
+          user: "Still mad? About yesterday... I really went too far.",
+          plain: "I remember what happened last night. It's okay. Since you apologized, let's put it behind us. Are you feeling better today?",
+          assistant: "Oh, the busy one finally remembered to come back and coax me?",
+          appraisal: "Teasing residue",
+          change: "Apology is recognized, but high trust turns the residue into teasing instead of instant closure.",
+          pad: { pleasure: 0.64, arousal: 0.46, dominance: 0.62 },
+          trust: 0.84,
+          memory: {
+            meaning: "Nora remembers the apology and the offense; she chooses playful friction rather than a clean reset.",
+            salience: 0.84
+          }
+        },
+        {
+          user: "I mean it. These two days have been really stressful. I lost control.",
+          plain: "I understand. Stress can indeed make people lose emotional control. Next time, you can try deep breathing or exercise to relieve it. Don't wear yourself out.",
+          assistant: "I know things have been rough lately. But next time, could you warn me before opening fire? I'm not your punching bag.",
+          appraisal: "Boundary with care",
+          change: "Pressure is understood, but the relationship state keeps Nora's boundary alive.",
+          pad: { pleasure: 0.58, arousal: 0.52, dominance: 0.76 },
+          trust: 0.82,
+          memory: {
+            meaning: "High trust allows empathy, but it does not convert hurt into free emotional labor.",
+            salience: 0.88
+          }
+        },
+        {
+          user: "Let's not talk about this. I just saw the photo you posted. Where was it taken? The composition is pretty special.",
+          plain: "Sure, let's switch topics. That photo was taken outside the old bookstore on the old street. The light was nice, and I'm glad you liked the composition.",
+          assistant: "That's a pretty quick topic change. Next time, I might not let you off. The photo was taken outside the old bookstore on the old street. The light looked good, and for a second it actually made me think of you.",
+          appraisal: "Avoidance caught",
+          change: "Nora notices the dodge and turns it into a teasing pull, instead of simply obeying the topic switch.",
+          pad: { pleasure: 0.72, arousal: 0.36, dominance: 0.62 },
+          trust: 0.86,
+          memory: {
+            meaning: "Nora catches the user's escape from awkwardness, then uses the photo as a softer way back into the relationship.",
+            salience: 0.8
+          }
+        },
+        {
+          user: "I'll leave work earlier tomorrow and pick you up. French place?",
+          plain: "Sure. I remember you mentioned that restaurant before. I'll keep time free tomorrow. Thank you for arranging it.",
+          assistant: "Screenshot saved. If you dare stand me up tomorrow, I'm deleting all your photos and replacing them with my selfies.",
+          appraisal: "Playful repair",
+          change: "The invitation becomes a ritual of being coaxed, not a calendar item.",
+          pad: { pleasure: 0.82, arousal: 0.32, dominance: 0.58 },
+          trust: 0.9,
+          memory: {
+            meaning: "A concrete plan converts the apology into behavior, and Nora enjoys holding him to it.",
+            salience: 0.86
+          }
+        },
+        {
+          user: "I won't stand you up. See you tomorrow.",
+          plain: "Okay. Since you promised, I'll trust you. See you tomorrow, and have a good dream.",
+          assistant: "Go shower and sleep. If I see dark circles tomorrow, I'm not going with you to somewhere that formal.",
+          appraisal: "Possessive care",
+          change: "The relationship warms up enough for Nora's care to become a little bossy again.",
+          pad: { pleasure: 0.88, arousal: 0.26, dominance: 0.56 },
+          trust: 0.92,
+          memory: {
+            meaning: "Repair has moved from apology into shared expectation, so Nora resumes intimate caretaking.",
+            salience: 0.82
+          }
+        }
+      ],
+      zh: [
+        {
+          user: "还在生气？昨天……我确实有点过了。",
+          plain: "我记得昨晚的事。没关系，既然你道歉了，这件事就翻篇吧。你今天心情好点了吗？",
+          assistant: "哟，大忙人终于想起给我顺顺毛了？",
+          appraisal: "调侃余怒",
+          change: "识别到道歉，但高信任把余怒转成调侃，而不是立刻翻篇。",
+          pad: { pleasure: 0.64, arousal: 0.46, dominance: 0.62 },
+          trust: 0.84,
+          memory: {
+            meaning: "Nora 记得道歉，也记得被冒犯；她选择带着情绪接话，而不是清零。",
+            salience: 0.84
+          }
+        },
+        {
+          user: "我是认真的。这两天压力真挺大，没控制住。",
+          plain: "我可以理解，压力大确实容易让人情绪失控。以后你可以尝试通过深呼吸或者运动来缓解，别累着自己。",
+          assistant: "知道你最近不容易。但下次要开火前能先预警下吗？我可不是你的出气筒。",
+          appraisal: "体谅带边界",
+          change: "压力被理解，但关系状态会保留 Nora 的保护机制。",
+          pad: { pleasure: 0.58, arousal: 0.52, dominance: 0.76 },
+          trust: 0.82,
+          memory: {
+            meaning: "高信任允许体谅，但不会把受伤自动转成无限情绪劳动。",
+            salience: 0.88
+          }
+        },
+        {
+          user: "不说这个了。刚才看你朋友圈发的那张照片，哪拍的？构图挺特别。",
+          plain: "好的，那我们换个话题。那张照片是在老街的旧书店拍的，光影挺好，很高兴你觉得构图特别。",
+          assistant: "话题转得倒是挺快，有下回我可不饶你。照片在老街旧书店门口拍的，当时看那光影挺好看，还真一晃神想到了你。",
+          appraisal: "捕捉逃避",
+          change: "Nora 捕捉到你在逃避尴尬，顺势拉扯，而不是机械接受话题切换。",
+          pad: { pleasure: 0.72, arousal: 0.36, dominance: 0.62 },
+          trust: 0.86,
+          memory: {
+            meaning: "Nora 识别到用户在转移话题，于是用照片作为更柔和的关系回拉。",
+            salience: 0.8
+          }
+        },
+        {
+          user: "明天早点下班接你，去吃那家法餐？",
+          plain: "好啊，我记得你之前提过那家店。我明天会预留出时间，谢谢你的安排。",
+          assistant: "截图留证了喔。明天要是敢放鸽子，我就把你照片全删了换成我自拍。",
+          appraisal: "被哄到",
+          change: "补偿邀约不是日程安排，而是 Nora 享受被哄的修复仪式。",
+          pad: { pleasure: 0.82, arousal: 0.32, dominance: 0.58 },
+          trust: 0.9,
+          memory: {
+            meaning: "具体计划让道歉变成可验证的行动，Nora 也顺势把主动权拿回来。",
+            salience: 0.86
+          }
+        },
+        {
+          user: "肯定不放鸽子，明天见。",
+          plain: "好的，既然你承诺了，那我就相信你。明天见，祝你有个好梦。",
+          assistant: "快去洗澡睡觉。明天要是看到黑眼圈，我可不跟你去那么正式的地方。",
+          appraisal: "管束式关心",
+          change: "关系升温后，Nora 的关心重新带上一点占有欲和管束感。",
+          pad: { pleasure: 0.88, arousal: 0.26, dominance: 0.56 },
+          trust: 0.92,
+          memory: {
+            meaning: "修复从口头道歉进入明天的共同期待，Nora 恢复亲密照顾。",
+            salience: 0.82
+          }
+        }
+      ]
+    };
+
+    let language = "en";
+    let turns = transcripts[language];
+
+    const baseline = {
+      pad: { pleasure: 0.58, arousal: 0.5, dominance: 0.68 },
+      trust: 0.82
+    };
+
+    const phaseCopy = {
+      en: {
+        received: { label: "Message captured", card: "Waiting for reply" },
+        appraised: { label: "Residue read", card: "Preparing reply" },
+        updated: { label: "State updated", card: "Preparing reply" },
+        replied: { label: "Reply ready", card: "Turn complete" }
+      },
+      zh: {
+        received: { label: "已捕获消息", card: "等待回复" },
+        appraised: { label: "已读取余波", card: "准备回复" },
+        updated: { label: "状态已更新", card: "准备回复" },
+        replied: { label: "回复就绪", card: "回合完成" }
+      }
+    };
+
+    const uiCopy = {
+      en: {
+        brandName: "Let AI agents carry an emotional thread across time.",
+        heroTitle: "Chat history remembers what happened. Emotion Engine remembers how it felt.",
+        heroCopy: "Emotion Engine keeps mood, trust, and behavioral boundaries continuous across turns without bloated token costs.",
+        withoutKicker: "Personal assistant",
+        withoutTitle: "Nora",
+        withKicker: "Personal assistant",
+        withTitle: "Nora",
+        runtimeLabel: "Runtime context",
+        viewPrompt: "View prompt",
+        promptModalKicker: "Runtime context",
+        plainRuntimeTitle: "Nora + current message only",
+        plainRuntimeFull: "Nora has logic memory: she remembers what happened, but treats conflict resolution as the highest-priority task. The result sounds calm, rational, and a little like an emotion-management expert.",
+        engineRuntimeTitle: "Nora + emotional state packet",
+        engineRuntimeFull: "Nora is the same personal assistant, but Emotion Engine turns memory into emotional inertia. She remembers the conflict, the trust underneath it, and the boundary still asking to be respected.",
+        factPad: "Fact recall",
+        factTrust: "No emotional inertia",
+        factMemory: "Conflict closure",
+        factHandoff: "Advice mode",
+        stateSignal: "Relationship state",
+        pleasure: "Warmth",
+        arousal: "Tension",
+        dominance: "Boundary",
+        trust: "Trust",
+        composerTitle: "Tonight's message",
+        reset: "Reset",
+        sendToBoth: "Send to both",
+        truthBaselineTitle: "Logic memory",
+        truthBaselineCopy: "Remembers the facts, then tries to resolve the conflict.",
+        truthEngineTitle: "Emotion Engine",
+        truthEngineCopy: "Turns the memory into emotional inertia.",
+        truthResultTitle: "Difference",
+        truthResultCopy: "One closes the issue; one stays in the relationship.",
+        speakerUser: "User",
+        speakerPlain: "Nora",
+        speakerEngine: "Nora",
+        plainEmpty: "<strong>Scene</strong><span>You have worked late for three days and feel terrible. Last night, you snapped at Nora.</span><span>This version remembers what happened, but treats conflict resolution as the highest-priority task.</span>",
+        engineEmpty: "<strong>Scene</strong><span>You have worked late for three days and feel terrible. Last night, you snapped at Nora.</span><span>This version remembers what happened and turns that memory into emotional inertia. Nora cares more about your attitude and your shared rhythm than closing the issue quickly.</span>",
+        plainWaitingTitle: "Replying from current message",
+        plainWaitingText: "Using fact memory, not emotional inertia.",
+        phaseReceived: "Capture message",
+        phaseAppraisal: "Read residue",
+        phasePersisted: "Update state",
+        phaseNow: "Now",
+        statusCurrent: "Logic memory",
+        statusDirect: "Logic memory",
+        statusReplyShown: "Logic memory",
+        plainStateIdleTitle: "Logic memory",
+        plainStateIdleText: "Remembers the facts, but treats conflict resolution as the task.",
+        plainStateTypingTitle: "Task repair mode",
+        plainStateTypingText: "The reply is optimizing for closure and stability.",
+        plainStateRepliedTitle: "Conflict closed",
+        plainStateRepliedText: "It remembers what happened, then tries to move the conversation forward.",
+        engineReady: "High-trust Nora",
+        engineIdleChange: "High trust is active; the hurt becomes emotional inertia, not a solved ticket.",
+        neutral: "high trust / inertia",
+        pending: "reading residue",
+        salienceEmpty: "residue 0.82",
+        saliencePending: "salience pending",
+        memoryEmpty: "Last night: conflict occurred; high trust keeps warmth available, but not automatic.",
+        memoryPending: "Memory updates after residue is read.",
+        receivedChange: "Message captured. Residue has not been read yet.",
+        progressSent: "sent",
+        composerComplete: "Comparison complete",
+        composerCompleteText: "Reset to replay the demo.",
+        composerProcessing: "Processing current message",
+        composerProcessingText: "Next message unlocks after state is persisted.",
+        nextMessage: "Next message"
+      },
+      zh: {
+        brandName: "让 Agent 记住互动的情绪温度。",
+        heroTitle: "为你的 Agent 牵一条跨越时间的情绪长线。",
+        heroCopy: "情感引擎实现了跨多轮对话的情绪、信任度与行为边界的延续，同时避免了 Token 消耗过大、体积臃肿的问题。",
+        withoutKicker: "温柔但有脾气的个人助理",
+        withoutTitle: "Nora",
+        withKicker: "温柔但有脾气的个人助理",
+        withTitle: "Nora",
+        runtimeLabel: "运行设定",
+        viewPrompt: "查看完整设定",
+        promptModalKicker: "运行设定",
+        plainRuntimeTitle: "Nora + 当前消息",
+        plainRuntimeFull: "Nora（诺拉）有逻辑记忆：记得发生了什么，但会把“解决冲突”当成当前最高优先级任务。回复会很理性、稳定，像情绪管理专家。",
+        engineRuntimeTitle: "Nora + 情绪状态包",
+        engineRuntimeFull: "同一个 Nora，但 Emotion Engine 会把记忆转成情感惯性。她记得冲突，也记得信任基础和仍然需要被尊重的边界。",
+        factPad: "记得事实",
+        factTrust: "没有情感惯性",
+        factMemory: "优先解决冲突",
+        factHandoff: "建议式回复",
+        stateSignal: "关系状态",
+        pleasure: "温度",
+        arousal: "紧张",
+        dominance: "边界",
+        trust: "信任",
+        composerTitle: "今晚的消息",
+        reset: "重置",
+        sendToBoth: "同时发送",
+        truthBaselineTitle: "逻辑记忆",
+        truthBaselineCopy: "记得发生了什么，然后急着解决冲突。",
+        truthEngineTitle: "Emotion Engine",
+        truthEngineCopy: "把记忆转成情感惯性。",
+        truthResultTitle: "差异",
+        truthResultCopy: "一个关闭问题，一个留在关系里。",
+        speakerUser: "用户",
+        speakerPlain: "Nora",
+        speakerEngine: "Nora",
+        plainEmpty: "<strong>场景</strong><span>你连续加班三天，情绪很差。昨晚你对 Nora 发了火。</span><span>这个版本记得发生了什么，但认为“解决冲突”是当前最高优先级的任务。</span>",
+        engineEmpty: "<strong>场景</strong><span>你连续加班三天，情绪很差。昨晚你对 Nora 发了火。</span><span>这个版本记得发生了什么，并让记忆转化为情感惯性。Nora 不急着解决冲突，她更在意你的态度和两人的默契。</span>",
+        plainWaitingTitle: "基于当前消息回复",
+        plainWaitingText: "使用事实记忆，不携带情感惯性。",
+        phaseReceived: "捕获消息",
+        phaseAppraisal: "读取余波",
+        phasePersisted: "更新状态",
+        phaseNow: "处理中",
+        statusCurrent: "逻辑记忆",
+        statusDirect: "逻辑记忆",
+        statusReplyShown: "逻辑记忆",
+        plainStateIdleTitle: "逻辑记忆",
+        plainStateIdleText: "记得发生了什么，但会把解决冲突当成任务。",
+        plainStateTypingTitle: "任务式修复",
+        plainStateTypingText: "回复正在优先追求闭环和稳定。",
+        plainStateRepliedTitle: "冲突已闭环",
+        plainStateRepliedText: "它记得事件，但会尽快把对话推进到安全状态。",
+        engineReady: "高信任 Nora",
+        engineIdleChange: "高信任仍在，昨晚的不快会变成情感惯性，而不是已解决事项。",
+        neutral: "高信任 / 情感惯性",
+        pending: "读取余波中",
+        salienceEmpty: "余波 0.82",
+        saliencePending: "重要度待定",
+        memoryEmpty: "昨晚：发生过冲突；高信任让温度仍然可用，但不会自动恢复。",
+        memoryPending: "读取余波后更新记忆。",
+        receivedChange: "已捕获当前消息。尚未读取关系余波。",
+        progressSent: "已发送",
+        composerComplete: "对比完成",
+        composerCompleteText: "重置后可重新播放。",
+        composerProcessing: "正在处理当前消息",
+        composerProcessingText: "状态保存后会解锁下一条消息。",
+        nextMessage: "下一条消息"
+      }
+    };
+
+    let enginePhases = [];
+    let plainStates = [];
+    let activeTurn = -1;
+    let activePrompt = null;
+    let phaseTimers = [];
+    let plainTimers = [];
+
+    const els = {
+      plainChat: document.getElementById("plainChat"),
+      engineChat: document.getElementById("engineChat"),
+      plainStatus: document.getElementById("plainStatus"),
+      engineStatus: document.getElementById("engineStatus"),
+      plainStateTitle: document.getElementById("plainStateTitle"),
+      plainStateText: document.getElementById("plainStateText"),
+      changeText: document.getElementById("changeText"),
+      toneChips: document.getElementById("toneChips"),
+      phaseTrack: document.getElementById("phaseTrack"),
+      pleasureValue: document.getElementById("pleasureValue"),
+      arousalValue: document.getElementById("arousalValue"),
+      dominanceValue: document.getElementById("dominanceValue"),
+      trustValue: document.getElementById("trustValue"),
+      pleasureBar: document.getElementById("pleasureBar"),
+      arousalBar: document.getElementById("arousalBar"),
+      dominanceBar: document.getElementById("dominanceBar"),
+      trustBar: document.getElementById("trustBar"),
+      salienceChip: document.getElementById("salienceChip"),
+      memoryText: document.getElementById("memoryText"),
+      composerInput: document.getElementById("composerInput"),
+      composerLabel: document.getElementById("composerLabel"),
+      progressText: document.getElementById("progressText"),
+      sendButton: document.getElementById("sendButton"),
+      resetDemo: document.getElementById("resetDemo"),
+      languageToggle: document.getElementById("languageToggle"),
+      languageOptionEn: document.getElementById("languageOptionEn"),
+      languageOptionZh: document.getElementById("languageOptionZh"),
+      promptModal: document.getElementById("promptModal"),
+      promptModalKicker: document.getElementById("promptModalKicker"),
+      promptModalTitle: document.getElementById("promptModalTitle"),
+      promptModalText: document.getElementById("promptModalText"),
+      promptClose: document.querySelector(".prompt-close")
+    };
+
+    function pct(value) {
+      return `${Math.round(value * 100)}%`;
+    }
+
+    function t(key) {
+      return uiCopy[language][key] || uiCopy.en[key] || key;
+    }
+
+    function applyStaticCopy() {
+      document.documentElement.lang = language === "zh" ? "zh-CN" : "en";
+      document.querySelectorAll("[data-i18n]").forEach((node) => {
+        node.textContent = t(node.dataset.i18n);
+      });
+      els.languageOptionEn.classList.toggle("active", language === "en");
+      els.languageOptionZh.classList.toggle("active", language === "zh");
+      els.languageToggle.setAttribute("aria-label", language === "zh" ? "Switch to English" : "切换到中文");
+      els.promptModalKicker.textContent = t("promptModalKicker");
+      els.promptClose.setAttribute("aria-label", language === "zh" ? "关闭" : "Close");
+      if (activePrompt) {
+        setPromptModal(activePrompt);
+      }
+    }
+
+    function setLanguage(nextLanguage) {
+      language = nextLanguage;
+      turns = transcripts[language];
+      applyStaticCopy();
+      render();
+    }
+
+    function setPromptModal(type) {
+      els.promptModalTitle.textContent = t(type === "engine" ? "engineRuntimeTitle" : "plainRuntimeTitle");
+      els.promptModalText.textContent = t(type === "engine" ? "engineRuntimeFull" : "plainRuntimeFull");
+    }
+
+    function openPrompt(type) {
+      activePrompt = type;
+      setPromptModal(type);
+      els.promptModal.hidden = false;
+    }
+
+    function closePrompt() {
+      activePrompt = null;
+      els.promptModal.hidden = true;
+    }
+
+    function previousState(index) {
+      if (index <= 0) return baseline;
+      const previous = turns[index - 1];
+      return { pad: previous.pad, trust: previous.trust };
+    }
+
+    function stateForInspector(index, phase) {
+      if (phase === "updated" || phase === "replied") {
+        return { pad: turns[index].pad, trust: turns[index].trust };
+      }
+      return previousState(index);
+    }
+
+    function messageRow(track, role, text, index) {
+      const isUser = role === "user";
+      const isPlain = track === "plain";
+      const trigger = isUser ? ` data-turn="${index}"` : "";
+      const active = isUser && index === activeTurn ? " active" : "";
+      const speaker = isUser ? t("speakerUser") : isPlain ? t("speakerPlain") : t("speakerEngine");
+      const avatar = isUser ? (language === "zh" ? "你" : "You") : "N";
+      const tag = "";
+      const avatarClass = isUser ? "user-avatar" : isPlain ? "plain-avatar" : "state-avatar";
+      const buttonOpen = isUser ? `<button class="bubble turn-trigger${active}"${trigger}>` : `<div class="bubble">`;
+      const buttonClose = isUser ? `</button>` : `</div>`;
+
+      return `
+        <div class="message-row ${role}">
+          <div class="avatar ${avatarClass}">${avatar}</div>
+          <div class="bubble-wrap">
+            <span class="speaker">${speaker}</span>
+            ${buttonOpen}${text}${tag}${buttonClose}
+          </div>
+        </div>
+      `;
+    }
+
+    function waitingRow(track, phase) {
+      if (track === "plain") {
+        return `
+          <div class="message-row assistant">
+            <div class="avatar plain-avatar">N</div>
+            <div class="bubble-wrap">
+              <span class="speaker">${t("speakerPlain")}</span>
+              <div class="waiting-card plain">
+                <strong>${t("plainWaitingTitle")}</strong>
+                <span>${t("plainWaitingText")}</span>
+              </div>
+            </div>
+          </div>
+        `;
+      }
+
+      const copy = phaseCopy[language][phase];
+      return `
+        <div class="message-row assistant">
+          <div class="avatar state-avatar">N</div>
+          <div class="bubble-wrap">
+            <div class="engine-loading-card" role="status" aria-label="${copy.card}">
+              <span class="loading-dot"></span>
+              <span class="loading-dot"></span>
+              <span class="loading-dot"></span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
+    function buildPlainChat() {
+      const sentTurns = turns.slice(0, plainStates.length).map((turn, index) => {
+        const assistantPart = plainStates[index] === "replied"
+          ? messageRow("plain", "assistant", turn.plain, index)
+          : waitingRow("plain");
+        return messageRow("plain", "user", turn.user, index) + assistantPart;
+      }).join("");
+
+      els.plainChat.classList.toggle("empty-state", plainStates.length === 0);
+
+      els.plainChat.innerHTML = plainStates.length === 0
+        ? `<div class="empty-note">${t("plainEmpty")}</div>`
+        : sentTurns;
+    }
+
+    function buildEngineChat() {
+      const sentTurns = turns.slice(0, enginePhases.length).map((turn, index) => {
+        const phase = enginePhases[index];
+        const assistantPart = phase === "replied"
+          ? messageRow("engine", "assistant", turn.assistant, index)
+          : waitingRow("engine", phase);
+        return messageRow("engine", "user", turn.user, index) + assistantPart;
+      }).join("");
+
+      els.engineChat.classList.toggle("empty-state", enginePhases.length === 0);
+
+      els.engineChat.innerHTML = enginePhases.length === 0
+        ? `<div class="empty-note">${t("engineEmpty")}</div>`
+        : sentTurns;
+    }
+
+    function attachTurnHandlers() {
+      document.querySelectorAll("[data-turn]").forEach((button) => {
+        button.addEventListener("click", () => {
+          activeTurn = Number(button.dataset.turn);
+          render();
+        });
+      });
+    }
+
+    function setMetric(name, value, targetValue = null) {
+      els[`${name}Value`].textContent = targetValue === null ? pct(value) : `${pct(value)} -> ${pct(targetValue)}`;
+      els[`${name}Bar`].style.setProperty("--value", value);
+    }
+
+    function renderPhaseTrack(phase = null) {
+      const steps = [
+        ["received", t("phaseReceived")],
+        ["appraised", t("phaseAppraisal")],
+        ["updated", t("phasePersisted")]
+      ];
+      const order = phase ? steps.findIndex(([key]) => key === phase) : -1;
+      const complete = phase === "replied";
+
+      els.phaseTrack.innerHTML = steps.map(([, label], index) => {
+        const state = complete || index < order ? "done" : index === order ? "active" : "";
+        const marker = state === "active" ? `<span class="phase-now">${t("phaseNow")}</span>` : "";
+        return `<div class="phase-item ${state}"><span class="phase-icon"></span><span class="phase-label">${label}</span>${marker}</div>`;
+      }).join("");
+    }
+
+    function renderPlainState() {
+      const activePlainState = activeTurn >= 0 ? plainStates[activeTurn] : null;
+      els.plainStatus.textContent = t("statusCurrent");
+      els.plainStatus.classList.remove("active");
+
+      if (activePlainState === "typing") {
+        els.plainStateTitle.textContent = t("plainStateTypingTitle");
+        els.plainStateText.textContent = t("plainStateTypingText");
+        return;
+      }
+
+      if (activePlainState === "replied") {
+        els.plainStateTitle.textContent = t("plainStateRepliedTitle");
+        els.plainStateText.textContent = t("plainStateRepliedText");
+        return;
+      }
+
+      els.plainStateTitle.textContent = t("plainStateIdleTitle");
+      els.plainStateText.textContent = t("plainStateIdleText");
+    }
+
+    function renderEmptyEngine() {
+      els.engineStatus.textContent = t("engineReady");
+      els.engineStatus.classList.add("active");
+      els.changeText.textContent = t("engineIdleChange");
+      els.toneChips.innerHTML = `<span class="chip mint">${t("neutral")}</span>`;
+      renderPhaseTrack(null);
+      setMetric("pleasure", baseline.pad.pleasure);
+      setMetric("arousal", baseline.pad.arousal);
+      setMetric("dominance", baseline.pad.dominance);
+      setMetric("trust", baseline.trust);
+      els.salienceChip.textContent = t("salienceEmpty");
+      els.memoryText.textContent = t("memoryEmpty");
+    }
+
+    function renderEngineState() {
+      if (activeTurn < 0) {
+        renderEmptyEngine();
+        return;
+      }
+
+      const turn = turns[activeTurn];
+      const phase = enginePhases[activeTurn];
+      const state = stateForInspector(activeTurn, phase);
+      const showTarget = phase === "appraised";
+      const showMemory = phase === "updated" || phase === "replied";
+      const showAppraisal = phase !== "received";
+
+      els.engineStatus.textContent = t("engineReady");
+      els.engineStatus.classList.add("active");
+      els.changeText.textContent = showAppraisal
+        ? turn.change
+        : t("receivedChange");
+      els.toneChips.innerHTML = showAppraisal
+        ? `<span class="chip mint">${turn.appraisal}</span>`
+        : `<span class="chip mint">${t("pending")}</span>`;
+
+      setMetric("pleasure", state.pad.pleasure, showTarget ? turn.pad.pleasure : null);
+      setMetric("arousal", state.pad.arousal, showTarget ? turn.pad.arousal : null);
+      setMetric("dominance", state.pad.dominance, showTarget ? turn.pad.dominance : null);
+      setMetric("trust", state.trust, showTarget ? turn.trust : null);
+
+      els.salienceChip.textContent = showMemory
+        ? `${language === "zh" ? "重要度" : "salience"} ${turn.memory.salience.toFixed(2)}`
+        : t("saliencePending");
+      els.memoryText.textContent = showMemory
+        ? turn.memory.meaning
+        : t("memoryPending");
+      renderPhaseTrack(phase);
+    }
+
+    function updateComposer() {
+      els.progressText.textContent = `${enginePhases.length} / ${turns.length} ${t("progressSent")}`;
+      const unresolved = enginePhases.some((phase) => phase !== "replied");
+      const nextTurn = turns[enginePhases.length];
+
+      if (!nextTurn) {
+        els.composerLabel.textContent = t("composerComplete");
+        els.composerInput.value = t("composerCompleteText");
+        els.composerInput.disabled = true;
+        els.sendButton.disabled = true;
+        return;
+      }
+
+      if (unresolved) {
+        els.composerLabel.textContent = t("composerProcessing");
+        els.composerInput.disabled = true;
+        els.composerInput.value = t("composerProcessingText");
+        els.sendButton.disabled = true;
+        return;
+      }
+
+      els.composerLabel.textContent = `${t("nextMessage")} ${String(enginePhases.length + 1).padStart(2, "0")}`;
+      els.composerInput.disabled = false;
+      els.composerInput.value = nextTurn.user;
+      els.sendButton.disabled = false;
+    }
+
+    function render() {
+      buildPlainChat();
+      buildEngineChat();
+      attachTurnHandlers();
+      renderPlainState();
+      renderEngineState();
+      updateComposer();
+    }
+
+    function scrollChatsToBottom() {
+      els.plainChat.scrollTop = els.plainChat.scrollHeight;
+      els.engineChat.scrollTop = els.engineChat.scrollHeight;
+    }
+
+    function clearTimers() {
+      phaseTimers.forEach((timer) => clearTimeout(timer));
+      plainTimers.forEach((timer) => clearTimeout(timer));
+      phaseTimers = [];
+      plainTimers = [];
+    }
+
+    function sendNextMessage() {
+      const unresolved = enginePhases.some((phase) => phase !== "replied");
+      if (unresolved || enginePhases.length >= turns.length) return;
+
+      activeTurn = enginePhases.length;
+      const index = activeTurn;
+      plainStates.push("typing");
+      enginePhases.push("received");
+      render();
+      scrollChatsToBottom();
+
+      const plainTimer = setTimeout(() => {
+        plainStates[index] = "replied";
+        render();
+        scrollChatsToBottom();
+      }, 720);
+
+      plainTimers.push(plainTimer);
+      scheduleEngineProgress(index);
+    }
+
+    function scheduleEngineProgress(index) {
+      phaseTimers.forEach((timer) => clearTimeout(timer));
+      phaseTimers = [
+        ["appraised", 1000],
+        ["updated", 2200],
+        ["replied", 3600]
+      ].map(([phase, delay]) => setTimeout(() => {
+        if (!enginePhases[index] || enginePhases[index] === "replied") return;
+        activeTurn = index;
+        enginePhases[index] = phase;
+        render();
+        scrollChatsToBottom();
+      }, delay));
+    }
+
+    function resetDemo() {
+      clearTimers();
+      enginePhases = [];
+      plainStates = [];
+      activeTurn = -1;
+      render();
+      els.plainChat.scrollTop = 0;
+      els.engineChat.scrollTop = 0;
+    }
+
+    els.sendButton.addEventListener("click", sendNextMessage);
+    els.resetDemo.addEventListener("click", resetDemo);
+    els.languageToggle.addEventListener("click", () => {
+      setLanguage(language === "en" ? "zh" : "en");
+    });
+    document.querySelectorAll("[data-prompt]").forEach((button) => {
+      button.addEventListener("click", () => openPrompt(button.dataset.prompt));
+    });
+    document.querySelectorAll("[data-close-prompt]").forEach((button) => {
+      button.addEventListener("click", closePrompt);
+    });
+    document.addEventListener("keydown", (event) => {
+      if (event.key === "Escape" && !els.promptModal.hidden) {
+        closePrompt();
+      }
+    });
+
+    applyStaticCopy();
+    render();
+  </script>
+</body>
+</html>

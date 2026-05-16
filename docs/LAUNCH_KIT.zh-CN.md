@@ -19,6 +19,7 @@
 我的目标是把这种底层能力做成可检查、可迁移、可复用的开源模块，让它可以被更上层的应用项目接入。
 
 目前仓库包含本地生命周期检查工具，以及 OpenClaw、Claude Skills 和 Hermes Agent 的初版集成。
+同时也包含一个脚本化的并排网页演示，适合用于截图、短视频和公开介绍。
 
 Repo: https://github.com/pioneerjeff-labs/emotion-engine
 
