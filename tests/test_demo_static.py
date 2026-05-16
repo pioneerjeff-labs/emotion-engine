@@ -12,6 +12,7 @@ class DemoStaticTest(unittest.TestCase):
         self.assertTrue(DEMO_INDEX.exists())
         self.assertTrue((DEMO / "README.md").exists())
         self.assertTrue((DEMO / "screenshot.png").exists())
+        self.assertTrue((DEMO / "screenshot.zh-CN.png").exists())
 
     def test_demo_reuses_repository_assets(self):
         html = DEMO_INDEX.read_text(encoding="utf-8")

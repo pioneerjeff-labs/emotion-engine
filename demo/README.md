@@ -5,6 +5,8 @@ The page includes an English / Chinese language toggle in the top-right corner.
 
 ![Emotion Engine web demo](screenshot.png)
 
+Chinese screenshot: [screenshot.zh-CN.png](screenshot.zh-CN.png)
+
 The conversation is based on adapted traces from previous real LLM interactions. It is not a purely fabricated benchmark, but it is curated for presentation and privacy. The browser does not call an LLM, does not generate live replies, and does not claim to infer a real user's emotional state.
 
 Open `index.html` in a browser, or serve the repository locally:
