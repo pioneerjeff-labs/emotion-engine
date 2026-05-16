@@ -1,7 +1,11 @@
 # Emotion Engine Web Demo
 
-This is a standalone launch demo for Emotion Engine. It is a scripted side-by-side comparison, not a live chatbot.
+This is the primary public demo for Emotion Engine: a standalone side-by-side comparison, not a live chatbot.
 The page includes an English / Chinese language toggle in the top-right corner.
+
+![Emotion Engine web demo](screenshot.png)
+
+The conversation is based on adapted traces from previous real LLM interactions. It is not a purely fabricated benchmark, but it is curated for presentation and privacy. The browser does not call an LLM, does not generate live replies, and does not claim to infer a real user's emotional state.
 
 Open `index.html` in a browser, or serve the repository locally:
 

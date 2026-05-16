@@ -55,7 +55,37 @@ Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 
 
 一句话：**大模型做判断，Emotion Engine 负责记住。**
 
-## 不安装任何 Agent 运行环境也能试
+## 网页演示
+
+最适合作为第一眼介绍的是 [demo](demo) 里的并排网页演示。它会对比普通“逻辑记忆”助手和接入 Emotion Engine 状态包后的助手，让差异在一段对话里直接显出来。
+
+<p align="center">
+  <img src="demo/screenshot.png" alt="Emotion Engine 网页演示：左侧是普通记忆，右侧是情绪状态层" width="900">
+</p>
+
+这段演示内容基于过往真实大模型互动记录改编，不是完全凭空编造的样例。但它仍然是为了公开解释而整理过的脚本化演示：浏览器不会调用大模型，不会实时生成回复，也不会推断真实用户的情绪状态。
+
+可以直接打开：
+
+```text
+demo/index.html
+```
+
+也可以在仓库根目录启动本地服务：
+
+```bash
+python3 -m http.server 4173 --bind 127.0.0.1
+```
+
+然后访问：
+
+```text
+http://127.0.0.1:4173/demo/
+```
+
+## 本地状态检查
+
+Python 脚本不是主要的产品演示，而是给开发者看的核心状态层检查工具。它适合用来验证生命周期、调试集成、确认同一份共享引擎在 OpenClaw、Claude Skill、Hermes Agent 或其他宿主里仍然能稳定工作。
 
 运行本地生命周期检查：
 
@@ -105,36 +135,12 @@ python3 scripts/prompt_preview.py \
 - 回复后记录一条紧凑情绪记忆。
 ```
 
-## 网页演示
-
-仓库里也有一个脚本化的并排网页演示：[demo](demo)。它会对比普通“逻辑记忆”助手和接入 Emotion Engine 状态包后的助手。
-
-可以直接打开：
-
-```text
-demo/index.html
-```
-
-也可以在仓库根目录启动本地服务：
-
-```bash
-python3 -m http.server 4173 --bind 127.0.0.1
-```
-
-然后访问：
-
-```text
-http://127.0.0.1:4173/demo/
-```
-
-这个网页演示是解释性、脚本化的，不会调用大模型，也不会推断真实用户的情绪状态。
-
 ## 我应该用哪一份？
 
 | 需求 | 使用位置 |
 |---|---|
-| 核心状态引擎和本地演示 | [scripts](scripts) |
 | 用于产品解释的脚本化网页演示 | [demo](demo) |
+| 核心状态层检查和本地工具 | [scripts](scripts) |
 | OpenClaw 集成包 | [integrations/openclaw](integrations/openclaw) |
 | Claude Skill / Claude Code 集成包 | [integrations/claude-skill](integrations/claude-skill) |
 | Hermes Agent 集成包 | [integrations/hermes](integrations/hermes) |

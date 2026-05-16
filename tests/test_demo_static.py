@@ -11,6 +11,7 @@ class DemoStaticTest(unittest.TestCase):
     def test_demo_files_exist(self):
         self.assertTrue(DEMO_INDEX.exists())
         self.assertTrue((DEMO / "README.md").exists())
+        self.assertTrue((DEMO / "screenshot.png").exists())
 
     def test_demo_reuses_repository_assets(self):
         html = DEMO_INDEX.read_text(encoding="utf-8")
@@ -24,6 +25,7 @@ class DemoStaticTest(unittest.TestCase):
 
         self.assertIn("Chat history remembers what happened", html)
         self.assertIn("Emotion Engine remembers how it felt", html)
+        self.assertIn("adapted traces from previous real LLM interactions", (ROOT / "README.md").read_text(encoding="utf-8"))
         self.assertIn("the LLM decides; Emotion Engine remembers", (ROOT / "README.md").read_text(encoding="utf-8"))
         self.assertIn("data-prompt=\"plain\"", html)
         self.assertIn("data-prompt=\"engine\"", html)

@@ -58,9 +58,39 @@ The split is intentional:
 
 In short: **the LLM decides; Emotion Engine remembers.**
 
-## Quick Demo
+## Web Demo
 
-Run a local lifecycle check without installing any agent runtime:
+The best first look is the side-by-side web demo in [demo](demo). It compares a baseline assistant with one using an Emotion Engine state packet, so the difference is visible as a conversation unfolds.
+
+<p align="center">
+  <img src="demo/screenshot.png" alt="Emotion Engine web demo showing baseline memory beside Emotion Engine state" width="900">
+</p>
+
+The demo is based on adapted traces from previous real LLM interactions, not a purely fabricated benchmark. It is still curated for explanation: the browser does not call an LLM, does not generate live replies, and does not infer a real user's emotional state.
+
+Open it directly:
+
+```text
+demo/index.html
+```
+
+Or serve the repository locally:
+
+```bash
+python3 -m http.server 4173 --bind 127.0.0.1
+```
+
+Then visit:
+
+```text
+http://127.0.0.1:4173/demo/
+```
+
+## Local State Checks
+
+The Python scripts are not the main product demo. They are developer-facing checks for the core state layer: useful for validating lifecycle behavior, debugging integrations, and proving the shared engine still works under OpenClaw, Claude Skill, Hermes Agent, or another host.
+
+Run a lifecycle check without installing any agent runtime:
 
 ```bash
 python3 scripts/check_state_lifecycle.py --style "warm but not over-compliant, with clear boundaries"
@@ -94,36 +124,12 @@ LLM task:
 - Record a compact emotional memory after the turn.
 ```
 
-## Web Demo
-
-A scripted side-by-side web demo lives in [demo](demo). It compares a baseline assistant with one using an Emotion Engine state packet.
-
-Open it directly:
-
-```text
-demo/index.html
-```
-
-Or serve the repository locally:
-
-```bash
-python3 -m http.server 4173 --bind 127.0.0.1
-```
-
-Then visit:
-
-```text
-http://127.0.0.1:4173/demo/
-```
-
-The web demo is explanatory and scripted. It does not call an LLM or infer a real user's emotional state.
-
 ## Which Package Should I Use?
 
 | Need | Use |
 |---|---|
-| Core state engine and local demos | [scripts](scripts) |
 | Scripted web demo for product explanation | [demo](demo) |
+| Core state engine checks and local tooling | [scripts](scripts) |
 | OpenClaw skill | [integrations/openclaw](integrations/openclaw) |
 | Claude Skill / Claude Code package | [integrations/claude-skill](integrations/claude-skill) |
 | Hermes Agent skill package | [integrations/hermes](integrations/hermes) |

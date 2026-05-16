@@ -66,7 +66,7 @@ It is a lightweight state layer for emotionally continuous LLM agents: PAD state
 The idea is simple: the LLM still decides what happened and how to respond, but Emotion Engine gives it a persistent inner state to carry forward across sessions.
 
 It includes a local lifecycle checker plus starter integrations for OpenClaw, Claude Skills, and Hermes Agent.
-It also includes a scripted web demo for screenshots and short launch videos.
+It also includes a scripted web demo for screenshots and short launch videos. The demo is based on adapted traces from previous real LLM interactions, while remaining curated and non-live for safety and clarity.
 
 Repo: https://github.com/pioneerjeff-labs/emotion-engine
 
