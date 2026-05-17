@@ -7,13 +7,9 @@ The page includes an English / Chinese language toggle in the top-right corner.
 
 Chinese screenshot: [screenshot.zh-CN.png](screenshot.zh-CN.png)
 
-The conversation is based on adapted traces from previous real LLM interactions. It is not a purely fabricated benchmark, but it is curated for presentation and privacy. The browser does not call an LLM, does not generate live replies, and does not claim to infer a real user's emotional state.
+The conversation is based on anonymized and adapted traces from prior LLM interaction experiments. It is not a purely fabricated benchmark, but it is curated for presentation and privacy. The browser does not call an LLM, does not generate live replies, and does not claim to infer a real user's emotional state.
 
-Live demo:
-
-```text
-https://pioneerjeff-labs.github.io/emotion-engine/demo/
-```
+Live demo: [Try the live demo](https://pioneerjeff-labs.github.io/emotion-engine/demo/)
 
 Open `index.html` in a browser, or serve the repository locally:
 

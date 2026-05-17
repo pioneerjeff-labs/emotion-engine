@@ -26,7 +26,8 @@ class DemoStaticTest(unittest.TestCase):
 
         self.assertIn("Chat history remembers what happened", html)
         self.assertIn("Emotion Engine remembers how it felt", html)
-        self.assertIn("adapted traces from previous real LLM interactions", (ROOT / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("anonymized and adapted traces from prior LLM interaction experiments", (ROOT / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("[Try the live demo](https://pioneerjeff-labs.github.io/emotion-engine/demo/)", (ROOT / "README.md").read_text(encoding="utf-8"))
         self.assertIn("https://pioneerjeff-labs.github.io/emotion-engine/demo/", (ROOT / "README.md").read_text(encoding="utf-8"))
         self.assertIn("the LLM decides; Emotion Engine remembers", (ROOT / "README.md").read_text(encoding="utf-8"))
         self.assertIn("data-prompt=\"plain\"", html)

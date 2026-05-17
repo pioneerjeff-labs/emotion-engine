@@ -66,13 +66,9 @@ The best first look is the side-by-side web demo in [demo](demo). It compares a 
   <img src="demo/screenshot.png" alt="Emotion Engine web demo showing baseline memory beside Emotion Engine state" width="900">
 </p>
 
-The demo is based on adapted traces from previous real LLM interactions, not a purely fabricated benchmark. It is still curated for explanation: the browser does not call an LLM, does not generate live replies, and does not infer a real user's emotional state.
+The demo is based on anonymized and adapted traces from prior LLM interaction experiments, not a purely fabricated benchmark. It is still curated for explanation: the browser does not call an LLM, does not generate live replies, and does not infer a real user's emotional state.
 
-Live demo:
-
-```text
-https://pioneerjeff-labs.github.io/emotion-engine/demo/
-```
+Live demo: [Try the live demo](https://pioneerjeff-labs.github.io/emotion-engine/demo/)
 
 Open it directly:
 
