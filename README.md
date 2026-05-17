@@ -68,6 +68,12 @@ The best first look is the side-by-side web demo in [demo](demo). It compares a 
 
 The demo is based on adapted traces from previous real LLM interactions, not a purely fabricated benchmark. It is still curated for explanation: the browser does not call an LLM, does not generate live replies, and does not infer a real user's emotional state.
 
+Live demo:
+
+```text
+https://pioneerjeff-labs.github.io/emotion-engine/demo/
+```
+
 Open it directly:
 
 ```text

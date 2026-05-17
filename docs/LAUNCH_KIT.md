@@ -69,6 +69,7 @@ It includes a local lifecycle checker plus starter integrations for OpenClaw, Cl
 It also includes a scripted web demo for screenshots and short launch videos. The demo is based on adapted traces from previous real LLM interactions, while remaining curated and non-live for safety and clarity.
 
 Repo: https://github.com/pioneerjeff-labs/emotion-engine
+Live demo: https://pioneerjeff-labs.github.io/emotion-engine/demo/
 
 ## What To Avoid Saying
 

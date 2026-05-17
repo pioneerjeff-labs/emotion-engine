@@ -22,6 +22,7 @@
 同时也包含一个脚本化的并排网页演示，适合用于截图、短视频和公开介绍。演示内容基于过往真实大模型互动记录改编，但仍然是整理过的非实时演示。
 
 Repo: https://github.com/pioneerjeff-labs/emotion-engine
+在线演示：https://pioneerjeff-labs.github.io/emotion-engine/demo/
 
 ## 中文组织介绍
 

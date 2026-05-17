@@ -27,9 +27,17 @@ class DemoStaticTest(unittest.TestCase):
         self.assertIn("Chat history remembers what happened", html)
         self.assertIn("Emotion Engine remembers how it felt", html)
         self.assertIn("adapted traces from previous real LLM interactions", (ROOT / "README.md").read_text(encoding="utf-8"))
+        self.assertIn("https://pioneerjeff-labs.github.io/emotion-engine/demo/", (ROOT / "README.md").read_text(encoding="utf-8"))
         self.assertIn("the LLM decides; Emotion Engine remembers", (ROOT / "README.md").read_text(encoding="utf-8"))
         self.assertIn("data-prompt=\"plain\"", html)
         self.assertIn("data-prompt=\"engine\"", html)
+
+    def test_demo_uses_character_positioning(self):
+        html = DEMO_INDEX.read_text(encoding="utf-8")
+
+        self.assertIn("Fictional character", html)
+        self.assertIn("虚构角色", html)
+        self.assertNotIn("Personal assistant", html)
 
 
 if __name__ == "__main__":

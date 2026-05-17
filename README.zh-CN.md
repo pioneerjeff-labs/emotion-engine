@@ -65,6 +65,12 @@ Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 
 
 这段演示内容基于过往真实大模型互动记录改编，不是完全凭空编造的样例。但它仍然是为了公开解释而整理过的脚本化演示：浏览器不会调用大模型，不会实时生成回复，也不会推断真实用户的情绪状态。
 
+在线演示：
+
+```text
+https://pioneerjeff-labs.github.io/emotion-engine/demo/
+```
+
 可以直接打开：
 
 ```text

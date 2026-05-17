@@ -11,6 +11,7 @@
 - Reworked README positioning for a clearer public launch story and added a launch kit.
 - Added separate English and Chinese README files, concept docs, integration docs, and prompt guidance preview.
 - Added a scripted side-by-side web demo and README screenshot for launch screenshots and product explanation.
+- Prepared the repository for GitHub Pages demo publishing.
 - Added a Claude Skill integration package.
 - Added a Hermes Agent integration package.
 - Added initial project logo assets.
