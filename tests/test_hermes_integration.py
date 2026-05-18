@@ -1,5 +1,6 @@
 import json
 import os
+import shutil
 import subprocess
 import tempfile
 import unittest
@@ -75,6 +76,50 @@ class HermesIntegrationTest(unittest.TestCase):
         finally:
             if output.exists():
                 output.unlink()
+
+    def test_prepare_hermes_hub_skill_builds_self_contained_directory(self):
+        output = ROOT / "dist" / "hermes-hub" / "emotion-engine"
+        if output.exists():
+            shutil.rmtree(output)
+
+        try:
+            subprocess.run(
+                ["sh", str(HERMES_INTEGRATION / "prepare_hermes_hub_skill.sh")],
+                cwd=str(ROOT),
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+
+            self.assertTrue((output / "SKILL.md").exists())
+            self.assertTrue((output / "README.md").exists())
+            self.assertTrue((output / "install.sh").exists())
+            self.assertTrue((output / "scripts" / "hermes_emotion.sh").exists())
+            self.assertTrue((output / "scripts" / "emotion_engine_utils.py").exists())
+            self.assertTrue((output / "emotion-state-template.json").exists())
+            self.assertTrue((output / "LICENSE").exists())
+
+            with tempfile.TemporaryDirectory() as tmp:
+                state_file = Path(tmp) / "emotion-state.json"
+                env = os.environ.copy()
+                env["HERMES_EMOTION_STATE"] = str(state_file)
+                result = subprocess.run(
+                    [str(output / "scripts" / "hermes_emotion.sh"), "status", "--raw"],
+                    cwd=str(output),
+                    env=env,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    check=True,
+                )
+                payload = json.loads(result.stdout)
+
+            self.assertEqual(payload["_schema"], "emotion-engine-state/v2")
+            self.assertTrue(payload["enabled"])
+        finally:
+            if output.exists():
+                shutil.rmtree(output)
 
 
 if __name__ == "__main__":

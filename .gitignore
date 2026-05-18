@@ -12,6 +12,7 @@ venv/
 env/
 
 emotion-state.json
+.emotion-engine/
 *.local.json
 *.tmp
 *.log

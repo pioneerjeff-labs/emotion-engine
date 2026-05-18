@@ -14,7 +14,8 @@ integrations/hermes/
 │   ├── install.sh
 │   └── scripts/
 │       └── hermes_emotion.sh
-└── package_hermes_skill.sh
+├── package_hermes_skill.sh
+└── prepare_hermes_hub_skill.sh
 ```
 
 ## Install
@@ -45,3 +46,39 @@ cd integrations/hermes
 ```
 
 This creates `emotion-engine-hermes-skill.zip`.
+
+## Prepare For HermesHub
+
+HermesHub expects a self-contained skill directory. The source skill under
+`integrations/hermes/emotion-engine` keeps shared files at the repository root,
+so prepare a publishable copy first:
+
+```bash
+cd integrations/hermes
+./prepare_hermes_hub_skill.sh
+```
+
+This creates:
+
+```text
+dist/hermes-hub/emotion-engine/
+├── SKILL.md
+├── README.md
+├── install.sh
+├── scripts/
+│   ├── hermes_emotion.sh
+│   └── emotion_engine_utils.py
+├── emotion-state-template.json
+└── LICENSE
+```
+
+Publish from a machine with Hermes Agent installed:
+
+```bash
+hermes skills publish dist/hermes-hub/emotion-engine \
+  --to github \
+  --repo pioneerjeff-labs/emotion-engine
+```
+
+The skill uses local files only: no network calls, no telemetry, and no full
+transcript storage.
