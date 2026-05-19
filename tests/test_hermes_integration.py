@@ -99,6 +99,8 @@ class HermesIntegrationTest(unittest.TestCase):
             self.assertTrue((output / "scripts" / "emotion_engine_utils.py").exists())
             self.assertTrue((output / "emotion-state-template.json").exists())
             self.assertTrue((output / "LICENSE").exists())
+            self.assertNotIn("../../..", (output / "install.sh").read_text())
+            self.assertNotIn("../../..", (output / "scripts" / "hermes_emotion.sh").read_text())
 
             with tempfile.TemporaryDirectory() as tmp:
                 state_file = Path(tmp) / "emotion-state.json"
