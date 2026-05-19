@@ -65,7 +65,7 @@ Map natural-language user requests to commands:
 
 Only run `clear_log` or `reset` after the user explicitly asks. They erase local emotional history.
 
-## Session Procedure
+## Procedure
 
 At the start of a new meaningful session:
 
@@ -141,6 +141,14 @@ full pasted user message or private transcript
 ```
 
 Useful fields: `situation`, `appraisal`, `character_lens`, `relational_meaning`, `impact`, `open_loop`, `follow_up_bias`, and `salience`.
+
+## Pitfalls
+
+- Do not expose raw PAD values in normal user-facing replies.
+- Do not treat the deterministic appraisal helper as the final emotional judge.
+- Do not store full private transcripts in `emotion_log`; store compact emotional summaries.
+- Do not use trust as obedience, sweetness, or attachment pressure.
+- Do not run `reset`, `clear_log`, or other destructive commands unless the user explicitly asks.
 
 ## Verification
 
