@@ -208,7 +208,13 @@ cd integrations/claude-skill
 
 Hermes 版本在 [integrations/hermes](integrations/hermes)。
 
-直接从 GitHub 安装：
+从 Skills Hub / skills.sh 安装：
+
+```bash
+hermes skills install skills-sh/pioneerjeff-labs/emotion-engine/skills/emotion-engine
+```
+
+也可以直接从 GitHub 安装：
 
 ```bash
 hermes skills install pioneerjeff-labs/emotion-engine/skills/emotion-engine

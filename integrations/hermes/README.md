@@ -33,7 +33,13 @@ skills/emotion-engine/
 └── LICENSE
 ```
 
-## Install From GitHub
+## Install From Skills Hub / GitHub
+
+```bash
+hermes skills install skills-sh/pioneerjeff-labs/emotion-engine/skills/emotion-engine
+```
+
+Fallback direct GitHub path:
 
 ```bash
 hermes skills install pioneerjeff-labs/emotion-engine/skills/emotion-engine
