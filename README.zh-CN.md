@@ -208,6 +208,12 @@ cd integrations/claude-skill
 
 Hermes 版本在 [integrations/hermes](integrations/hermes)。
 
+直接从 GitHub 安装：
+
+```bash
+hermes skills install pioneerjeff-labs/emotion-engine/skills/emotion-engine
+```
+
 用于本地 Hermes 安装：
 
 ```bash

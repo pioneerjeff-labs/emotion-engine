@@ -11,6 +11,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 HERMES_INTEGRATION = ROOT / "integrations" / "hermes"
 HERMES_SKILL = HERMES_INTEGRATION / "emotion-engine"
+GITHUB_TAP_SKILL = ROOT / "skills" / "emotion-engine"
 WRAPPER = HERMES_SKILL / "scripts" / "hermes_emotion.sh"
 
 
@@ -122,6 +123,35 @@ class HermesIntegrationTest(unittest.TestCase):
         finally:
             if output.exists():
                 shutil.rmtree(output)
+
+    def test_github_tap_skill_is_self_contained(self):
+        self.assertTrue((GITHUB_TAP_SKILL / "SKILL.md").exists())
+        self.assertTrue((GITHUB_TAP_SKILL / "README.md").exists())
+        self.assertTrue((GITHUB_TAP_SKILL / "install.sh").exists())
+        self.assertTrue((GITHUB_TAP_SKILL / "scripts" / "hermes_emotion.sh").exists())
+        self.assertTrue((GITHUB_TAP_SKILL / "scripts" / "emotion_engine_utils.py").exists())
+        self.assertTrue((GITHUB_TAP_SKILL / "emotion-state-template.json").exists())
+        self.assertTrue((GITHUB_TAP_SKILL / "LICENSE").exists())
+        self.assertNotIn("../../..", (GITHUB_TAP_SKILL / "install.sh").read_text())
+        self.assertNotIn("../../..", (GITHUB_TAP_SKILL / "scripts" / "hermes_emotion.sh").read_text())
+
+        with tempfile.TemporaryDirectory() as tmp:
+            state_file = Path(tmp) / "emotion-state.json"
+            env = os.environ.copy()
+            env["HERMES_EMOTION_STATE"] = str(state_file)
+            result = subprocess.run(
+                [str(GITHUB_TAP_SKILL / "scripts" / "hermes_emotion.sh"), "status", "--raw"],
+                cwd=str(GITHUB_TAP_SKILL),
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            payload = json.loads(result.stdout)
+
+        self.assertEqual(payload["_schema"], "emotion-engine-state/v2")
+        self.assertTrue(payload["enabled"])
 
 
 if __name__ == "__main__":

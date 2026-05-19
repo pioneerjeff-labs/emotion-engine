@@ -199,6 +199,12 @@ This creates `emotion-engine-claude-skill.zip`. The zip is a generated release a
 
 The Hermes-compatible package lives in [integrations/hermes](integrations/hermes).
 
+Install directly from GitHub:
+
+```bash
+hermes skills install pioneerjeff-labs/emotion-engine/skills/emotion-engine
+```
+
 For local Hermes installation:
 
 ```bash

@@ -3,6 +3,7 @@
 This folder contains the Hermes Agent-compatible package for Emotion Engine.
 
 Hermes Skills use `SKILL.md` plus optional scripts and references. This integration keeps the shared core at the repository root and copies it into the generated/installed Hermes skill.
+The repository root also includes `skills/emotion-engine`, a self-contained copy that Hermes can install directly from GitHub.
 
 ## Layout
 
@@ -16,6 +17,33 @@ integrations/hermes/
 │       └── hermes_emotion.sh
 ├── package_hermes_skill.sh
 └── prepare_hermes_hub_skill.sh
+```
+
+Published GitHub skill path:
+
+```text
+skills/emotion-engine/
+├── SKILL.md
+├── README.md
+├── install.sh
+├── scripts/
+│   ├── hermes_emotion.sh
+│   └── emotion_engine_utils.py
+├── emotion-state-template.json
+└── LICENSE
+```
+
+## Install From GitHub
+
+```bash
+hermes skills install pioneerjeff-labs/emotion-engine/skills/emotion-engine
+```
+
+Or add the repository as a custom tap:
+
+```bash
+hermes skills tap add pioneerjeff-labs/emotion-engine
+hermes skills install pioneerjeff-labs/emotion-engine/skills/emotion-engine
 ```
 
 ## Install
@@ -47,11 +75,11 @@ cd integrations/hermes
 
 This creates `emotion-engine-hermes-skill.zip`.
 
-## Prepare For HermesHub
+## Prepare A Self-Contained Package
 
-HermesHub expects a self-contained skill directory. The source skill under
-`integrations/hermes/emotion-engine` keeps shared files at the repository root,
-so prepare a publishable copy first:
+Hermes install sources expect a self-contained skill directory. The source skill
+under `integrations/hermes/emotion-engine` keeps shared files at the repository
+root, so prepare a self-contained copy first:
 
 ```bash
 cd integrations/hermes
@@ -72,13 +100,13 @@ dist/hermes-hub/emotion-engine/
 └── LICENSE
 ```
 
-Publish from a machine with Hermes Agent installed:
+The tracked GitHub-installable copy lives at `skills/emotion-engine`. Refresh it
+from `dist/hermes-hub/emotion-engine` before release if the shared engine
+changes.
 
-```bash
-hermes skills publish dist/hermes-hub/emotion-engine \
-  --to github \
-  --repo pioneerjeff-labs/emotion-engine
-```
+Note: `hermes skills publish --to github` creates a fork and pull request into
+the target repository. For this project repository, direct GitHub installation
+from `skills/emotion-engine` is the simpler public distribution path.
 
 The skill uses local files only: no network calls, no telemetry, and no full
 transcript storage.

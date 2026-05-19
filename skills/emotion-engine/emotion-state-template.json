@@ -1,0 +1,33 @@
+{
+  "_schema": "emotion-engine-state/v2",
+  "enabled": true,
+  "emotion": {
+    "pleasure": 0.0,
+    "arousal": 0.3,
+    "dominance": 0.5
+  },
+  "personality_baseline": {
+    "pleasure": 0.0,
+    "arousal": 0.3,
+    "dominance": 0.5
+  },
+  "character_profile": {
+    "source": "default",
+    "description": "warm, steady, lightly bounded",
+    "interpretation": "Warm enough to feel present, calm enough to stay stable, and balanced enough to avoid over-compliance.",
+    "traits": [
+      "warm",
+      "steady",
+      "balanced"
+    ]
+  },
+  "trust": 0.1,
+  "trust_anchor": 0.1,
+  "session_count": 0,
+  "total_turns": 0,
+  "last_interaction_iso": null,
+  "emotion_trajectory": [],
+  "emotion_log": [],
+  "trust_history": [],
+  "log_limit": 200
+}
