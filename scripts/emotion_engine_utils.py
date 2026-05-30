@@ -141,6 +141,12 @@ APPRAISAL_KEYWORDS = {
     ],
 }
 
+COLLABORATION_ACTION_KEYWORDS = [
+    "can you", "could you", "let's", "work with", "explain", "review",
+    "build", "fix", "challenge", "帮我", "一起", "解释", "看看",
+    "改一下", "做一个", "生成", "挑战", "质疑",
+]
+
 TEXT_MEMORY_FIELDS = {
     "--cue": "situation",
     "--situation": "situation",
@@ -651,6 +657,10 @@ def count_keyword_hits(text, keywords):
     return sum(1 for keyword in keywords if keyword in text)
 
 
+def has_collaboration_action(text):
+    return any(keyword in text for keyword in COLLABORATION_ACTION_KEYWORDS)
+
+
 def classify_message(message):
     text = message.lower()
     scores = {
@@ -668,6 +678,8 @@ def classify_message(message):
         return "repair", scores["repair"]
     if scores["vulnerability"]:
         return "vulnerability", scores["vulnerability"]
+    if scores["collaboration"] and has_collaboration_action(text):
+        return "collaboration", scores["collaboration"]
     if scores["warmth"]:
         return "warmth", scores["warmth"]
     if scores["collaboration"]:

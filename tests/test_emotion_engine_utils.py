@@ -44,6 +44,26 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(result["appraisal"], "warmth")
         self.assertGreater(result["suggested"]["P"], result["current"]["P"])
 
+    def test_appraise_multi_intent_challenge_prefers_collaboration(self):
+        state = emotion_engine_utils.default_state()
+
+        result = emotion_engine_utils.appraise_message(
+            state,
+            "Thanks, the last version is much clearer. I want to challenge one part of the design.",
+        )
+
+        self.assertEqual(result["appraisal"], "collaboration")
+
+    def test_appraise_thanks_for_help_stays_warmth(self):
+        state = emotion_engine_utils.default_state()
+
+        result = emotion_engine_utils.appraise_message(
+            state,
+            "Thanks for the help.",
+        )
+
+        self.assertEqual(result["appraisal"], "warmth")
+
     def test_record_turn_updates_state_and_log(self):
         state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
 

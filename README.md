@@ -13,7 +13,9 @@
 
 Most AI agents can respond well in the moment, but they do not carry an emotional thread across time. They may sound warm in one turn, blank in the next, and forget whether the last interaction felt collaborative, tense, repaired, or unresolved.
 
-Emotion Engine gives an LLM-powered agent a small, inspectable continuity layer: mood, trust, decay, boundaries, and compact emotional memories. The LLM still decides what happened and how to respond. Emotion Engine makes that judgment persistent.
+Emotion Engine gives an LLM-powered agent a small, inspectable continuity layer: mood, trust, decay, boundary signals, and compact emotional memories. The LLM still decides what happened and how to respond. Emotion Engine makes that judgment persistent.
+
+It is not a memory stack. It is a portable emotional-continuity state layer that can sit beside memory retrieval, character systems, or agent runtimes.
 
 Emotion Engine is part of PioneerJeff Labs, an open-source lab building reusable infrastructure layers for creative AI applications.
 
@@ -138,6 +140,28 @@ LLM task:
 
 The repository root is the Emotion Engine project. Platform-specific packages live under `integrations/`.
 The first-party starter integrations are OpenClaw, Claude Skill, and Hermes Agent.
+
+## When To Use It
+
+Use Emotion Engine when an agent needs compact continuity signals that are easy to inspect, tune, and inject into a prompt prelude.
+
+Good fits:
+
+- A character, companion, or NPC should carry emotional inertia across sessions.
+- A personal assistant should remember whether the last interaction felt collaborative, tense, repaired, or unresolved.
+- A memory system is already present, but relationship state should stay small and debuggable.
+- A prototype needs stateful behavior without running a full retrieval stack.
+
+## When Not To Use It
+
+Do not use Emotion Engine as a substitute for full experiential memory. If your agent should derive emotion entirely from retrieved lived context, use a memory system first.
+
+Poor fits:
+
+- The agent needs factual recall, graph memory, semantic search, or audit-grade history.
+- Emotional meaning must remain grounded in complete event context rather than a compact state snapshot.
+- The system cannot accept numeric or summarized relationship-state signals.
+- The use case involves mental-health assessment, emotion detection for real people, or consequential decisions.
 
 ## Integrations
 
