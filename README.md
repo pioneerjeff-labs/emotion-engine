@@ -13,7 +13,7 @@
 
 Most AI agents can respond well in the moment, but they do not carry an emotional thread across time. They may sound warm in one turn, blank in the next, and forget whether the last interaction felt collaborative, tense, repaired, or unresolved.
 
-Emotion Engine gives an LLM-powered agent a small, inspectable continuity layer: mood, trust, decay, boundary signals, and compact emotional memories. The LLM still decides what happened and how to respond. Emotion Engine makes that judgment persistent.
+Emotion Engine gives an LLM-powered agent a small, inspectable continuity layer: mood, agent-to-user trust, decay, boundary signals, and compact emotional memories. The LLM still decides what happened and how to respond. Emotion Engine makes that judgment persistent.
 
 It is not a memory stack. It is a portable emotional-continuity state layer that can sit beside memory retrieval, character systems, or agent runtimes.
 
@@ -30,7 +30,7 @@ Chat history stores what happened. Emotion Engine stores how the interaction has
 Without a continuity layer, an agent often treats every session as emotionally fresh. With Emotion Engine, an agent can carry forward lightweight signals such as:
 
 - the last session was collaborative
-- trust has grown slightly, but the relationship is still early
+- agent-to-user trust has grown slightly, but the relationship is still early
 - a challenge felt productive rather than hostile
 - the next response should be warm, steady, and clearly bounded
 
@@ -140,6 +140,14 @@ LLM task:
 
 The repository root is the Emotion Engine project. Platform-specific packages live under `integrations/`.
 The first-party starter integrations are OpenClaw, Claude Skill, and Hermes Agent.
+
+## Protocol And Adapter Boundary
+
+The stable state contract lives in [Emotion Engine State Protocol](docs/PROTOCOL.md), with a machine-readable schema at [spec/emotion-state.schema.json](spec/emotion-state.schema.json).
+
+For memory systems such as Celiums Memory, Emotion Engine should be used as a thin adapter target: map host PAD / `limbicState` into `state.emotion`, map compact journal or `turn_after` events into `emotion_log`, then return a compact snapshot or prompt prelude for the host to store or inject.
+
+Emotion Engine does not replace a memory stack, retrieval, ethics/policy, turn context, or clinical emotion inference. Host systems keep ownership of grounded memory and safety decisions.
 
 ## When To Use It
 
@@ -256,10 +264,11 @@ This creates `emotion-engine-hermes-skill.zip`. The zip is a generated release a
 Emotion Engine stores and updates:
 
 - **PAD state**: Pleasure, Arousal, Dominance.
-- **Trust**: a slow-moving relationship coefficient.
+- **Trust**: a slow-moving agent-to-user relationship coefficient. It is not the user's trust in the agent.
 - **Personality baseline**: where the agent naturally drifts back to.
 - **Emotion trajectory**: numeric state during a session.
 - **Emotion log**: compact emotional memories, not full transcripts.
+- **Trust history**: numeric ledger for trust changes; reasons belong in `emotion_log`.
 - **Session patterns**: conflict, repair, volatility, suppression, and trust signals.
 
 Read more in [Concepts](docs/CONCEPTS.md).
@@ -273,7 +282,7 @@ The typical integration loop is:
 3. Let the LLM interpret the user message and choose the final emotional update.
 4. Record the turn with compact memory.
 5. Use the updated state as guidance for future replies.
-6. At session end, extract patterns and update trust.
+6. At session end, extract patterns and update agent-to-user trust.
 
 See [Integration Guide](docs/INTEGRATION.md) for the full sequence.
 
@@ -312,6 +321,8 @@ Starter logo assets live in [assets](assets). Brand guidance lives in [Brand Not
 ```text
 emotion-engine/
 ├── emotion-state-template.json
+├── spec/
+│   └── emotion-state.schema.json
 ├── scripts/
 │   ├── emotion_engine_utils.py
 │   ├── check_state_lifecycle.py

@@ -1,0 +1,593 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://pioneerjeff-labs.github.io/emotion-engine/spec/emotion-state.schema.json",
+  "title": "Emotion Engine State Protocol v2",
+  "description": "Machine-readable schema for the Emotion Engine v2 state packet. The root schema validates state packets; adapter event and output contracts are exposed under $defs.",
+  "type": "object",
+  "additionalProperties": true,
+  "required": [
+    "_schema",
+    "enabled",
+    "emotion",
+    "personality_baseline",
+    "character_profile",
+    "trust",
+    "trust_anchor",
+    "session_count",
+    "total_turns",
+    "last_interaction_iso",
+    "emotion_trajectory",
+    "emotion_log",
+    "trust_history",
+    "log_limit"
+  ],
+  "properties": {
+    "_schema": {
+      "const": "emotion-engine-state/v2"
+    },
+    "enabled": {
+      "type": "boolean"
+    },
+    "emotion": {
+      "$ref": "#/$defs/padState"
+    },
+    "personality_baseline": {
+      "$ref": "#/$defs/padState"
+    },
+    "character_profile": {
+      "$ref": "#/$defs/characterProfile"
+    },
+    "trust": {
+      "description": "Slow-moving agent-to-user relationship continuity coefficient. This is the agent/persona's internal continuity estimate; it does not infer the user's trust in the agent.",
+      "type": "number",
+      "minimum": 0.05,
+      "maximum": 1.0
+    },
+    "trust_anchor": {
+      "description": "Highest agent-to-user trust level reached, used as a floor reference for trust decay.",
+      "type": "number",
+      "minimum": 0.05,
+      "maximum": 1.0
+    },
+    "session_count": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "total_turns": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "last_interaction_iso": {
+      "$ref": "#/$defs/nullableIsoTimestamp"
+    },
+    "emotion_trajectory": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/emotionTrajectoryEntry"
+      }
+    },
+    "emotion_log": {
+      "description": "Compact affective/provenance log for explaining PAD and trust changes. This is the semantic explanation layer; do not store full transcripts.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/emotionLogEntry"
+      }
+    },
+    "trust_history": {
+      "description": "Numeric ledger of applied trust changes. Semantic reasons and provenance belong in emotion_log, not trust_history.",
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/trustHistoryEntry"
+      }
+    },
+    "log_limit": {
+      "type": "integer",
+      "minimum": 25
+    },
+    "boundary_state": {
+      "description": "Optional adapter-owned boundary continuity extension. The core helper may omit it, but readers should preserve it when present.",
+      "oneOf": [
+        {
+          "type": "null"
+        },
+        {
+          "$ref": "#/$defs/boundaryState"
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "nullableIsoTimestamp": {
+      "description": "Timezone-aware ISO 8601 timestamp, or null when no event has occurred yet.",
+      "oneOf": [
+        {
+          "type": "string",
+          "format": "date-time"
+        },
+        {
+          "type": "null"
+        }
+      ]
+    },
+    "padState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "pleasure",
+        "arousal",
+        "dominance"
+      ],
+      "properties": {
+        "pleasure": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0
+        },
+        "arousal": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "dominance": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      }
+    },
+    "compactPadState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "P",
+        "A",
+        "D"
+      ],
+      "properties": {
+        "P": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0
+        },
+        "A": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "D": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
+      }
+    },
+    "characterProfile": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "source",
+        "description",
+        "interpretation",
+        "traits"
+      ],
+      "properties": {
+        "source": {
+          "type": "string"
+        },
+        "description": {
+          "type": "string"
+        },
+        "interpretation": {
+          "type": "string"
+        },
+        "traits": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "emotionTrajectoryEntry": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "turn",
+        "P",
+        "A",
+        "D",
+        "timestamp"
+      ],
+      "properties": {
+        "turn": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "P": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0
+        },
+        "A": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "D": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "appraisal": {
+          "type": "string"
+        },
+        "situation": {
+          "type": "string"
+        }
+      }
+    },
+    "emotionLogEntry": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "timestamp",
+        "event_type"
+      ],
+      "properties": {
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "event_type": {
+          "type": "string"
+        },
+        "trust": {
+          "description": "Agent-to-user trust value at the time of this emotion log entry.",
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 1.0
+        },
+        "turn": {
+          "type": "integer",
+          "minimum": 1
+        },
+        "situation": {
+          "type": "string"
+        },
+        "character_lens": {
+          "type": "string"
+        },
+        "relational_meaning": {
+          "type": "string"
+        },
+        "impact": {
+          "type": "string"
+        },
+        "open_loop": {
+          "type": "boolean"
+        },
+        "follow_up_bias": {
+          "type": "string"
+        },
+        "salience": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "appraisal": {
+          "type": "string"
+        },
+        "before": {
+          "$ref": "#/$defs/compactPadState"
+        },
+        "after": {
+          "$ref": "#/$defs/compactPadState"
+        },
+        "delta": {
+          "$ref": "#/$defs/compactPadState"
+        },
+        "tags": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "source_refs": {
+          "description": "Optional references to external memory, journal, turn, or audit records. References should point outward rather than duplicate private transcript text.",
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sourceRef"
+          }
+        }
+      }
+    },
+    "trustHistoryEntry": {
+      "description": "Numeric ledger entry for an applied trust update. Keep reasons, confidence, and source references in emotion_log entries instead.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "timestamp",
+        "old",
+        "new",
+        "raw_delta",
+        "effective_delta"
+      ],
+      "properties": {
+        "timestamp": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "old": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 1.0
+        },
+        "new": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 1.0
+        },
+        "raw_delta": {
+          "type": "number"
+        },
+        "effective_delta": {
+          "type": "number"
+        }
+      }
+    },
+    "sourceRef": {
+      "description": "External provenance pointer for host memory, journal, turn, or audit records.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "type",
+        "value"
+      ],
+      "properties": {
+        "type": {
+          "type": "string"
+        },
+        "value": {
+          "type": "string"
+        }
+      }
+    },
+    "boundaryState": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "status": {
+          "type": "string",
+          "enum": [
+            "unknown",
+            "clear",
+            "watch",
+            "strained",
+            "repairing"
+          ]
+        },
+        "firmness": {
+          "description": "How firmly the agent should maintain standing boundaries, not a policy decision.",
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "recent_pressure": {
+          "description": "Recent boundary pressure signal in the current relationship state.",
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "standing_boundaries": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/standingBoundary"
+          }
+        },
+        "last_updated_iso": {
+          "$ref": "#/$defs/nullableIsoTimestamp"
+        },
+        "provenance": {
+          "type": "string"
+        }
+      }
+    },
+    "standingBoundary": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "label"
+      ],
+      "properties": {
+        "label": {
+          "type": "string"
+        },
+        "status": {
+          "type": "string",
+          "enum": [
+            "active",
+            "softened",
+            "retired"
+          ]
+        },
+        "source": {
+          "type": "string"
+        },
+        "updated_at": {
+          "$ref": "#/$defs/nullableIsoTimestamp"
+        }
+      }
+    },
+    "adapterEvent": {
+      "description": "Generic event envelope that a host adapter can map from a runtime such as Celiums Memory before updating Emotion Engine state.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "_schema",
+        "event_type"
+      ],
+      "properties": {
+        "_schema": {
+          "const": "emotion-engine-adapter-event/v1"
+        },
+        "source": {
+          "type": "string"
+        },
+        "event_type": {
+          "type": "string",
+          "enum": [
+            "session_start",
+            "turn_after",
+            "journal_append",
+            "session_end",
+            "trust_update",
+            "boundary_update",
+            "time_decay",
+            "manual"
+          ]
+        },
+        "occurred_at": {
+          "$ref": "#/$defs/nullableIsoTimestamp"
+        },
+        "session_id": {
+          "type": "string"
+        },
+        "turn_id": {
+          "type": "string"
+        },
+        "limbicState": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/padState"
+            },
+            {
+              "$ref": "#/$defs/compactPadState"
+            }
+          ]
+        },
+        "limbic_state": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/padState"
+            },
+            {
+              "$ref": "#/$defs/compactPadState"
+            }
+          ]
+        },
+        "pad": {
+          "oneOf": [
+            {
+              "$ref": "#/$defs/padState"
+            },
+            {
+              "$ref": "#/$defs/compactPadState"
+            }
+          ]
+        },
+        "appraisal": {
+          "type": "string"
+        },
+        "compact_memory": {
+          "$ref": "#/$defs/emotionLogEntry"
+        },
+        "trust_delta": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0
+        },
+        "boundary_state": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/boundaryState"
+            }
+          ]
+        },
+        "source_refs": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/sourceRef"
+          }
+        }
+      }
+    },
+    "adapterOutput": {
+      "description": "Recommended output envelope from an Emotion Engine adapter back to the host runtime.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "_schema",
+        "state_schema",
+        "snapshot",
+        "prompt_prelude"
+      ],
+      "properties": {
+        "_schema": {
+          "const": "emotion-engine-adapter-output/v1"
+        },
+        "state_schema": {
+          "const": "emotion-engine-state/v2"
+        },
+        "state_patch": {
+          "type": "object",
+          "additionalProperties": true
+        },
+        "snapshot": {
+          "$ref": "#/$defs/compactSnapshot"
+        },
+        "prompt_prelude": {
+          "type": "string"
+        },
+        "emotion_log_entry": {
+          "$ref": "#/$defs/emotionLogEntry"
+        },
+        "journal_suggestion": {
+          "$ref": "#/$defs/emotionLogEntry"
+        }
+      }
+    },
+    "compactSnapshot": {
+      "type": "object",
+      "additionalProperties": true,
+      "properties": {
+        "tone": {
+          "type": "string"
+        },
+        "emotion": {
+          "$ref": "#/$defs/padState"
+        },
+        "trust": {
+          "type": "number",
+          "minimum": 0.05,
+          "maximum": 1.0
+        },
+        "trust_tier": {
+          "type": "string"
+        },
+        "recent_memories": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/emotionLogEntry"
+          }
+        },
+        "boundary_state": {
+          "oneOf": [
+            {
+              "type": "null"
+            },
+            {
+              "$ref": "#/$defs/boundaryState"
+            }
+          ]
+        }
+      }
+    }
+  }
+}

@@ -16,12 +16,13 @@ case "$PACKAGE" in
 esac
 
 rm -rf "$PACKAGE"
-mkdir -p "$PACKAGE/scripts"
+mkdir -p "$PACKAGE/scripts" "$PACKAGE/spec"
 
 cp "$SCRIPT_DIR/emotion-engine/SKILL.md" "$PACKAGE/"
 cp "$SCRIPT_DIR/emotion-engine/README.md" "$PACKAGE/"
 cp "$REPO_ROOT/scripts/emotion_engine_utils.py" "$PACKAGE/scripts/"
 cp "$REPO_ROOT/emotion-state-template.json" "$PACKAGE/"
+cp "$REPO_ROOT/spec/emotion-state.schema.json" "$PACKAGE/spec/"
 cp "$REPO_ROOT/LICENSE" "$PACKAGE/"
 
 cat > "$PACKAGE/install.sh" <<'SH'
@@ -36,6 +37,7 @@ PYTHON=${PYTHON:-python3}
 
 CORE_SCRIPT="$SCRIPT_DIR/scripts/emotion_engine_utils.py"
 STATE_TEMPLATE="$SCRIPT_DIR/emotion-state-template.json"
+SCHEMA_FILE="$SCRIPT_DIR/spec/emotion-state.schema.json"
 
 if [ ! -f "$CORE_SCRIPT" ]; then
   printf "Emotion Engine core not found in package: %s\n" "$CORE_SCRIPT" >&2
@@ -47,6 +49,7 @@ if [ ! -f "$STATE_TEMPLATE" ]; then
 fi
 
 mkdir -p "$DEST/scripts"
+mkdir -p "$DEST/spec"
 mkdir -p "$(dirname -- "$STATE_FILE")"
 
 if [ "$SCRIPT_DIR" != "$DEST" ]; then
@@ -56,6 +59,9 @@ if [ "$SCRIPT_DIR" != "$DEST" ]; then
   cp "$SCRIPT_DIR/scripts/hermes_emotion.sh" "$DEST/scripts/"
   cp "$CORE_SCRIPT" "$DEST/scripts/emotion_engine_utils.py"
   cp "$STATE_TEMPLATE" "$DEST/emotion-state-template.json"
+  if [ -f "$SCHEMA_FILE" ]; then
+    cp "$SCHEMA_FILE" "$DEST/spec/emotion-state.schema.json"
+  fi
   if [ -f "$SCRIPT_DIR/LICENSE" ]; then
     cp "$SCRIPT_DIR/LICENSE" "$DEST/"
   fi

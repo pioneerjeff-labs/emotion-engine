@@ -13,7 +13,7 @@ integrations/openclaw/
 └── package_openclaw_skill.sh
 ```
 
-The shared core, license, and state template are kept once at the repository root. The installer and packaging script copy them into the installed/generated OpenClaw package.
+The shared core, license, state template, and protocol schema are kept once at the repository root. The installer and packaging script copy them into the installed/generated OpenClaw package.
 
 ## Install
 

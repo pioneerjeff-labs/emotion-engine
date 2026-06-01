@@ -69,6 +69,7 @@ class ClaudeSkillIntegrationTest(unittest.TestCase):
             self.assertIn("emotion-engine/install.sh", names)
             self.assertIn("emotion-engine/scripts/claude_emotion.sh", names)
             self.assertIn("emotion-engine/scripts/emotion_engine_utils.py", names)
+            self.assertIn("emotion-engine/spec/emotion-state.schema.json", names)
             self.assertIn("emotion-engine/emotion-state-template.json", names)
             self.assertIn("emotion-engine/LICENSE", names)
         finally:

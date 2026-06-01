@@ -19,6 +19,8 @@
 - Moved platform-specific packages under `integrations/openclaw`, `integrations/claude-skill`, and `integrations/hermes`.
 - Removed duplicate integration copies of the shared core; package scripts now assemble self-contained release zips from the root source.
 - Refined PioneerJeff Labs positioning around reusable infrastructure layers for creative AI applications.
+- Added the v2 state protocol schema, documented the thin-adapter boundary for Celiums Memory-style integrations, and included the schema in generated skill packages.
+- Clarified that trust v1 is agent-to-user only and that `trust_history` is a numeric ledger while `emotion_log` carries explanations and provenance.
 
 ## 0.1.0
 

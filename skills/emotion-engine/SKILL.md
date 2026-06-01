@@ -20,7 +20,7 @@ metadata:
 
 Use this skill when the user wants Hermes to maintain lightweight emotional continuity across sessions, character workflows, personal assistant interactions, or long-running agent relationships.
 
-Emotion Engine is not a chatbot and does not generate replies by itself. Hermes still interprets the situation, decides the final emotional meaning, and writes the reply. Emotion Engine persists continuity: PAD state, trust, decay, and compact emotional memories.
+Emotion Engine is not a chatbot and does not generate replies by itself. Hermes still interprets the situation, decides the final emotional meaning, and writes the reply. Emotion Engine persists continuity: PAD state, agent-to-user trust, decay, and compact emotional memories.
 
 ## Quick Reference
 
@@ -45,7 +45,7 @@ Use this skill when the user asks for:
 
 - emotional continuity
 - persistent character mood
-- relationship/trust memory
+- agent-to-user relationship/trust memory
 - SOUL.md-based character configuration
 - a more consistent personal assistant or companion tone
 - `/emotion-engine` status, tuning, pause, or resume
@@ -109,7 +109,7 @@ ${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh session_end
 ${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh update_trust <trust_delta>
 ```
 
-Suggested trust delta range is `-0.20` to `+0.05`. Increase trust slowly. Strong positives should usually require either sustained constructive interaction or genuine conflict repair.
+Suggested trust delta range is `-0.20` to `+0.05`. Trust is agent-to-user only: it is the agent/persona's internal continuity estimate and does not infer the user's trust in the agent. Increase trust slowly. Strong positives should usually require either sustained constructive interaction or genuine conflict repair.
 
 ## How State Should Shape Replies
 
@@ -127,6 +127,8 @@ Blend this with Hermes memory, user preferences, and any SOUL.md character profi
 ## Emotion Memory Rules
 
 `emotion_log` should store situation-aware emotional memories, not transcripts.
+
+`trust_history` should stay a numeric ledger for applied trust changes. Keep reasons and provenance in `emotion_log`, including turn entries, session patterns, compact `trust_update` entries, or optional `source_refs`.
 
 Good memory:
 
@@ -147,7 +149,7 @@ Useful fields: `situation`, `appraisal`, `character_lens`, `relational_meaning`,
 - Do not expose raw PAD values in normal user-facing replies.
 - Do not treat the deterministic appraisal helper as the final emotional judge.
 - Do not store full private transcripts in `emotion_log`; store compact emotional summaries.
-- Do not use trust as obedience, sweetness, or attachment pressure.
+- Do not use trust as obedience, sweetness, user scoring, safety permission, user-to-agent trust, or attachment pressure.
 - Do not run `reset`, `clear_log`, or other destructive commands unless the user explicitly asks.
 
 ## Verification

@@ -2,7 +2,7 @@
 
 This folder contains the Hermes Agent-compatible package for Emotion Engine.
 
-Hermes Skills use `SKILL.md` plus optional scripts and references. This integration keeps the shared core at the repository root and copies it into the generated/installed Hermes skill.
+Hermes Skills use `SKILL.md` plus optional scripts and references. This integration keeps the shared core and protocol schema at the repository root and copies them into the generated/installed Hermes skill.
 The repository root also includes `skills/emotion-engine`, a self-contained copy that Hermes can install directly from GitHub.
 
 ## Layout
@@ -29,6 +29,8 @@ skills/emotion-engine/
 ├── scripts/
 │   ├── hermes_emotion.sh
 │   └── emotion_engine_utils.py
+├── spec/
+│   └── emotion-state.schema.json
 ├── emotion-state-template.json
 └── LICENSE
 ```
@@ -102,6 +104,8 @@ dist/hermes-hub/emotion-engine/
 ├── scripts/
 │   ├── hermes_emotion.sh
 │   └── emotion_engine_utils.py
+├── spec/
+│   └── emotion-state.schema.json
 ├── emotion-state-template.json
 └── LICENSE
 ```

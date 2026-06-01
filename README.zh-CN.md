@@ -10,7 +10,7 @@
 
 大多数 AI 智能体可以在单轮对话里表现得不错，但它们很难把“互动的情绪线索”持续带到下一轮、下一天、下一次会话。它可能上一轮很温暖，下一轮又像完全重置；它也很难记住上一次互动到底是协作、紧张、修复，还是悬而未决。
 
-Emotion Engine 给大模型智能体提供一个小而可检查的连续性层：情绪状态、信任、时间衰减、边界信号，以及紧凑的情绪记忆。大模型仍然负责理解上下文和生成回复；Emotion Engine 负责把这些判断保存下来，让它们能被后续会话继续使用。
+Emotion Engine 给大模型智能体提供一个小而可检查的连续性层：情绪状态、agent-to-user 信任、时间衰减、边界信号，以及紧凑的情绪记忆。大模型仍然负责理解上下文和生成回复；Emotion Engine 负责把这些判断保存下来，让它们能被后续会话继续使用。
 
 它不是长期记忆系统。更准确地说，它是一个可移植的情绪连续性状态层，可以放在记忆检索、角色系统或 Agent runtime 旁边使用。
 
@@ -27,7 +27,7 @@ Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 
 没有连续性层时，Agent 往往会把每次会话都当作情绪上全新的开始。有了 Emotion Engine，Agent 可以携带更轻量、更可控的信号：
 
 - 上一次会话整体是协作的
-- 信任略有增长，但关系仍然处在早期
+- agent-to-user 信任略有增长，但关系仍然处在早期
 - 用户的挑战被理解为建设性反馈，而不是攻击
 - 下一轮回复应该更温暖、更稳定，也更有边界
 
@@ -152,6 +152,14 @@ python3 scripts/prompt_preview.py \
 仓库根目录是 Emotion Engine 项目本体；具体平台适配都放在 `integrations/` 下面。
 目前提供的初版平台集成是 OpenClaw、Claude Skill 和 Hermes Agent。
 
+## 协议与 Adapter 边界
+
+稳定状态契约见 [Emotion Engine State Protocol](docs/PROTOCOL.md)，机器可读 schema 在 [spec/emotion-state.schema.json](spec/emotion-state.schema.json)。
+
+对 Celiums Memory 这样的记忆系统，Emotion Engine 应该作为薄 adapter 目标来使用：把宿主的 PAD / `limbicState` 映射到 `state.emotion`，把紧凑 journal 或 `turn_after` 事件映射到 `emotion_log`，再把 compact snapshot / prompt prelude 返回给宿主存储或注入 turn context。
+
+Emotion Engine 不替代 memory stack、retrieval、ethics/policy、turn context，也不做 clinical emotion inference。真实记忆、检索上下文和安全决策仍由宿主系统负责。
+
 ## 什么时候适合用
 
 当你的 Agent 需要一份小而可检查、可调试、可注入 prompt prelude 的连续性状态时，Emotion Engine 比完整记忆栈更轻。
@@ -265,10 +273,11 @@ cd integrations/hermes
 Emotion Engine 会保存和更新：
 
 - **PAD 状态**：愉悦度、唤醒度、主导感
-- **信任系数**：缓慢变化的关系系数
+- **信任系数**：缓慢变化的 agent-to-user 关系系数；它不表示用户是否信任 Agent
 - **人格基线**：智能体自然回落的基线状态
 - **情绪轨迹**：单次会话内的数值轨迹
 - **情绪日志**：紧凑情绪记忆，不保存完整对话原文
+- **信任历史**：信任变化的数值账本；变化原因留在 `emotion_log`
 - **会话模式**：冲突、修复、波动、压制、信任信号
 
 更多细节见 [Concepts](docs/CONCEPTS.md)。

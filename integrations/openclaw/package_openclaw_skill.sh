@@ -11,13 +11,14 @@ PACKAGE="$STAGE/emotion-engine"
 trap 'rm -rf "$STAGE"' EXIT
 
 rm -f "$SCRIPT_DIR/$OUTPUT"
-mkdir -p "$PACKAGE/scripts"
+mkdir -p "$PACKAGE/scripts" "$PACKAGE/spec"
 
 cp "$SCRIPT_DIR/emotion-engine/SKILL.md" "$PACKAGE/"
 cp "$SCRIPT_DIR/emotion-engine/README.md" "$PACKAGE/"
 cp "$SCRIPT_DIR/emotion-engine/install.sh" "$PACKAGE/"
 cp "$REPO_ROOT/scripts/emotion_engine_utils.py" "$PACKAGE/scripts/"
 cp "$REPO_ROOT/emotion-state-template.json" "$PACKAGE/"
+cp "$REPO_ROOT/spec/emotion-state.schema.json" "$PACKAGE/spec/"
 cp "$REPO_ROOT/LICENSE" "$PACKAGE/"
 
 (cd "$STAGE" && "$PYTHON" -m zipfile -c "$SCRIPT_DIR/$OUTPUT" emotion-engine)

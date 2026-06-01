@@ -40,6 +40,7 @@ class OpenClawIntegrationTest(unittest.TestCase):
             self.assertTrue((installed / "SKILL.md").exists())
             self.assertTrue((installed / "install.sh").exists())
             self.assertTrue((installed / "scripts" / "emotion_engine_utils.py").exists())
+            self.assertTrue((installed / "spec" / "emotion-state.schema.json").exists())
 
             with state_file.open() as f:
                 state = json.load(f)
@@ -66,6 +67,7 @@ class OpenClawIntegrationTest(unittest.TestCase):
             self.assertIn("emotion-engine/SKILL.md", names)
             self.assertIn("emotion-engine/install.sh", names)
             self.assertIn("emotion-engine/scripts/emotion_engine_utils.py", names)
+            self.assertIn("emotion-engine/spec/emotion-state.schema.json", names)
             self.assertIn("emotion-engine/emotion-state-template.json", names)
             self.assertIn("emotion-engine/LICENSE", names)
         finally:

@@ -72,6 +72,7 @@ class HermesIntegrationTest(unittest.TestCase):
             self.assertIn("emotion-engine/install.sh", names)
             self.assertIn("emotion-engine/scripts/hermes_emotion.sh", names)
             self.assertIn("emotion-engine/scripts/emotion_engine_utils.py", names)
+            self.assertIn("emotion-engine/spec/emotion-state.schema.json", names)
             self.assertIn("emotion-engine/emotion-state-template.json", names)
             self.assertIn("emotion-engine/LICENSE", names)
         finally:
@@ -98,6 +99,7 @@ class HermesIntegrationTest(unittest.TestCase):
             self.assertTrue((output / "install.sh").exists())
             self.assertTrue((output / "scripts" / "hermes_emotion.sh").exists())
             self.assertTrue((output / "scripts" / "emotion_engine_utils.py").exists())
+            self.assertTrue((output / "spec" / "emotion-state.schema.json").exists())
             self.assertTrue((output / "emotion-state-template.json").exists())
             self.assertTrue((output / "LICENSE").exists())
             self.assertNotIn("../../..", (output / "install.sh").read_text())
@@ -130,6 +132,7 @@ class HermesIntegrationTest(unittest.TestCase):
         self.assertTrue((GITHUB_TAP_SKILL / "install.sh").exists())
         self.assertTrue((GITHUB_TAP_SKILL / "scripts" / "hermes_emotion.sh").exists())
         self.assertTrue((GITHUB_TAP_SKILL / "scripts" / "emotion_engine_utils.py").exists())
+        self.assertTrue((GITHUB_TAP_SKILL / "spec" / "emotion-state.schema.json").exists())
         self.assertTrue((GITHUB_TAP_SKILL / "emotion-state-template.json").exists())
         self.assertTrue((GITHUB_TAP_SKILL / "LICENSE").exists())
         self.assertNotIn("../../..", (GITHUB_TAP_SKILL / "install.sh").read_text())

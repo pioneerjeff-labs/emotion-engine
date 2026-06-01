@@ -8,7 +8,7 @@ It contains:
 - `scripts/claude_emotion.sh`, a Claude Code wrapper that manages state path and initialization.
 - `install.sh` for personal Claude Code installation.
 
-When installed or packaged, the shared Emotion Engine core, state template, and license are copied from the repository root.
+When installed or packaged, the shared Emotion Engine core, state template, protocol schema, and license are copied from the repository root.
 
 ## Install For Claude Code
 

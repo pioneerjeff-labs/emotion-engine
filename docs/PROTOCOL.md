@@ -26,16 +26,53 @@ The LLM decides.
 Emotion Engine remembers.
 ```
 
+## State And Explanation Invariant
+
+Emotion Engine separates compact numeric state from the explanation for that state.
+
+- `emotion` is the current PAD state.
+- `emotion_trajectory` is the current-session PAD numeric trajectory.
+- `trust` is the current agent-to-user trust coefficient.
+- `trust_history` is a numeric ledger for applied trust changes.
+- `emotion_log` is the explanation layer for both PAD and trust changes.
+
+Do not move semantic reasons into `trust_history`. If trust changes because of repair, collaboration, hostility, boundary pressure, or any other relational evidence, keep that reason in the surrounding `emotion_log` entries and session patterns. `trust_history` should record only the applied numeric effect: `old`, `new`, `raw_delta`, and `effective_delta`.
+
+Similarly, do not treat PAD numbers as self-explanatory. The reason a PAD state changed belongs in `emotion_log` through fields such as `situation`, `appraisal`, `relational_meaning`, `impact`, `before`, `after`, `delta`, `tags`, and optional `source_refs`.
+
+Cryptographic auditability, hash chains, signed anchors, or tamper-evident provenance are backend-level guarantees. They can be provided by host systems or optional adapters, but they are not required by the core Emotion Engine state packet.
+
 ## Compatibility Rules
 
 Readers and writers should follow these rules:
 
 - Treat `_schema: "emotion-engine-state/v2"` as the current packet identifier.
+- Use [`spec/emotion-state.schema.json`](../spec/emotion-state.schema.json) as the machine-readable schema for state packets and adapter envelopes.
 - Ignore unknown top-level fields so optional extensions can be added safely.
 - Treat missing known fields as defaultable. The Python helper fills missing fields through `ensure_state_shape`.
 - Do not store full private transcripts in `emotion_log`.
 - Do not treat deterministic `appraise` output as final emotional truth.
 - Do not use trust or emotion values for consequential decisions about real people.
+
+## Versioning
+
+The current state packet version is:
+
+```text
+emotion-engine-state/v2
+```
+
+The state packet version is separate from helper script versions and package versions. Patch-level helper changes may add optional fields, improve normalization, or refine prompt wording without changing the state version.
+
+Change the state packet version only when a reader or writer can no longer safely interpret the packet by ignoring unknown fields and filling documented defaults. Adapter envelopes currently use their own identifiers:
+
+| Envelope | Current identifier |
+|---|---|
+| State packet | `emotion-engine-state/v2` |
+| Adapter event input | `emotion-engine-adapter-event/v1` |
+| Adapter output | `emotion-engine-adapter-output/v1` |
+
+Adapters should preserve unknown fields when possible, and should include their own source or provenance fields for host-specific extensions.
 
 ## Canonical Packet
 
@@ -140,7 +177,7 @@ Adapters may add host-specific profile fields, but should keep the profile compa
 
 ### `trust`
 
-Slow-moving relationship coefficient.
+Slow-moving agent-to-user relationship continuity coefficient.
 
 Range:
 
@@ -154,7 +191,9 @@ Default:
 0.1
 ```
 
-Trust is separate from PAD emotion. It can affect decay and modulation, but it should not mean obedience, dependency, user value, attachment pressure, or permission to ignore boundaries.
+Trust is directional, but v1 only models one direction: agent-to-user. It is the agent or persona's internal estimate of whether this user has been cooperative, boundary-respecting, predictable, and safe enough for deeper persona continuity.
+
+It does not infer the user's trust in the agent. Trust is separate from PAD emotion. It can affect decay and modulation, but it should not mean obedience, dependency, user value, user score, attachment pressure, safety permission, or permission to ignore boundaries.
 
 Trust tiers used by `status`:
 
@@ -170,7 +209,7 @@ Tier names are descriptive prompt guidance, not claims about a real relationship
 
 ### `trust_anchor`
 
-Highest trust level reached by the relationship, clamped to `[0.05, 1.0]`.
+Highest agent-to-user trust level reached by the relationship, clamped to `[0.05, 1.0]`.
 
 The helper uses this as a floor reference during time-based trust decay. It should be greater than or equal to `trust`.
 
@@ -236,7 +275,7 @@ Common fields:
 | `follow_up_bias` | Suggested bias for future replies. |
 | `salience` | `[0.0, 1.0]` importance score. |
 | `appraisal` | Label such as `collaboration`, `repair`, or `boundary_pressure`. |
-| `before` / `after` | Optional PAD snapshots. |
+| `before` / `after` | Optional compact PAD snapshots with `P/A/D`. |
 | `delta` | Optional PAD delta. |
 | `tags` | Small list of labels for pattern extraction or filtering. |
 
@@ -286,6 +325,8 @@ Example:
 ```
 
 Positive deltas have diminishing returns as trust rises. Negative deltas can be softened when trust is already high, but major negative deltas still matter.
+
+`trust_history` is intentionally not the explanation layer. It should stay a compact numeric ledger. The reason for a trust change should be recorded in `emotion_log`, usually through the preceding turn entries, `session_end` patterns, or a compact `trust_update` log entry that points back to the relevant relationship evidence.
 
 ### `log_limit`
 
@@ -345,6 +386,129 @@ python3 scripts/emotion_engine_utils.py record_turn emotion-state.json 0.18 0.32
 python3 scripts/emotion_engine_utils.py session_end emotion-state.json
 python3 scripts/emotion_engine_utils.py update_trust emotion-state.json 0.02
 ```
+
+## Adapter Event Contract
+
+Host runtimes may map their own event stream into a small adapter envelope before updating Emotion Engine. The schema definition is exposed as `$defs.adapterEvent` in [`spec/emotion-state.schema.json`](../spec/emotion-state.schema.json).
+
+The adapter event envelope is intentionally host-neutral:
+
+```json
+{
+  "_schema": "emotion-engine-adapter-event/v1",
+  "source": "celiums-memory",
+  "event_type": "turn_after",
+  "occurred_at": "2026-05-29T15:20:00.000000+00:00",
+  "session_id": "session_123",
+  "turn_id": "turn_456",
+  "limbicState": {
+    "pleasure": 0.18,
+    "arousal": 0.32,
+    "dominance": 0.61
+  },
+  "appraisal": "collaboration",
+  "compact_memory": {
+    "timestamp": "2026-05-29T15:20:00.000000+00:00",
+    "event_type": "turn",
+    "situation": "user challenged the design constructively",
+    "relational_meaning": "direct critique feels safe and productive",
+    "follow_up_bias": "be precise, warm, and clearly bounded",
+    "salience": 0.65,
+    "tags": ["collaboration"]
+  },
+  "source_refs": [
+    {
+      "type": "celiums_journal_id",
+      "value": "journal_789"
+    }
+  ]
+}
+```
+
+Recommended event types:
+
+| Event type | Adapter behavior |
+|---|---|
+| `session_start` | Run Emotion Engine session start / time decay before the host turn loop. |
+| `turn_after` | Map final host PAD or `limbicState` into `record_turn`; append compact memory only after the host/LLM finalizes the turn meaning. |
+| `journal_append` | Append a compact `emotion_log` entry that points to the host journal via `source_refs`. |
+| `session_end` | Extract patterns and optionally prepare a trust update. |
+| `trust_update` | Apply a small trust delta chosen by host policy plus session interpretation. |
+| `boundary_update` | Preserve or update optional `boundary_state` without turning Emotion Engine into a policy engine. |
+
+Event input rules:
+
+- Prefer final host interpretation over deterministic `appraise` output.
+- Provide PAD as either long-form fields or compact `P/A/D` under `limbicState`, `limbic_state`, or `pad`.
+- Put grounded details in the host memory or journal; put only compact affective summaries in `compact_memory`.
+- Use `source_refs` to point back to external records instead of copying private text into Emotion Engine.
+- Keep `trust_delta` small and slow-moving; do not update trust as a direct reward or punishment signal.
+
+## Adapter Output Contract
+
+After processing an adapter event, return a compact output envelope to the host runtime. The schema definition is exposed as `$defs.adapterOutput`.
+
+Example:
+
+```json
+{
+  "_schema": "emotion-engine-adapter-output/v1",
+  "state_schema": "emotion-engine-state/v2",
+  "state_patch": {
+    "emotion": {
+      "pleasure": 0.18,
+      "arousal": 0.32,
+      "dominance": 0.61
+    },
+    "trust": 0.12
+  },
+  "snapshot": {
+    "tone": "warm, steady, balanced",
+    "emotion": {
+      "pleasure": 0.18,
+      "arousal": 0.32,
+      "dominance": 0.61
+    },
+    "trust": 0.12,
+    "trust_tier": "New",
+    "recent_memories": []
+  },
+  "prompt_prelude": "Current continuity state: ...",
+  "journal_suggestion": {
+    "timestamp": "2026-05-29T15:20:00.000000+00:00",
+    "event_type": "turn",
+    "situation": "user challenged the design constructively",
+    "appraisal": "collaboration"
+  }
+}
+```
+
+The host may store the `snapshot`, write the `journal_suggestion`, or inject the `prompt_prelude` into turn context. The host remains responsible for long-term memory, retrieval, policy, and user-facing behavior.
+
+## Celiums Memory Adapter Boundary
+
+Celiums Memory already owns memory, journal, retrieval, ethics, `limbicState` / PAD, and turn context. A Celiums adapter should therefore be a thin bridge, not a replacement memory stack.
+
+Recommended mapping:
+
+| Celiums concept | Emotion Engine concept |
+|---|---|
+| `limbicState` PAD | `state.emotion` and `emotion_trajectory` PAD |
+| Journal compact entry | `emotion_log` entry with `source_refs` back to Celiums |
+| `turn_after` event | Adapter `turn_after` event, usually followed by `record_turn` |
+| Celiums retrieval | External context fetched before prompt construction, not copied into Emotion Engine |
+| Celiums ethics/policy | Host responsibility; Emotion Engine only emits advisory boundary signals |
+| Celiums turn context | Consumer of Emotion Engine compact snapshot / prompt prelude |
+| Celiums trust extension | Only map agent-to-user trust; do not map user-to-agent trust into Emotion Engine v1 |
+
+Adapter non-goals:
+
+- Do not replace Celiums memory, journal, retrieval, ethics, or turn context.
+- Do not rewrite Celiums' existing emotion system.
+- Do not infer clinical or real-user emotion from Celiums events.
+- Do not store raw Celiums transcripts in `emotion_log`.
+- Do not make trust or `boundary_state` drive consequential decisions.
+- Do not treat Emotion Engine trust as mutual trust or as the user's trust in the agent.
 
 ## Prompt Prelude Contract
 
@@ -445,9 +609,40 @@ In `emotion-engine-state/v2`, boundary is represented indirectly through:
 - `recent_boundary_events` in extracted session patterns
 - profile descriptions such as "clearly bounded"
 
-This is enough for advisory prompt guidance, but it is not a first-class boundary model. A future optional `boundary_state` field should track standing boundaries, provenance, firmness, and recent pressure without turning Emotion Engine into a policy engine.
+This is enough for advisory prompt guidance, but it is not a policy model. Adapters may also preserve an optional top-level `boundary_state` extension:
 
-Until that field exists, adapters should say "boundary signals" rather than "boundaries" when describing the v2 packet.
+```json
+{
+  "boundary_state": {
+    "status": "watch",
+    "firmness": 0.7,
+    "recent_pressure": 0.3,
+    "standing_boundaries": [
+      {
+        "label": "do not over-comply with pressure to skip review",
+        "status": "active",
+        "source": "host_policy"
+      }
+    ],
+    "last_updated_iso": "2026-05-29T15:20:00.000000+00:00",
+    "provenance": "celiums-memory"
+  }
+}
+```
+
+Recommended `boundary_state.status` values:
+
+| Status | Meaning |
+|---|---|
+| `unknown` | No stable boundary context is available. |
+| `clear` | Boundaries are stable and not currently pressured. |
+| `watch` | Mild pressure or ambiguity exists; keep responses more explicitly bounded. |
+| `strained` | Repeated pressure or unresolved tension exists. |
+| `repairing` | A prior boundary issue is being repaired or clarified. |
+
+`firmness` and `recent_pressure` are prompt-guidance signals in `[0.0, 1.0]`. They are not safety policy decisions, user classifications, or permission systems.
+
+Adapters should say "boundary signals" rather than "boundaries" when describing the v2 packet, unless their host runtime owns a real boundary or policy model outside Emotion Engine.
 
 ## Deterministic Helper Responsibilities
 

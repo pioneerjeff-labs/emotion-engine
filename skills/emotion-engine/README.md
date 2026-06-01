@@ -8,7 +8,7 @@ It contains:
 - `scripts/hermes_emotion.sh`, a wrapper that manages state path and initialization.
 - `install.sh` for local Hermes installation.
 
-The shared core script, state template, and license are copied from the repository root during install/package.
+This self-contained package includes the shared core script, state template, protocol schema, and license.
 
 ## Install
 

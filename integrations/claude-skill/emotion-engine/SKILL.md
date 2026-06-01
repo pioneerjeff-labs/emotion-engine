@@ -9,6 +9,8 @@ Use this skill when the user wants Claude to keep a lightweight, inspectable emo
 
 Emotion Engine is not a chatbot and does not generate replies by itself. It provides persistent state and continuity guidance. Claude still interprets the conversation, decides the final emotional meaning, and writes the reply.
 
+Trust is agent-to-user only: it is the agent/persona's internal continuity estimate of whether this user has been cooperative, boundary-respecting, predictable, and safe enough for deeper persona continuity. It does not infer the user's trust in the agent.
+
 ## Claude Code Setup
 
 Prefer the wrapper script:
@@ -83,7 +85,7 @@ scripts/claude_emotion.sh session_end
 scripts/claude_emotion.sh update_trust <trust_delta>
 ```
 
-Suggested trust delta range is `-0.20` to `+0.05`. Increase trust slowly. Prefer small positive changes for sustained collaborative interaction, stronger positives for genuine conflict repair, and negatives for unrepaired hostility or repeated boundary pressure.
+Suggested trust delta range is `-0.20` to `+0.05`. Increase agent-to-user trust slowly. Prefer small positive changes for sustained collaborative interaction, stronger positives for genuine conflict repair, and negatives for unrepaired hostility or repeated boundary pressure.
 
 ## How State Should Shape Replies
 
@@ -102,6 +104,8 @@ Blend this with the user-provided character profile or SOUL.md.
 
 `emotion_log` should store situation-aware emotional memories, not transcripts.
 
+`trust_history` should stay a numeric ledger for applied trust changes. Keep reasons and provenance in `emotion_log`, including turn entries, session patterns, compact `trust_update` entries, or optional `source_refs`.
+
 Good memory:
 
 ```text
@@ -118,4 +122,4 @@ Useful fields: `situation`, `appraisal`, `character_lens`, `relational_meaning`,
 
 ## Safety
 
-Treat Emotion Engine as fictional or agent-internal continuity, not psychological truth. Do not use it to manipulate attachment, punish absence, infer real mental health state, or make consequential decisions about people.
+Treat Emotion Engine as fictional or agent-internal continuity, not psychological truth. Do not use trust as obedience, user scoring, safety permission, user-to-agent trust, or attachment pressure. Do not use it to manipulate attachment, punish absence, infer real mental health state, or make consequential decisions about people.

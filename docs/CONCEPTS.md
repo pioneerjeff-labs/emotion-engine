@@ -32,6 +32,8 @@ This could describe an agent that is mildly warm, calm, and clearly bounded.
 
 Trust is separate from emotion. It changes slowly, usually at session boundaries.
 
+In v1, trust is directional and intentionally narrow: it is agent-to-user only. It is the agent or persona's internal estimate of whether this user has been cooperative, boundary-respecting, predictable, and safe enough for deeper persona continuity. It does not infer the user's trust in the agent.
+
 Trust can:
 
 - slow emotional decay
@@ -39,7 +41,9 @@ Trust can:
 - make positive interactions linger slightly longer
 - help the agent distinguish early relationship from established rapport
 
-Trust should not be used to manipulate the user or punish absence.
+Trust should not be used as obedience, a user score, safety permission, dependency, attachment pressure, or a way to manipulate the user or punish absence.
+
+`trust_history` is only a numeric ledger: `old`, `new`, `raw_delta`, and `effective_delta`. The reason for a trust change belongs in `emotion_log`, usually in the relevant turn entries, session patterns, or a compact `trust_update` log entry.
 
 ## Emotion Log
 
@@ -61,6 +65,8 @@ Good emotion memories are:
 - interpretive
 - useful for future response style
 - free of sensitive full transcripts
+
+`emotion_log` is also the explanation layer for PAD and trust changes. Numbers stay compact; situation, appraisal, relational meaning, impact, and optional external references explain why they moved.
 
 ## Decay
 

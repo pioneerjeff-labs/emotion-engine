@@ -7,7 +7,7 @@ It contains:
 - `SKILL.md` for OpenClaw.
 - `install.sh` for local OpenClaw installation.
 
-When installed or packaged, the shared Emotion Engine core, state template, and license are copied from the repository root.
+When installed or packaged, the shared Emotion Engine core, state template, protocol schema, and license are copied from the repository root.
 
 ## Install
 
