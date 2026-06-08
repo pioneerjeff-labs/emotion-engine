@@ -137,9 +137,11 @@ LLM task:
 | OpenClaw skill | [integrations/openclaw](integrations/openclaw) |
 | Claude Skill / Claude Code package | [integrations/claude-skill](integrations/claude-skill) |
 | Hermes Agent skill package | [integrations/hermes](integrations/hermes) |
+| Codex skill package | [integrations/codex](integrations/codex) |
+| OpenAI GPT / API host-side integration guide | [docs/OPENAI_GPT.md](docs/OPENAI_GPT.md) |
 
 The repository root is the Emotion Engine project. Platform-specific packages live under `integrations/`.
-The first-party starter integrations are OpenClaw, Claude Skill, and Hermes Agent.
+The first-party starter integrations are OpenClaw, Claude Skill, Hermes Agent, and Codex. Codex ships as a user-installed skill package. GPT/API usage is documented as a host-side integration pattern because the host application owns persistence and model calls.
 
 ## Protocol And Adapter Boundary
 
@@ -259,6 +261,38 @@ cd integrations/hermes
 
 This creates `emotion-engine-hermes-skill.zip`. The zip is a generated release artifact, so it is not committed to the repository.
 
+### Codex
+
+The Codex-compatible package lives in [integrations/codex](integrations/codex).
+
+For local Codex installation:
+
+```bash
+cd integrations/codex/emotion-engine-codex
+sh install.sh
+```
+
+The installer creates a user-level Codex skill, not a bundled/system skill. It copies the skill into `CODEX_SKILLS_DIR` if set; otherwise it prefers an existing `~/.codex/skills` directory and falls back to:
+
+```text
+~/.agents/skills/emotion-engine-codex
+```
+
+Personal state defaults to the matching local home: `~/.codex/emotion-engine/emotion-state.json` when `~/.codex` is active, or `~/.agents/emotion-engine/emotion-state.json` for the `~/.agents` fallback.
+
+To build a Codex skill zip:
+
+```bash
+cd integrations/codex
+./package_codex_skill.sh
+```
+
+This creates `emotion-engine-codex-skill.zip`. The zip is a generated release artifact, so it is not committed to the repository.
+
+### OpenAI GPT / API
+
+For GPT/API integrations, keep Emotion Engine state in your host application and inject compact continuity guidance into the model prompt. This is not the Codex skill package; it is a pattern for applications that call OpenAI models. See [OpenAI GPT / API Integration](docs/OPENAI_GPT.md).
+
 ## Core Concepts
 
 Emotion Engine stores and updates:
@@ -331,7 +365,8 @@ emotion-engine/
 ├── integrations/
 │   ├── openclaw/
 │   ├── claude-skill/
-│   └── hermes/
+│   ├── hermes/
+│   └── codex/
 ├── tests/
 ├── docs/
 ├── demo/

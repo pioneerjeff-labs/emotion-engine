@@ -9,6 +9,8 @@ Ready-to-adapt starter integrations:
 - OpenClaw: [integrations/openclaw](../integrations/openclaw)
 - Claude Skill: [integrations/claude-skill](../integrations/claude-skill)
 - Hermes Agent: [integrations/hermes](../integrations/hermes)
+- Codex: [integrations/codex](../integrations/codex)
+- OpenAI GPT / API host-side guide: [docs/OPENAI_GPT.md](OPENAI_GPT.md)
 
 ## Minimal Loop
 

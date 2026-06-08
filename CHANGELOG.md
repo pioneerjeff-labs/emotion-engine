@@ -21,6 +21,7 @@
 - Refined PioneerJeff Labs positioning around reusable infrastructure layers for creative AI applications.
 - Added the v2 state protocol schema, documented the thin-adapter boundary for Celiums Memory-style integrations, and included the schema in generated skill packages.
 - Clarified that trust v1 is agent-to-user only and that `trust_history` is a numeric ledger while `emotion_log` carries explanations and provenance.
+- Added a user-level Codex skill integration package plus an OpenAI GPT / API host-side integration guide.
 
 ## 0.1.0
 

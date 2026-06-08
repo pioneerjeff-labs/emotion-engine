@@ -148,9 +148,11 @@ python3 scripts/prompt_preview.py \
 | OpenClaw 集成包 | [integrations/openclaw](integrations/openclaw) |
 | Claude Skill / Claude Code 集成包 | [integrations/claude-skill](integrations/claude-skill) |
 | Hermes Agent 集成包 | [integrations/hermes](integrations/hermes) |
+| Codex Skill 集成包 | [integrations/codex](integrations/codex) |
+| OpenAI GPT / API 宿主侧接入说明 | [docs/OPENAI_GPT.md](docs/OPENAI_GPT.md) |
 
 仓库根目录是 Emotion Engine 项目本体；具体平台适配都放在 `integrations/` 下面。
-目前提供的初版平台集成是 OpenClaw、Claude Skill 和 Hermes Agent。
+目前提供的初版平台集成是 OpenClaw、Claude Skill、Hermes Agent 和 Codex。Codex 是用户级 skill 安装包；GPT/API 用法以宿主应用接入说明为主，因为状态持久化和模型调用由宿主应用负责。
 
 ## 协议与 Adapter 边界
 
@@ -267,6 +269,38 @@ cd integrations/hermes
 ```
 
 这会生成 `emotion-engine-hermes-skill.zip`。它是发布产物，不需要提交到仓库。
+
+## Codex 快速安装
+
+Codex 版本在 [integrations/codex](integrations/codex)。
+
+用于本地 Codex 安装：
+
+```bash
+cd integrations/codex/emotion-engine-codex
+sh install.sh
+```
+
+安装脚本创建的是用户级 Codex skill，不是 Codex 内置/系统级 skill。它会优先使用 `CODEX_SKILLS_DIR`；如果没有设置，会优先使用本机已有的 `~/.codex/skills`，否则默认复制到：
+
+```text
+~/.agents/skills/emotion-engine-codex
+```
+
+个人 state 默认跟随当前本地目录：使用 `~/.codex` 时写入 `~/.codex/emotion-engine/emotion-state.json`；走 `~/.agents` fallback 时写入 `~/.agents/emotion-engine/emotion-state.json`。
+
+构建 Codex skill 压缩包：
+
+```bash
+cd integrations/codex
+./package_codex_skill.sh
+```
+
+这会生成 `emotion-engine-codex-skill.zip`。它是发布产物，不需要提交到仓库。
+
+## OpenAI GPT / API 接入
+
+GPT/API 集成时，Emotion Engine state 应该由你的宿主应用保存，并在调用模型时注入紧凑的 continuity prompt。这不是 Codex skill 包，而是给调用 OpenAI 模型的应用使用的接入模式。具体见 [OpenAI GPT / API Integration](docs/OPENAI_GPT.md)。
 
 ## 核心概念
 
