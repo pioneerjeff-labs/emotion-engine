@@ -133,10 +133,12 @@ These are guides, not scripts. Blend them with SOUL.md.
 Run:
 
 ```bash
-python3 {baseDir}/scripts/emotion_engine_utils.py session_end <state_file>
+python3 {baseDir}/scripts/emotion_engine_utils.py settle_trust <state_file>
 ```
 
-This extracts trajectory patterns and logs the session close. Use the pattern signals and the conversation content to choose an agent-to-user trust delta between -0.20 and +0.05.
+This extracts trajectory patterns, logs the session close, checks recent turn-level emotion logs and the current trajectory, chooses a conservative agent-to-user raw trust delta between -0.20 and +0.05, and applies it once for the same trajectory. Repeating it should return `already_settled` with `raw_delta: 0.0`.
+
+Use `session_end` only to inspect patterns without changing trust. Use the pattern signals and the conversation content for explicit host-side overrides:
 
 | Pattern | Trust Signal | Suggested Delta |
 |---|---|---|
@@ -147,7 +149,7 @@ This extracts trajectory patterns and logs the session close. Use the pattern si
 | Sustained negative, no repair attempt | Moderate negative | -0.05 to -0.10 |
 | Severe boundary violation or persistent hostility | Strong negative | -0.10 to -0.20 |
 
-Apply the trust delta:
+Apply a manual trust delta only when the host has made its own trust judgment:
 
 ```bash
 python3 {baseDir}/scripts/emotion_engine_utils.py update_trust <state_file> <trust_delta>

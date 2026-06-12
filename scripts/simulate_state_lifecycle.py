@@ -6,7 +6,7 @@ Use this when an agent runtime is not installed yet. It does not call an LLM
 and does not generate assistant replies. It uses the deterministic appraisal
 helper as a stand-in so you can verify the state lifecycle:
 configure -> session_start -> pre_turn_decay -> advisory appraisal ->
-record_turn -> session_end -> trust update.
+record_turn -> settle_trust.
 """
 
 import argparse
@@ -68,6 +68,7 @@ ZH_EVENT_LABELS = {
     "turn": "轮次记录",
     "session_end": "会话结束",
     "trust_update": "信任更新",
+    "trust_settlement": "信任结算",
 }
 
 ZH_SITUATIONS = {
@@ -83,22 +84,6 @@ def is_zh(lang):
 
 def default_turns(lang):
     return DEFAULT_TURNS_ZH if is_zh(lang) else DEFAULT_TURNS
-
-
-def choose_trust_delta(patterns):
-    if not patterns.get("sufficient_data"):
-        return 0.0
-    if patterns.get("v_shape"):
-        return 0.04
-    if patterns.get("sustained_negative"):
-        return -0.07
-    if patterns.get("dominance_suppressed") or patterns.get("recent_boundary_events", 0) >= 2:
-        return -0.04
-    if patterns.get("too_smooth"):
-        return 0.005
-    if patterns.get("avg_pleasure_delta", 0) > 0:
-        return 0.02
-    return 0.0
 
 
 def tone_preview(state, lang="en"):
@@ -387,7 +372,7 @@ def print_human_footer(state, patterns, trust_before, trust_delta, args):
         print()
         print("会话总结")
         print(f"模式总结：{summarize_patterns(patterns, lang)}")
-        print(f"信任更新：{trust_before:.4f} -> {state['trust']:.4f}（原始变化 {trust_delta}）")
+        print(f"信任结算：{trust_before:.4f} -> {state['trust']:.4f}（原始变化 {trust_delta}）")
         print(f"最终状态：{zh_tone_summary(state)} | {trust_label(status['trust_tier'], lang)}")
         if args.state:
             print(f"已保存状态文件：{args.state}")
@@ -403,7 +388,7 @@ def print_human_footer(state, patterns, trust_before, trust_delta, args):
     print()
     print("Session Summary")
     print(f"Pattern summary: {summarize_patterns(patterns, lang)}")
-    print(f"Trust update: {trust_before:.4f} -> {state['trust']:.4f} (raw delta {trust_delta})")
+    print(f"Trust settlement: {trust_before:.4f} -> {state['trust']:.4f} (raw delta {trust_delta})")
     print(f"Final status: {status['summary']} | {status['trust_tier']}")
     if args.state:
         print(f"Saved state file: {args.state}")
@@ -485,11 +470,10 @@ def run_simulation(args):
                 args.lang,
             )
 
-    state, patterns = engine.session_end(state)
-    trust_delta = choose_trust_delta(patterns)
     trust_before = state["trust"]
-    if trust_delta:
-        state = engine.apply_trust_delta(state, trust_delta)
+    state, settlement = engine.settle_trust(state)
+    patterns = settlement.get("patterns", {})
+    trust_delta = settlement.get("raw_delta", 0.0)
 
     if args.state:
         engine.save_state(args.state, state)

@@ -21,7 +21,7 @@ Ready-to-adapt starter integrations:
 4. Ask the LLM to choose final appraisal and PAD values
 5. Record the turn
 6. Generate or refine the assistant response using current state
-7. At session end, extract patterns and update agent-to-user trust
+7. At session end, settle agent-to-user trust from session evidence
 ```
 
 ## Adapter Boundary
@@ -101,21 +101,29 @@ python3 scripts/emotion_engine_utils.py record_turn emotion-state.json 0.18 0.32
 ## End A Session
 
 ```bash
+python3 scripts/emotion_engine_utils.py settle_trust emotion-state.json
+```
+
+This extracts patterns, logs the session close, checks recent turn-level `emotion_log` entries and the current `emotion_trajectory`, chooses a conservative raw delta in `[-0.20, +0.05]`, and applies it at most once for the same session trajectory. Repeating it for the same trajectory returns `already_settled` with `raw_delta: 0.0`.
+
+To inspect patterns without changing trust, run:
+
+```bash
 python3 scripts/emotion_engine_utils.py session_end emotion-state.json
 ```
 
-Then choose an agent-to-user trust delta using both:
+Use manual settlement only when the host has made its own trust judgment from both:
 
 - extracted trajectory patterns
 - the LLM's interpretation of the session
 
-Apply the final trust update:
+Then apply the final trust update:
 
 ```bash
 python3 scripts/emotion_engine_utils.py update_trust emotion-state.json 0.02
 ```
 
-`update_trust` writes the numeric effect to `trust_history`. Keep the reason for the change in `emotion_log`: the preceding turn entries, the `session_end` pattern log, or the compact `trust_update` entry. Do not add semantic reasons, confidence, or external references to `trust_history`; use `emotion_log.source_refs` for adapter provenance.
+`settle_trust` and `update_trust` write the numeric effect to `trust_history`. Keep the reason for the change in `emotion_log`: the preceding turn entries, the `session_end` pattern log, or the compact `trust_settlement` / `trust_update` entries. Do not add semantic reasons, confidence, or external references to `trust_history`; use `emotion_log.source_refs` for adapter provenance.
 
 ## State Control
 

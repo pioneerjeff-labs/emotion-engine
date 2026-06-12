@@ -444,6 +444,7 @@
             "turn_after",
             "journal_append",
             "session_end",
+            "trust_settlement",
             "trust_update",
             "boundary_update",
             "time_decay",

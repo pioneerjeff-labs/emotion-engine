@@ -97,11 +97,10 @@ scripts/codex_emotion.sh record_turn <P> <A> <D> \
 At session end:
 
 ```bash
-scripts/codex_emotion.sh session_end
-scripts/codex_emotion.sh update_trust <trust_delta>
+scripts/codex_emotion.sh settle_trust
 ```
 
-Suggested trust delta range is `-0.20` to `+0.05`. Increase agent-to-user trust slowly. Prefer small positive changes for sustained collaborative interaction, stronger positives for genuine conflict repair, and negatives for unrepaired hostility or repeated boundary pressure.
+`settle_trust` extracts session patterns, checks recent turn-level emotion logs and the current trajectory, chooses a conservative raw delta in `-0.20` to `+0.05`, and applies it once for the same trajectory. Repeating it should return `already_settled` with `raw_delta: 0.0`. Use `session_end` only to inspect patterns without changing trust, and `update_trust <trust_delta>` only for an explicit host-side override.
 
 ## How State Should Shape Replies
 

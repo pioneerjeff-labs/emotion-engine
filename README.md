@@ -100,7 +100,7 @@ Run a lifecycle check without installing any agent runtime:
 python3 scripts/check_state_lifecycle.py --style "warm but not over-compliant, with clear boundaries"
 ```
 
-This does not call an LLM and does not generate assistant replies. It checks that the state layer works: configure, session start, decay, advisory appraisal, record turn, session end, trust update, and emotion log.
+This does not call an LLM and does not generate assistant replies. It checks that the state layer works: configure, session start, decay, advisory appraisal, record turn, session end, trust settlement, and emotion log.
 
 To see the kind of guidance an LLM integration would receive:
 
@@ -133,6 +133,7 @@ LLM task:
 | Need | Use |
 |---|---|
 | Scripted web demo for product explanation | [demo](demo) |
+| 5-minute reference loop for wiring Emotion Engine into an agent | [examples/minimal-agent](examples/minimal-agent) |
 | Core state engine checks and local tooling | [scripts](scripts) |
 | OpenClaw skill | [integrations/openclaw](integrations/openclaw) |
 | Claude Skill / Claude Code package | [integrations/claude-skill](integrations/claude-skill) |
@@ -142,6 +143,14 @@ LLM task:
 
 The repository root is the Emotion Engine project. Platform-specific packages live under `integrations/`.
 The first-party starter integrations are OpenClaw, Claude Skill, Hermes Agent, and Codex. Codex ships as a user-installed skill package. GPT/API usage is documented as a host-side integration pattern because the host application owns persistence and model calls.
+
+For the smallest concrete loop before choosing a platform package, run:
+
+```bash
+python3 examples/minimal-agent/run_demo.py
+```
+
+The minimal agent example shows how to load state, build a prompt prelude, let a mock LLM choose the final appraisal/PAD values, record the turn, settle trust, and save the final state.
 
 ## Protocol And Adapter Boundary
 
@@ -316,7 +325,7 @@ The typical integration loop is:
 3. Let the LLM interpret the user message and choose the final emotional update.
 4. Record the turn with compact memory.
 5. Use the updated state as guidance for future replies.
-6. At session end, extract patterns and update agent-to-user trust.
+6. At session end, settle agent-to-user trust from session evidence.
 
 See [Integration Guide](docs/INTEGRATION.md) for the full sequence.
 
@@ -335,6 +344,7 @@ python3 scripts/emotion_engine_utils.py session_start <state_file>
 python3 scripts/emotion_engine_utils.py pre_turn_decay <state_file>
 python3 scripts/emotion_engine_utils.py appraise <state_file> <message...>
 python3 scripts/emotion_engine_utils.py record_turn <state_file> <P> <A> <D> --appraisal <label> --situation <what happened>
+python3 scripts/emotion_engine_utils.py settle_trust <state_file>
 python3 scripts/emotion_engine_utils.py session_end <state_file>
 python3 scripts/emotion_engine_utils.py update_trust <state_file> <trust_delta>
 python3 scripts/emotion_engine_utils.py recent_log <state_file> 5

@@ -144,6 +144,7 @@ python3 scripts/prompt_preview.py \
 | 需求 | 使用位置 |
 |---|---|
 | 用于产品解释的脚本化网页演示 | [demo](demo) |
+| 5 分钟接入参考 loop，把 Emotion Engine 接进自己的 Agent | [examples/minimal-agent](examples/minimal-agent) |
 | 核心状态层检查和本地工具 | [scripts](scripts) |
 | OpenClaw 集成包 | [integrations/openclaw](integrations/openclaw) |
 | Claude Skill / Claude Code 集成包 | [integrations/claude-skill](integrations/claude-skill) |
@@ -153,6 +154,14 @@ python3 scripts/prompt_preview.py \
 
 仓库根目录是 Emotion Engine 项目本体；具体平台适配都放在 `integrations/` 下面。
 目前提供的初版平台集成是 OpenClaw、Claude Skill、Hermes Agent 和 Codex。Codex 是用户级 skill 安装包；GPT/API 用法以宿主应用接入说明为主，因为状态持久化和模型调用由宿主应用负责。
+
+如果你想先看最小可接入 loop，再决定用哪种平台包，可以运行：
+
+```bash
+python3 examples/minimal-agent/run_demo.py
+```
+
+这个 minimal agent example 展示如何读取状态、构建 prompt prelude、让 mock LLM 决定最终 appraisal/PAD、记录轮次、结算信任，并保存最终状态。
 
 ## 协议与 Adapter 边界
 

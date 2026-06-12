@@ -85,7 +85,7 @@ At session end, Emotion Engine can extract simple trajectory patterns:
 - dominance suppression
 - boundary pressure
 
-These patterns can inform trust changes, but they should remain advisory. A real integration should let the LLM interpret the broader context.
+These patterns inform `settle_trust`, which applies a conservative, idempotent host-side trust settlement for the current trajectory. They should remain advisory. A real integration should let the LLM interpret the broader context, and should use manual `update_trust` only for explicit host-side overrides.
 
 ## Deterministic Appraisal Helper
 

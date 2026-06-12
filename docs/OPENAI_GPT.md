@@ -53,7 +53,7 @@ Read the state before a model turn, and write it back after the turn.
 5. Send the prelude plus conversation context to the model.
 6. Ask the model or host policy to choose final appraisal, PAD, and compact memory.
 7. Run record_turn.
-8. At session end, run session_end and update_trust.
+8. At session end, run settle_trust.
 9. Persist the updated state.
 ```
 

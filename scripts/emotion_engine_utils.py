@@ -10,6 +10,7 @@ Usage:
   python3 emotion_engine_utils.py pre_turn_decay <state_file>
   python3 emotion_engine_utils.py appraise <state_file> <message...>
   python3 emotion_engine_utils.py patterns <state_file>
+  python3 emotion_engine_utils.py settle_trust <state_file>
   python3 emotion_engine_utils.py update_trust <state_file> <trust_delta>
   python3 emotion_engine_utils.py record_turn <state_file> <P> <A> <D> [memory options]
   python3 emotion_engine_utils.py log_event <state_file> <event_type> [memory options]
@@ -30,6 +31,7 @@ import json
 import math
 import os
 import sys
+import hashlib
 from copy import deepcopy
 from datetime import datetime, timezone
 
@@ -53,6 +55,7 @@ DEFAULT_STATE = {
     "emotion_trajectory": [],
     "emotion_log": [],
     "trust_history": [],
+    "trust_settlements": [],
     "log_limit": 200,
 }
 
@@ -238,7 +241,7 @@ def ensure_state_shape(state):
         1.0,
     ), 4)
 
-    for key in ["emotion_trajectory", "emotion_log", "trust_history"]:
+    for key in ["emotion_trajectory", "emotion_log", "trust_history", "trust_settlements"]:
         if not isinstance(merged.get(key), list):
             merged[key] = []
 
@@ -452,6 +455,28 @@ def trust_tier(trust):
     return "Intimate"
 
 
+def trust_progress(trust):
+    trust = clamp(float(trust), 0.05, 1.0)
+    bands = [
+        (0.05, 0.2, "New", "warming up"),
+        (0.2, 0.4, "Acquaintance", "getting oriented"),
+        (0.4, 0.6, "Familiar", "steadying"),
+        (0.6, 0.8, "Close", "well established"),
+        (0.8, 1.0, "Intimate", "deeply established"),
+    ]
+    for lo, hi, tier, phrase in bands:
+        if trust < hi or tier == "Intimate":
+            if hi == lo:
+                progress = 1.0
+            else:
+                progress = (trust - lo) / (hi - lo)
+            return {
+                "tier": tier,
+                "progress": round(clamp(progress, 0.0, 1.0), 3),
+                "phrase": phrase,
+            }
+
+
 def emotion_summary(state):
     state = ensure_state_shape(state)
     emotion = state["emotion"]
@@ -481,11 +506,14 @@ def emotion_summary(state):
 
 def public_status(state):
     state = ensure_state_shape(state)
+    progress = trust_progress(state["trust"])
     return {
         "enabled": state["enabled"],
         "summary": emotion_summary(state),
         "style": state["character_profile"].get("interpretation"),
         "trust_tier": trust_tier(state["trust"]),
+        "trust_progress": progress["progress"],
+        "trust_progress_phrase": progress["phrase"],
         "session_count": state["session_count"],
         "log_entries": len(state.get("emotion_log", [])),
         "hint": "Use tune for small changes, pause/resume for control, and status --raw for debug values.",
@@ -786,8 +814,11 @@ def extract_patterns(state):
         for entry in state.get("emotion_log", [])[-20:]
         for tag in entry.get("tags", [])
     ]
-    boundary_events = sum(1 for tag in log_tags if tag == "boundary")
+    boundary_events = sum(1 for tag in log_tags if tag in ["boundary", "boundary_pressure"])
     repair_events = sum(1 for tag in log_tags if tag == "repair")
+    collaboration_events = sum(1 for tag in log_tags if tag == "collaboration")
+    warmth_events = sum(1 for tag in log_tags if tag == "warmth")
+    hostility_events = sum(1 for tag in log_tags if tag in ["negative", "hostility"])
 
     return {
         "sufficient_data": True,
@@ -804,10 +835,248 @@ def extract_patterns(state):
         "negative_ratio": round(negative_ratio, 4),
         "recent_boundary_events": boundary_events,
         "recent_repair_events": repair_events,
+        "recent_collaboration_events": collaboration_events,
+        "recent_warmth_events": warmth_events,
+        "recent_hostility_events": hostility_events,
     }
 
 
 # ── Trust Update ─────────────────────────────────────────────────────
+
+TRUST_SETTLEMENT_TEXT_FIELDS = [
+    "situation",
+    "character_lens",
+    "relational_meaning",
+    "impact",
+    "follow_up_bias",
+]
+
+TRUST_SETTLEMENT_KEYWORDS = [
+    "trust your judgment",
+    "trust your judgement",
+    "use your judgment",
+    "use your judgement",
+    "you decide",
+    "direct judgment",
+    "call it directly",
+    "be direct",
+    "i trust you",
+    "相信你的判断",
+    "你来判断",
+    "你决定",
+    "直接判断",
+    "直接一点",
+]
+
+
+def current_session_turn_logs(state):
+    trajectory_turns = {
+        int(entry.get("turn"))
+        for entry in state.get("emotion_trajectory", [])
+        if entry.get("turn") is not None
+    }
+    if not trajectory_turns:
+        return []
+    turn_logs = []
+    for entry in state.get("emotion_log", [])[-50:]:
+        if entry.get("event_type") == "turn" and entry.get("turn") in trajectory_turns:
+            turn_logs.append(entry)
+    return turn_logs
+
+
+def settlement_trajectory_signature(state):
+    state = ensure_state_shape(state)
+    trajectory = state.get("emotion_trajectory", [])
+    payload = {
+        "session_count": state.get("session_count", 0),
+        "trajectory": [
+            {
+                "turn": entry.get("turn"),
+                "P": entry.get("P"),
+                "A": entry.get("A"),
+                "D": entry.get("D"),
+                "timestamp": entry.get("timestamp"),
+                "appraisal": entry.get("appraisal"),
+            }
+            for entry in trajectory
+        ],
+    }
+    encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
+
+
+def settlement_already_applied(state, settlement_id):
+    for entry in state.get("trust_settlements", []):
+        if entry.get("settlement_id") == settlement_id:
+            return True
+    return any(
+        entry.get("event_type") == "trust_settlement"
+        and entry.get("settlement_id") == settlement_id
+        for entry in state.get("emotion_log", [])[-50:]
+    )
+
+
+def turn_log_text(turn_logs):
+    parts = []
+    for entry in turn_logs:
+        for field in TRUST_SETTLEMENT_TEXT_FIELDS:
+            if entry.get(field):
+                parts.append(str(entry[field]).lower())
+    return " ".join(parts)
+
+
+def assess_trust_settlement(state, patterns=None):
+    state = ensure_state_shape(state)
+    patterns = patterns or extract_patterns(state)
+    turn_logs = current_session_turn_logs(state)
+    appraisals = [
+        entry.get("appraisal")
+        for entry in turn_logs
+        if entry.get("appraisal")
+    ]
+    tags = [
+        tag
+        for entry in turn_logs
+        for tag in entry.get("tags", [])
+    ]
+    text = turn_log_text(turn_logs)
+
+    turn_count = int(patterns.get("turn_count", len(state.get("emotion_trajectory", []))) or 0)
+    collaboration_count = tags.count("collaboration") + appraisals.count("collaboration")
+    warmth_count = tags.count("warmth") + appraisals.count("warmth")
+    repair_count = tags.count("repair") + appraisals.count("repair")
+    boundary_count = tags.count("boundary") + appraisals.count("boundary_pressure")
+    hostility_count = tags.count("negative") + appraisals.count("hostility")
+    explicit_trust = any(keyword in text for keyword in TRUST_SETTLEMENT_KEYWORDS)
+
+    if not patterns.get("sufficient_data") or turn_count < 2:
+        return 0.0, "insufficient_data", "insufficient turn-level evidence for trust settlement"
+
+    if hostility_count and not repair_count:
+        return -0.06, "unrepaired_hostility", "recent hostility was not repaired"
+
+    if boundary_count >= 2:
+        return -0.04, "repeated_boundary_pressure", "repeated boundary pressure blocks positive trust gain"
+
+    if patterns.get("dominance_suppressed") and boundary_count:
+        return -0.03, "boundary_pressure_with_suppression", "boundary pressure coincided with suppressed dominance"
+
+    if patterns.get("sustained_negative") and not patterns.get("had_repair"):
+        return -0.05, "sustained_negative_unrepaired", "session stayed negative without repair"
+
+    if boundary_count:
+        return -0.02, "boundary_pressure_blocks_gain", "boundary pressure blocks positive trust gain"
+
+    if patterns.get("v_shape") and patterns.get("had_repair"):
+        return 0.05, "conflict_repair", "genuine conflict repair improved the session trajectory"
+
+    if patterns.get("had_conflict") and patterns.get("had_repair"):
+        return 0.04, "conflict_repair", "conflict was followed by meaningful repair"
+
+    if collaboration_count >= 2 and explicit_trust:
+        if patterns.get("end_vs_start_pleasure", 0.0) > 0.05:
+            return 0.04, "collaboration_with_direct_trust", "multiple cooperative turns included explicit trust in direct judgment"
+        return 0.03, "collaboration_with_direct_trust", "multiple cooperative turns included explicit trust in direct judgment"
+
+    if (
+        collaboration_count >= 2
+        and turn_count >= 3
+        and patterns.get("avg_pleasure_delta", 0.0) > 0
+        and patterns.get("end_vs_start_pleasure", 0.0) > 0
+    ):
+        return 0.02, "sustained_collaboration", "sustained collaborative interaction showed a positive pleasure trend"
+
+    if warmth_count and collaboration_count == 0:
+        return 0.0, "praise_only", "single warmth or praise is not enough for trust growth"
+
+    return 0.0, "no_clear_trust_signal", "no clear session-level trust signal"
+
+
+def settlement_record(settlement_id, state, raw_delta, status):
+    return {
+        "timestamp": now_iso(),
+        "settlement_id": settlement_id,
+        "session_count": int(state.get("session_count", 0)),
+        "turn_count": len(state.get("emotion_trajectory", [])),
+        "trust_before": round(float(state.get("trust", 0.1)), 4),
+        "trust_after": round(float(state.get("trust", 0.1)), 4),
+        "raw_delta": round(float(raw_delta), 4),
+        "status": status,
+    }
+
+
+def has_current_session_end_log(state, patterns):
+    return any(
+        entry.get("event_type") == "session_end"
+        and entry.get("patterns") == patterns
+        for entry in state.get("emotion_log", [])[-10:]
+    )
+
+
+def settle_trust(state):
+    """Conservatively settle session trust once for the current trajectory."""
+    state = ensure_state_shape(state)
+    settlement_id = settlement_trajectory_signature(state)
+    patterns = extract_patterns(state)
+
+    if not state.get("enabled", True):
+        return state, {
+            "status": "paused",
+            "settlement_id": settlement_id,
+            "raw_delta": 0.0,
+            "patterns": patterns,
+        }
+
+    if settlement_already_applied(state, settlement_id):
+        return state, {
+            "status": "already_settled",
+            "settlement_id": settlement_id,
+            "raw_delta": 0.0,
+            "patterns": patterns,
+        }
+
+    if not has_current_session_end_log(state, patterns):
+        state, patterns = session_end(state)
+    raw_delta, reason_code, reason = assess_trust_settlement(state, patterns)
+    raw_delta = round(clamp(raw_delta, -0.2, 0.05), 4)
+    trust_before = round(float(state.get("trust", 0.1)), 4)
+
+    if raw_delta != 0.0:
+        state = apply_trust_delta(state, raw_delta)
+
+    trust_after = round(float(state.get("trust", 0.1)), 4)
+    state = add_emotion_log(
+        state,
+        "trust_settlement",
+        situation="host-side trust settlement completed",
+        relational_meaning=reason,
+        impact=f"raw trust delta {raw_delta:+.4f}",
+        tags=["trust", "trust_settlement", reason_code],
+        extra={
+            "settlement_id": settlement_id,
+            "reason_code": reason_code,
+            "raw_delta": raw_delta,
+            "trust_before": trust_before,
+            "trust_after": trust_after,
+            "patterns": patterns,
+        },
+    )
+
+    record = settlement_record(settlement_id, state, raw_delta, "settled")
+    record["trust_before"] = trust_before
+    record["trust_after"] = trust_after
+    append_limited(state, "trust_settlements", record, 50)
+
+    return state, {
+        "status": "settled",
+        "settlement_id": settlement_id,
+        "raw_delta": raw_delta,
+        "trust_before": trust_before,
+        "trust_after": trust_after,
+        "reason_code": reason_code,
+        "reason": reason,
+        "patterns": patterns,
+    }
 
 def apply_trust_delta(state, raw_delta):
     """Apply trust change with diminishing returns for positive deltas."""
@@ -1146,6 +1415,11 @@ def main():
 
     elif command == "patterns":
         print_json(extract_patterns(state))
+
+    elif command == "settle_trust":
+        state, result = settle_trust(state)
+        save_state(state_file, state)
+        print_json(result)
 
     elif command == "update_trust":
         if len(sys.argv) < 4:

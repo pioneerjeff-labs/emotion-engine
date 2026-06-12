@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.1.2 - 2026-06-12
+
+- Added `settle_trust`, a conservative host-side trust settlement command that reuses session patterns, checks recent turn-level evidence, applies trust deltas once per trajectory, and returns `already_settled` on repeat execution.
+- Kept `trust_history` as a numeric ledger while writing settlement evidence and reasons to `emotion_log`.
+- Added trust tier progress fields to `status` without removing existing status fields.
+- Updated Codex, Hermes, Claude, OpenClaw, GPT/API, protocol, and concept docs to use `settle_trust` as the default session-end trust path.
+- Expanded tests for trust settlement policy, idempotency, evidence placement, and minimal-agent lifecycle behavior.
+
 ## 0.1.1 - 2026-06-11
 
 - Added a user-level Codex skill integration package.

@@ -16,6 +16,7 @@ emotion-state.json
 *.local.json
 *.tmp
 *.log
+examples/minimal-agent/out/
 
 *.zip
 dist/

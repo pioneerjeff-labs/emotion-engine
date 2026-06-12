@@ -1,7 +1,7 @@
 ---
 name: emotion-engine
 description: Persistent PAD emotion state, trust, decay, and compact emotional memories for Hermes Agent conversations.
-version: 0.1.0
+version: 0.1.2
 author: PioneerJeff Labs
 license: MIT
 platforms: [macos, linux]
@@ -105,11 +105,10 @@ ${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh record_turn <P> <A> <D> \
 At session end:
 
 ```bash
-${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh session_end
-${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh update_trust <trust_delta>
+${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh settle_trust
 ```
 
-Suggested trust delta range is `-0.20` to `+0.05`. Trust is agent-to-user only: it is the agent/persona's internal continuity estimate and does not infer the user's trust in the agent. Increase trust slowly. Strong positives should usually require either sustained constructive interaction or genuine conflict repair.
+`settle_trust` extracts session patterns, checks recent turn-level emotion logs and the current trajectory, chooses a conservative raw delta in `-0.20` to `+0.05`, and applies it once for the same trajectory. Trust is agent-to-user only: it is the agent/persona's internal continuity estimate and does not infer the user's trust in the agent. Use `session_end` only to inspect patterns without changing trust, and `update_trust <trust_delta>` only for an explicit host-side override.
 
 ## How State Should Shape Replies
 

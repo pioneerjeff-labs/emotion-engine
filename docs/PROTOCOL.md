@@ -362,9 +362,7 @@ for each user message:
   ask the LLM to interpret context and generate the reply
   ask the LLM or host policy to choose final PAD/appraisal/memory
   record_turn
-session_end
-choose trust delta from patterns plus LLM/session interpretation
-update_trust
+settle_trust
 save state
 ```
 
@@ -383,9 +381,11 @@ python3 scripts/emotion_engine_utils.py record_turn emotion-state.json 0.18 0.32
   --meaning disagreement feels safe and productive \
   --follow-up be precise, warm, and clearly bounded \
   --salience 0.65
-python3 scripts/emotion_engine_utils.py session_end emotion-state.json
+python3 scripts/emotion_engine_utils.py settle_trust emotion-state.json
 python3 scripts/emotion_engine_utils.py update_trust emotion-state.json 0.02
 ```
+
+`settle_trust` is the normal host-side trust settlement command. It reuses pattern extraction, logs the session close if needed, checks the current session trajectory and recent turn-level emotion log evidence, chooses a conservative raw delta in `[-0.20, +0.05]`, and then applies the trust update once for that trajectory. Repeated settlement for the same trajectory should be treated as idempotent and return `already_settled` with `raw_delta: 0.0`. `session_end` remains available for pattern inspection without trust changes, and `update_trust` remains available for explicit host policy overrides.
 
 ## Adapter Event Contract
 
@@ -433,6 +433,7 @@ Recommended event types:
 | `turn_after` | Map final host PAD or `limbicState` into `record_turn`; append compact memory only after the host/LLM finalizes the turn meaning. |
 | `journal_append` | Append a compact `emotion_log` entry that points to the host journal via `source_refs`. |
 | `session_end` | Extract patterns and optionally prepare a trust update. |
+| `trust_settlement` | Run conservative host-side settlement once for the current trajectory. |
 | `trust_update` | Apply a small trust delta chosen by host policy plus session interpretation. |
 | `boundary_update` | Preserve or update optional `boundary_state` without turning Emotion Engine into a policy engine. |
 
