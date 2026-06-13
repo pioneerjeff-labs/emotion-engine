@@ -65,6 +65,26 @@ class CodexIntegrationTest(unittest.TestCase):
         self.assertIn("Emotion Engine state:", prompt)
         self.assertIn("Output only Nora's reply in Chinese.", prompt)
 
+    def test_wrapper_forwards_record_policy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            state_file = Path(tmp) / "emotion-state.json"
+
+            output = self.run_wrapper(
+                state_file,
+                "record_policy",
+                "--mode",
+                "light",
+                "--context",
+                "milestone",
+                "that migration was handled well",
+            )
+
+        payload = json.loads(output)
+        self.assertEqual(payload["mode"], "light")
+        self.assertEqual(payload["decision"], "record_turn")
+        self.assertIn("reply_bias", payload)
+        self.assertIn("milestone", payload["context"])
+
     def test_installer_creates_user_skill_and_state(self):
         with tempfile.TemporaryDirectory() as tmp:
             tmp_path = Path(tmp)

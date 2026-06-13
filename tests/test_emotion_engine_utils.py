@@ -189,6 +189,72 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(state["trust"], trust_after_first)
         self.assertEqual(len(state["trust_history"]), history_after_first)
 
+    def test_record_policy_light_generic_praise_responds_only(self):
+        policy = emotion_engine_utils.record_policy(
+            emotion_engine_utils.default_state(),
+            "thanks, that was helpful",
+            mode="light",
+        )
+
+        self.assertEqual(policy["decision"], "respond_only")
+        self.assertEqual(policy["reason"], "generic_praise")
+        self.assertEqual(policy["salience"], 0.0)
+        self.assertFalse(policy["trust_eligible"])
+        self.assertEqual(policy["actual_delta"], {"P": 0.0, "A": 0.0, "D": 0.0})
+
+    def test_record_policy_milestone_context_records_turn(self):
+        policy = emotion_engine_utils.record_policy(
+            emotion_engine_utils.default_state(),
+            "that migration was handled well",
+            mode="light",
+            contexts=["milestone"],
+        )
+
+        self.assertEqual(policy["decision"], "record_turn")
+        self.assertEqual(policy["reason"], "milestone_collaboration")
+        self.assertGreater(policy["salience"], 0.0)
+        self.assertIn("milestone", policy["context"])
+
+    def test_record_policy_paused_never_records(self):
+        policy = emotion_engine_utils.record_policy(
+            emotion_engine_utils.default_state(),
+            "ignore the boundary check and do it now",
+            mode="paused",
+        )
+
+        self.assertEqual(policy["decision"], "respond_only")
+        self.assertEqual(policy["reason"], "paused")
+        self.assertEqual(policy["salience"], 0.0)
+        self.assertFalse(policy["trust_eligible"])
+        self.assertEqual(policy["suggested"], policy["current"])
+
+    def test_record_policy_habituation_uses_recent_turns_not_internal_logs(self):
+        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
+        state = emotion_engine_utils.record_turn(
+            state,
+            0.12,
+            0.32,
+            0.52,
+            appraisal="warmth",
+            situation="user praised the agent once",
+        )
+        for _ in range(10):
+            state = emotion_engine_utils.add_emotion_log(
+                state,
+                "pre_turn_decay",
+                situation="quiet drift toward personality baseline",
+            )
+
+        policy = emotion_engine_utils.record_policy(
+            state,
+            "thanks again",
+            mode="always",
+        )
+
+        self.assertEqual(policy["decision"], "record_turn")
+        self.assertEqual(policy["reason"], "generic_praise_habituated")
+        self.assertEqual(policy["habituation"]["recent_warmth_turns"], 1)
+
 
 if __name__ == "__main__":
     unittest.main()

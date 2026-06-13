@@ -17,6 +17,7 @@ Use the bundled wrapper:
 
 ```bash
 scripts/codex_emotion.sh status
+scripts/codex_emotion.sh record_policy --mode light --context milestone "that migration was handled well"
 scripts/codex_emotion.sh configure --style "warm but not over-compliant, with clear boundaries"
 scripts/codex_emotion.sh tune "make it calmer"
 ```
@@ -56,6 +57,30 @@ Map natural-language user requests to commands:
 - "Resume Emotion Engine" -> `scripts/codex_emotion.sh resume`
 
 Only run `clear_log` or `reset` after the user explicitly asks. They erase local emotional history.
+
+## Runtime Modes And Record Policy
+
+Emotion Engine state is a modulation layer, not an identity layer. Do not edit `AGENTS.md`, `CLAUDE.md`, or durable memory just because PAD changes. Use compact state only as temporary turn context.
+
+Use `record_policy` before deciding whether to persist a turn:
+
+```bash
+scripts/codex_emotion.sh record_policy --mode light --context milestone "老登夸了刚完成的迁移"
+```
+
+The command is deterministic and side-effect free. It returns a JSON decision such as `record_turn` or `respond_only`, plus `reason`, `appraisal`, `salience`, `trust_eligible`, and structured `reply_bias`. It does not call an LLM and does not write state.
+
+Mode contract:
+
+- `light`: event-triggered. Generic praise, small talk, and ordinary task progress should usually be `respond_only`; concrete feedback, milestones, repair, stable preferences, boundary pressure, or explicit emotional-continuity discussion may be recorded.
+- `always`: per-meaningful-turn tracking. Compact turn records are allowed more often, but habituation, salience, and trust-settlement rules still apply.
+- `paused`: preserve local state but do not record lifecycle updates or modulate replies.
+
+Habituation rules:
+
+- Repeated generic praise loses weight across recent turns.
+- Concrete feedback, milestone warmth, repair, boundary pressure, or a stable future preference may bypass ordinary praise rate limits.
+- Trust does not grow from praise alone; use `settle_trust` at session or milestone close.
 
 ## Session Flow
 

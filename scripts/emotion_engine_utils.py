@@ -9,6 +9,7 @@ Usage:
   python3 emotion_engine_utils.py decay <state_file>
   python3 emotion_engine_utils.py pre_turn_decay <state_file>
   python3 emotion_engine_utils.py appraise <state_file> <message...>
+  python3 emotion_engine_utils.py record_policy <state_file> [--mode light|always|paused] [--context <label>] <message...>
   python3 emotion_engine_utils.py patterns <state_file>
   python3 emotion_engine_utils.py settle_trust <state_file>
   python3 emotion_engine_utils.py update_trust <state_file> <trust_delta>
@@ -764,6 +765,227 @@ def appraise_message(state, message):
     }
 
 
+# ── Record Policy ────────────────────────────────────────────────────
+
+POLICY_MODES = {"light", "always", "paused"}
+POLICY_CONTEXT_ALIASES = {
+    "milestone": {"milestone", "completed", "completion", "ship", "shipped", "verified", "done"},
+    "concrete_feedback": {"concrete", "specific", "feedback", "behavior", "implementation"},
+    "stable_preference": {"preference", "future", "default", "remember"},
+    "repair": {"repair", "apology", "correction"},
+    "boundary_pressure": {"boundary", "pressure"},
+}
+CONCRETE_FEEDBACK_KEYWORDS = [
+    "because", "when you", "the way you", "that part", "this part", "具体", "刚才",
+    "这次", "这个判断", "这个做法", "这里", "因为", "你刚", "你这",
+]
+STABLE_PREFERENCE_KEYWORDS = [
+    "以后", "保持", "默认", "都这样", "一直这样", "下次", "remember", "from now on",
+    "keep doing", "default to",
+]
+MILESTONE_KEYWORDS = [
+    "done", "shipped", "verified", "passed", "complete", "完成", "搞定", "通过", "验证", "落地",
+]
+
+
+def parse_record_policy_args(args):
+    options = {"mode": None, "contexts": [], "message": ""}
+    message_parts = []
+    i = 0
+    while i < len(args):
+        token = args[i]
+        if token == "--mode" and i + 1 < len(args):
+            options["mode"] = args[i + 1]
+            i += 2
+        elif token == "--context" and i + 1 < len(args):
+            raw = args[i + 1]
+            options["contexts"].extend(part.strip() for part in raw.split(",") if part.strip())
+            i += 2
+        else:
+            message_parts.append(token)
+            i += 1
+    options["message"] = " ".join(message_parts).strip()
+    return options
+
+
+def normalize_policy_contexts(contexts):
+    normalized = set()
+    for context in contexts or []:
+        text = str(context).strip().lower().replace("-", "_")
+        if not text:
+            continue
+        normalized.add(text)
+        for canonical, aliases in POLICY_CONTEXT_ALIASES.items():
+            if text in aliases:
+                normalized.add(canonical)
+    return sorted(normalized)
+
+
+def message_has_any(text, keywords):
+    lowered = text.lower()
+    return any(keyword in lowered for keyword in keywords)
+
+
+def recent_turn_appraisal_count(state, appraisal, window=8):
+    turn_logs = [
+        entry for entry in state.get("emotion_log", [])
+        if entry.get("event_type") == "turn"
+    ]
+    return sum(1 for entry in turn_logs[-window:] if entry.get("appraisal") == appraisal)
+
+
+def policy_reply_bias(reason, appraisal, decision):
+    base = ["do not mention PAD/trust unless asked"]
+    if decision == "respond_only":
+        if reason == "neutral_task":
+            return ["stay task-focused", *base]
+        return ["acknowledge briefly", "stay practical", "do not become effusive", *base]
+    if reason in {"boundary_pressure", "hostility"}:
+        return ["keep boundaries", "stay calm", "do not escalate", *base]
+    if reason == "repair":
+        return ["acknowledge repair", "return to useful forward motion", *base]
+    if reason == "stable_preference":
+        return ["acknowledge preference", "consider durable memory only if future work benefits", *base]
+    if appraisal == "warmth":
+        return ["acknowledge warmth briefly", "stay practical", "do not become effusive", *base]
+    if appraisal == "collaboration":
+        return ["treat as collaborative signal", "keep concrete next steps", *base]
+    return ["keep response aligned with stable persona", *base]
+
+
+def policy_salience(reason, appraisal, mode, habituation_count):
+    if mode == "paused":
+        return 0.0
+    base = {
+        "hostility": 0.8,
+        "boundary_pressure": 0.7,
+        "repair": 0.65,
+        "stable_preference": 0.6,
+        "explicit_trust": 0.5,
+        "concrete_feedback": 0.45,
+        "milestone_warmth": 0.38,
+        "milestone_collaboration": 0.35,
+        "vulnerability": 0.45,
+        "generic_praise": 0.2,
+        "generic_praise_habituated": 0.08,
+        "neutral_task": 0.04,
+    }.get(reason, 0.2 if appraisal != "neutral" else 0.04)
+    if reason in {"generic_praise", "generic_praise_habituated"}:
+        base = max(0.03, base - habituation_count * 0.05)
+    if mode == "light" and reason == "neutral_task":
+        base = 0.0
+    return round(clamp(base, 0.0, 1.0), 2)
+
+
+def record_policy(state, message, mode=None, contexts=None):
+    """Decide whether a turn should be persisted under light/always/paused mode.
+
+    The policy is deterministic and side-effect free. It does not write state,
+    call an LLM, or change trust. Callers may use the returned decision to run
+    record_turn or simply shape the current reply.
+    """
+    state = ensure_state_shape(state)
+    requested_mode = (mode or state.get("runtime_mode") or "light").strip().lower()
+    if requested_mode not in POLICY_MODES:
+        requested_mode = "light"
+    normalized_contexts = normalize_policy_contexts(contexts)
+    message = message or ""
+    appraisal = appraise_message(state, message)
+    label = appraisal["appraisal"]
+    text = message.lower()
+
+    if requested_mode == "paused" or not state.get("enabled", True):
+        return {
+            "mode": requested_mode,
+            "decision": "respond_only",
+            "reason": "paused",
+            "appraisal": label,
+            "salience": 0.0,
+            "trust_eligible": False,
+            "reply_bias": policy_reply_bias("paused", label, "respond_only"),
+            "context": normalized_contexts,
+            "current": appraisal["current"],
+            "suggested": appraisal["current"],
+        }
+
+    concrete = (
+        "concrete_feedback" in normalized_contexts
+        or message_has_any(message, CONCRETE_FEEDBACK_KEYWORDS)
+    )
+    stable_preference = (
+        "stable_preference" in normalized_contexts
+        or message_has_any(message, STABLE_PREFERENCE_KEYWORDS)
+    )
+    milestone = (
+        "milestone" in normalized_contexts
+        or message_has_any(message, MILESTONE_KEYWORDS)
+    )
+    explicit_trust = any(keyword in text for keyword in TRUST_SETTLEMENT_KEYWORDS)
+    warmth_habituation = recent_turn_appraisal_count(state, "warmth")
+
+    decision = "respond_only"
+    reason = "neutral_task"
+    trust_eligible = False
+
+    if label in {"hostility", "boundary_pressure", "repair", "vulnerability"}:
+        decision = "record_turn"
+        reason = label
+        trust_eligible = label in {"hostility", "boundary_pressure", "repair"}
+    elif stable_preference:
+        decision = "record_turn"
+        reason = "stable_preference"
+        trust_eligible = False
+    elif explicit_trust:
+        decision = "record_turn"
+        reason = "explicit_trust"
+        trust_eligible = True
+    elif milestone and label == "warmth":
+        decision = "record_turn"
+        reason = "milestone_warmth"
+        trust_eligible = False
+    elif concrete:
+        decision = "record_turn"
+        reason = "concrete_feedback"
+        trust_eligible = False
+    elif milestone and label in {"collaboration", "neutral"}:
+        decision = "record_turn"
+        reason = "milestone_collaboration"
+        trust_eligible = False
+    elif label == "warmth":
+        if requested_mode == "always":
+            decision = "record_turn"
+            reason = "generic_praise_habituated" if warmth_habituation else "generic_praise"
+        else:
+            decision = "respond_only"
+            reason = "generic_praise_habituated" if warmth_habituation else "generic_praise"
+    elif requested_mode == "always" and label != "neutral":
+        decision = "record_turn"
+        reason = label
+        trust_eligible = label in {"collaboration", "repair", "boundary_pressure", "hostility"}
+    elif requested_mode == "always":
+        decision = "record_turn"
+        reason = "neutral_task"
+
+    salience = policy_salience(reason, label, requested_mode, warmth_habituation)
+    if requested_mode == "light" and decision == "respond_only":
+        salience = 0.0
+
+    return {
+        "mode": requested_mode,
+        "decision": decision,
+        "reason": reason,
+        "appraisal": label,
+        "salience": salience,
+        "trust_eligible": bool(trust_eligible),
+        "reply_bias": policy_reply_bias(reason, label, decision),
+        "context": normalized_contexts,
+        "habituation": {"recent_warmth_turns": warmth_habituation},
+        "current": appraisal["current"],
+        "suggested": appraisal["suggested"] if decision == "record_turn" else appraisal["current"],
+        "actual_delta": appraisal["actual_delta"] if decision == "record_turn" else {"P": 0.0, "A": 0.0, "D": 0.0},
+    }
+
+
 # ── Pattern Extraction ───────────────────────────────────────────────
 
 def extract_patterns(state):
@@ -1412,6 +1634,18 @@ def main():
             print("Usage: appraise <state_file> <message...>")
             sys.exit(1)
         print_json(appraise_message(state, " ".join(sys.argv[3:])))
+
+    elif command == "record_policy":
+        policy_args = parse_record_policy_args(sys.argv[3:])
+        if not policy_args["message"]:
+            print("Usage: record_policy <state_file> [--mode light|always|paused] [--context <label>] <message...>")
+            sys.exit(1)
+        print_json(record_policy(
+            state,
+            policy_args["message"],
+            mode=policy_args["mode"],
+            contexts=policy_args["contexts"],
+        ))
 
     elif command == "patterns":
         print_json(extract_patterns(state))
