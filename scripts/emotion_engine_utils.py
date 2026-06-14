@@ -582,11 +582,12 @@ def add_emotion_log(
 
 # ── Decay ────────────────────────────────────────────────────────────
 
-def compute_time_decay(state):
-    """Apply time-based decay to PAD emotion vector.
+def compute_mood_time_decay(state):
+    """Apply short-lived time decay to the PAD mood vector.
 
-    Decay pulls emotions toward personality_baseline. Trust slows the decay
-    rate, so higher trust makes emotions linger longer between sessions.
+    Mood behaves like working state: it decays by hours toward the
+    personality_baseline. Trust can add emotional inertia, but mood does not
+    share trust's slower relationship-level decay policy.
     """
     state = ensure_state_shape(state)
     if not state.get("enabled", True):
@@ -619,11 +620,17 @@ def compute_time_decay(state):
     return state
 
 
+def compute_time_decay(state):
+    """Backward-compatible alias for PAD mood decay."""
+    return compute_mood_time_decay(state)
+
+
 def compute_trust_time_decay(state):
-    """Apply time-based decay to trust when user is absent.
+    """Apply slow relationship-level time decay to trust when user is absent.
 
     Trust never drops below max(0.05, trust_anchor * 0.3), where trust_anchor
-    tracks the highest trust reached by the relationship.
+    tracks the highest trust reached by the relationship. This is intentionally
+    separate from PAD mood decay.
     """
     state = ensure_state_shape(state)
     if not state.get("enabled", True):
@@ -1348,7 +1355,7 @@ def session_start(state):
         return state
     before = state["emotion"].copy()
     trust_before = state["trust"]
-    state = compute_time_decay(state)
+    state = compute_mood_time_decay(state)
     state = compute_trust_time_decay(state)
     after = state["emotion"].copy()
     state["emotion_trajectory"] = []
@@ -1609,7 +1616,7 @@ def main():
     elif command == "decay":
         before = state["emotion"].copy()
         trust_before = state["trust"]
-        state = compute_time_decay(state)
+        state = compute_mood_time_decay(state)
         state = compute_trust_time_decay(state)
         state = add_emotion_log(
             state,

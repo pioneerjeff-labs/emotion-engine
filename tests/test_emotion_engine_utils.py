@@ -1,6 +1,8 @@
 import importlib.util
 import tempfile
 import unittest
+from copy import deepcopy
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 
 
@@ -81,6 +83,31 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         )
 
         self.assertEqual(result["appraisal"], "warmth")
+
+    def test_mood_and_trust_time_decay_use_distinct_policies(self):
+        state = emotion_engine_utils.default_state()
+        state["emotion"] = {"pleasure": 0.8, "arousal": 0.8, "dominance": 0.8}
+        state["personality_baseline"] = {
+            "pleasure": 0.0,
+            "arousal": 0.3,
+            "dominance": 0.5,
+        }
+        state["trust"] = 0.8
+        state["trust_anchor"] = 0.9
+        state["last_interaction_iso"] = (
+            datetime.now(timezone.utc) - timedelta(days=3)
+        ).isoformat()
+
+        mood_decayed = emotion_engine_utils.compute_mood_time_decay(deepcopy(state))
+        trust_decayed = emotion_engine_utils.compute_trust_time_decay(deepcopy(state))
+
+        self.assertLess(abs(mood_decayed["emotion"]["pleasure"]), 0.02)
+        self.assertLess(abs(mood_decayed["emotion"]["arousal"] - 0.3), 0.02)
+        self.assertLess(abs(mood_decayed["emotion"]["dominance"] - 0.5), 0.02)
+        self.assertEqual(mood_decayed["trust"], 0.8)
+
+        self.assertGreater(trust_decayed["trust"], 0.75)
+        self.assertEqual(trust_decayed["emotion"], state["emotion"])
 
     def test_record_turn_updates_state_and_log(self):
         state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())

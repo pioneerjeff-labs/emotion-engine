@@ -306,8 +306,8 @@ For GPT/API integrations, keep Emotion Engine state in your host application and
 
 Emotion Engine stores and updates:
 
-- **PAD state**: Pleasure, Arousal, Dominance.
-- **Trust**: a slow-moving agent-to-user relationship coefficient. It is not the user's trust in the agent.
+- **PAD state**: Pleasure, Arousal, Dominance; short-lived mood state that drifts back toward baseline.
+- **Trust**: a slow-moving agent-to-user relationship coefficient with its own decay policy. It is not the user's trust in the agent.
 - **Personality baseline**: where the agent naturally drifts back to.
 - **Emotion trajectory**: numeric state during a session.
 - **Emotion log**: compact emotional memories, not full transcripts.

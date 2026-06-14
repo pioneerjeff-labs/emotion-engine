@@ -70,9 +70,9 @@ Good emotion memories are:
 
 ## Decay
 
-Emotion drifts toward the baseline over time. This prevents the agent from staying permanently excited, hurt, guarded, or overly attached after a single event.
+PAD mood drifts toward the baseline over time. This prevents the agent from staying permanently excited, hurt, guarded, or overly attached after a single event.
 
-Trust can slow decay, but should not prevent it entirely.
+Trust is a separate, slower relationship-level state. It can add limited emotional inertia to PAD mood, but it uses its own day-level decay curve and `trust_anchor` floor.
 
 ## Session Patterns
 

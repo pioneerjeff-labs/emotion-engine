@@ -193,7 +193,7 @@ Default:
 
 Trust is directional, but v1 only models one direction: agent-to-user. It is the agent or persona's internal estimate of whether this user has been cooperative, boundary-respecting, predictable, and safe enough for deeper persona continuity.
 
-It does not infer the user's trust in the agent. Trust is separate from PAD emotion. It can affect decay and modulation, but it should not mean obedience, dependency, user value, user score, attachment pressure, safety permission, or permission to ignore boundaries.
+It does not infer the user's trust in the agent. Trust is separate from PAD emotion. It can affect PAD modulation and emotional inertia, but it should not mean obedience, dependency, user value, user score, attachment pressure, safety permission, or permission to ignore boundaries.
 
 Trust tiers used by `status`:
 
@@ -349,6 +349,17 @@ The deterministic helper currently recognizes these labels:
 The helper is advisory. In a real integration, the LLM should decide the final appraisal and PAD update using the full conversation context.
 
 ## Lifecycle Contract
+
+### Decay Policies
+
+Emotion Engine uses separate decay policies for mood and trust:
+
+| State | Role | Decay policy |
+|---|---|---|
+| PAD mood | Short-lived working emotional state | Hour-level exponential drift toward `personality_baseline`. Trust may add limited emotional inertia, but old mood should still fade quickly. |
+| Trust | Slow relationship-level continuity | Day-level decay with a `trust_anchor` floor. Trust should survive client switches and should usually update from session-level evidence. |
+
+Adapters should not treat the whole emotional packet as one uniformly decaying memory. Mood, trust, and optional boundary-related signals may need different update cadence, floor, and decay curves.
 
 A typical integration loop:
 
