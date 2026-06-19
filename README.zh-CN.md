@@ -69,6 +69,8 @@ Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 
 
 在线演示：[打开 live demo](https://pioneerjeff-labs.github.io/emotion-engine/demo/)
 
+Hugging Face Space：[打开 state playground](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground)，直接查看 prompt prelude 和 `emotion-engine-state/v2` 状态包。
+
 可以直接打开：
 
 ```text
@@ -144,6 +146,7 @@ python3 scripts/prompt_preview.py \
 | 需求 | 使用位置 |
 |---|---|
 | 用于产品解释的脚本化网页演示 | [demo](demo) |
+| 在线查看 prompt prelude 和状态包的 state playground | [Hugging Face Space](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground) |
 | 5 分钟接入参考 loop，把 Emotion Engine 接进自己的 Agent | [examples/minimal-agent](examples/minimal-agent) |
 | 核心状态层检查和本地工具 | [scripts](scripts) |
 | OpenClaw 集成包 | [integrations/openclaw](integrations/openclaw) |

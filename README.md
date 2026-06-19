@@ -72,6 +72,8 @@ The demo is based on anonymized and adapted traces from prior LLM interaction ex
 
 Live demo: [Try the live demo](https://pioneerjeff-labs.github.io/emotion-engine/demo/)
 
+Hugging Face Space: [Try the state playground](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground) to inspect the prompt prelude and `emotion-engine-state/v2` packet directly.
+
 Open it directly:
 
 ```text
@@ -133,6 +135,7 @@ LLM task:
 | Need | Use |
 |---|---|
 | Scripted web demo for product explanation | [demo](demo) |
+| Hosted state playground for inspecting prompt prelude and state packets | [Hugging Face Space](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground) |
 | 5-minute reference loop for wiring Emotion Engine into an agent | [examples/minimal-agent](examples/minimal-agent) |
 | Core state engine checks and local tooling | [scripts](scripts) |
 | OpenClaw skill | [integrations/openclaw](integrations/openclaw) |
