@@ -17,6 +17,12 @@ examples/minimal-agent/out/emotion-state.json
 
 The `out/` directory is generated output and should not be committed.
 
+Repeated runs reuse the generated state. For a clean run, delete `examples/minimal-agent/out/` or pass a fresh state path:
+
+```bash
+python3 examples/minimal-agent/run_demo.py --state /tmp/emotion-engine-demo-state.json
+```
+
 ## What This Shows
 
 `run_demo.py` demonstrates the smallest useful loop:

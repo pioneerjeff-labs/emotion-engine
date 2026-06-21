@@ -15,11 +15,25 @@ Most AI agents can respond well in the moment, but they do not carry an emotiona
 
 Emotion Engine gives an LLM-powered agent a small, inspectable continuity layer: mood, agent-to-user trust, decay, boundary signals, and compact emotional memories. The LLM still decides what happened and how to respond. Emotion Engine makes that judgment persistent.
 
+Memory systems remember facts and events. Emotion Engine remembers a small, inspectable continuity signal for how the interaction has been going.
+
 It is not a memory stack. It is a portable emotional-continuity state layer that can sit beside memory retrieval, character systems, or agent runtimes.
 
 Emotion Engine is part of PioneerJeff Labs, an open-source lab building reusable infrastructure layers for creative AI applications.
 
-Status: experimental / v0.1.
+Status: experimental / v0.1.2. Current release: [v0.1.2 - Conservative trust settlement](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v0.1.2).
+
+## Start Here
+
+| Goal | Start with |
+|---|---|
+| See the idea in 30 seconds | [Live web demo](https://pioneerjeff-labs.github.io/emotion-engine/demo/) |
+| Inspect the state packet | [Hugging Face state playground](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground) |
+| Wire the smallest agent loop | `python3 examples/minimal-agent/run_demo.py` |
+| Integrate with an OpenAI/API host | [docs/OPENAI_GPT.md](docs/OPENAI_GPT.md) |
+| Implement an adapter | [docs/PROTOCOL.md](docs/PROTOCOL.md) |
+
+The demo and minimal-agent paths do not require an API key or a live LLM call.
 
 ## The Problem
 
@@ -92,6 +106,16 @@ Then visit:
 http://127.0.0.1:4173/demo/
 ```
 
+## 5-Minute Minimal Agent
+
+If you want the smallest concrete loop before choosing a platform package, run:
+
+```bash
+python3 examples/minimal-agent/run_demo.py
+```
+
+The example loads state, builds a prompt prelude, lets a mock LLM choose the final appraisal/PAD values, records the turn, settles trust, and saves the final state. It does not call an LLM or require an API key. Repeat runs reuse generated state; pass `--state <path>` for a clean run.
+
 ## Local State Checks
 
 The Python scripts are not the main product demo. They are developer-facing checks for the core state layer: useful for validating lifecycle behavior, debugging integrations, and proving the shared engine still works under OpenClaw, Claude Skill, Hermes Agent, or another host.
@@ -147,13 +171,7 @@ LLM task:
 The repository root is the Emotion Engine project. Platform-specific packages live under `integrations/`.
 The first-party starter integrations are OpenClaw, Claude Skill, Hermes Agent, and Codex. Codex ships as a user-installed skill package. GPT/API usage is documented as a host-side integration pattern because the host application owns persistence and model calls.
 
-For the smallest concrete loop before choosing a platform package, run:
-
-```bash
-python3 examples/minimal-agent/run_demo.py
-```
-
-The minimal agent example shows how to load state, build a prompt prelude, let a mock LLM choose the final appraisal/PAD values, record the turn, settle trust, and save the final state.
+For the smallest concrete loop before choosing a platform package, see [examples/minimal-agent](examples/minimal-agent).
 
 ## Protocol And Adapter Boundary
 

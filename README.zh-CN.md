@@ -12,11 +12,25 @@
 
 Emotion Engine 给大模型智能体提供一个小而可检查的连续性层：情绪状态、agent-to-user 信任、时间衰减、边界信号，以及紧凑的情绪记忆。大模型仍然负责理解上下文和生成回复；Emotion Engine 负责把这些判断保存下来，让它们能被后续会话继续使用。
 
+记忆系统保存事实和事件；Emotion Engine 保存一份小而可检查的连续性信号，用来描述这段互动一直以来的状态。
+
 它不是长期记忆系统。更准确地说，它是一个可移植的情绪连续性状态层，可以放在记忆检索、角色系统或 Agent runtime 旁边使用。
 
 Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 关注面向创意 AI 应用的可复用底层基础设施层。
 
-状态：实验性 / v0.1。
+状态：实验性 / v0.1.2。当前版本：[v0.1.2 - Conservative trust settlement](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v0.1.2)。
+
+## 从这里开始
+
+| 目标 | 入口 |
+|---|---|
+| 30 秒看懂效果 | [在线网页演示](https://pioneerjeff-labs.github.io/emotion-engine/demo/) |
+| 查看状态包和 prompt prelude | [Hugging Face state playground](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground) |
+| 跑最小 Agent loop | `python3 examples/minimal-agent/run_demo.py` |
+| 接入 OpenAI/API 宿主应用 | [docs/OPENAI_GPT.md](docs/OPENAI_GPT.md) |
+| 实现 adapter / 对接记忆系统 | [docs/PROTOCOL.md](docs/PROTOCOL.md) |
+
+网页演示和 minimal-agent 都不需要 API key，也不会调用真实 LLM。
 
 ## 它解决什么问题
 
@@ -89,6 +103,16 @@ python3 -m http.server 4173 --bind 127.0.0.1
 http://127.0.0.1:4173/demo/
 ```
 
+## 5 分钟 Minimal Agent
+
+如果你想先看最小可接入 loop，再决定用哪种平台包，可以运行：
+
+```bash
+python3 examples/minimal-agent/run_demo.py
+```
+
+这个示例会读取状态、构建 prompt prelude、让 mock LLM 决定最终 appraisal/PAD、记录轮次、结算信任，并保存最终状态。它不调用真实 LLM，也不需要 API key。重复运行会复用生成的状态；如果想干净重跑，可以传入 `--state <path>`。
+
 ## 本地状态检查
 
 Python 脚本不是主要的产品演示，而是给开发者看的核心状态层检查工具。它适合用来验证生命周期、调试集成、确认同一份共享引擎在 OpenClaw、Claude Skill、Hermes Agent 或其他宿主里仍然能稳定工作。
@@ -158,13 +182,7 @@ python3 scripts/prompt_preview.py \
 仓库根目录是 Emotion Engine 项目本体；具体平台适配都放在 `integrations/` 下面。
 目前提供的初版平台集成是 OpenClaw、Claude Skill、Hermes Agent 和 Codex。Codex 是用户级 skill 安装包；GPT/API 用法以宿主应用接入说明为主，因为状态持久化和模型调用由宿主应用负责。
 
-如果你想先看最小可接入 loop，再决定用哪种平台包，可以运行：
-
-```bash
-python3 examples/minimal-agent/run_demo.py
-```
-
-这个 minimal agent example 展示如何读取状态、构建 prompt prelude、让 mock LLM 决定最终 appraisal/PAD、记录轮次、结算信任，并保存最终状态。
+如果你想先看最小可接入 loop，再决定用哪种平台包，可以阅读 [examples/minimal-agent](examples/minimal-agent)。
 
 ## 协议与 Adapter 边界
 
