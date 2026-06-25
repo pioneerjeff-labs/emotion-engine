@@ -72,6 +72,10 @@ Good emotion memories are:
 
 PAD mood drifts toward the baseline over time. This prevents the agent from staying permanently excited, hurt, guarded, or overly attached after a single event.
 
+`affective_pulse` is a short-lived event movement layer. It lets an agent show that a specific turn landed as playful, tense, touching, or corrective without forcing the slow PAD mood to swing wildly.
+
+`volatility_profile` controls how visible that movement should be. `steady` fits work assistants, `expressive` fits companion-style agents, and `dramatic_test` is for demos or tests that intentionally need stronger movement.
+
 Trust is a separate, slower relationship-level state. It can add limited emotional inertia to PAD mood, but it uses its own day-level decay curve and `trust_anchor` floor.
 
 ## Session Patterns

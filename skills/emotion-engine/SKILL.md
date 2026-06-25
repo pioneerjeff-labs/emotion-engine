@@ -1,7 +1,7 @@
 ---
 name: emotion-engine
-description: Persistent PAD emotion state, trust, decay, and compact emotional memories for Hermes Agent conversations.
-version: 0.1.2
+description: Persistent PAD mood, affective pulse, trust, decay, and compact emotional memories for Hermes Agent conversations.
+version: 0.2.0
 author: PioneerJeff Labs
 license: MIT
 platforms: [macos, linux]
@@ -20,7 +20,7 @@ metadata:
 
 Use this skill when the user wants Hermes to maintain lightweight emotional continuity across sessions, character workflows, personal assistant interactions, or long-running agent relationships.
 
-Emotion Engine is not a chatbot and does not generate replies by itself. Hermes still interprets the situation, decides the final emotional meaning, and writes the reply. Emotion Engine persists continuity: PAD state, agent-to-user trust, decay, and compact emotional memories.
+Emotion Engine is not a chatbot and does not generate replies by itself. Hermes still interprets the situation, decides the final emotional meaning, and writes the reply. Emotion Engine persists continuity: PAD state, short-lived affective pulse, agent-to-user trust, decay, and compact emotional memories.
 
 ## Quick Reference
 

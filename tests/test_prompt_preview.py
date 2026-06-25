@@ -30,6 +30,8 @@ class PromptPreviewTest(unittest.TestCase):
         )
 
         self.assertIn("Current continuity state", guidance)
+        self.assertIn("Affective pulse", guidance)
+        self.assertIn("Volatility profile", guidance)
         self.assertIn("Advisory appraisal", guidance)
         self.assertIn("LLM task", guidance)
         self.assertIn("Treat this as a hint", guidance)
@@ -48,6 +50,8 @@ class PromptPreviewTest(unittest.TestCase):
         )
 
         self.assertIn("当前连续性状态", guidance)
+        self.assertIn("短期情绪波动", guidance)
+        self.assertIn("波动档位", guidance)
         self.assertIn("辅助评价", guidance)
         self.assertIn("大模型任务", guidance)
         self.assertIn("这只是提示，不是最终判断", guidance)
@@ -59,6 +63,8 @@ class PromptPreviewTest(unittest.TestCase):
         )
 
         self.assertIn("status", payload)
+        self.assertIn("affective_pulse", payload)
+        self.assertIn("volatility_profile", payload)
         self.assertIn("advisory_appraisal", payload)
         self.assertIn("choose final PAD update", payload["llm_responsibility"])
 

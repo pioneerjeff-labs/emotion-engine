@@ -75,6 +75,21 @@ def zh_tone_summary(state):
     return f"{pleasure}、{arousal}、{dominance}"
 
 
+def zh_pulse_summary(state):
+    pulse = state.get("affective_pulse", {})
+    intensity = pulse.get("intensity", 0.0)
+    label = pulse.get("label", "none")
+    if intensity <= 0.03:
+        strength = "安静"
+    elif intensity <= 0.18:
+        strength = "轻微"
+    elif intensity <= 0.35:
+        strength = "明显"
+    else:
+        strength = "强烈"
+    return f"{strength}的{label}短期波动"
+
+
 def build_guidance(state, message=None, lang="en"):
     state = engine.ensure_state_shape(state)
     status = engine.public_status(state)
@@ -89,6 +104,8 @@ def build_guidance(state, message=None, lang="en"):
             "",
             "当前连续性状态：",
             f"- 语气倾向：{zh_tone_summary(state)}",
+            f"- 短期情绪波动：{zh_pulse_summary(state)}",
+            f"- 波动档位：{state.get('volatility_profile', 'steady')}",
             f"- 信任阶段：{ZH_TRUST_TIER.get(status['trust_tier'], status['trust_tier'])}",
             f"- 风格描述：{state.get('character_profile', {}).get('description', status['style'])}",
             f"- 会话次数：{status['session_count']}",
@@ -107,6 +124,7 @@ def build_guidance(state, message=None, lang="en"):
                 "辅助评价：",
                 f"- 规则工具暂时把这句话看作：{label}。",
                 f"- 建议 PAD 变化：{advisory['actual_delta']}",
+                f"- 建议短期 pulse：{advisory['affective_pulse']}",
                 "- 这只是提示，不是最终判断。",
             ])
 
@@ -128,6 +146,8 @@ def build_guidance(state, message=None, lang="en"):
         "",
         "Current continuity state:",
         f"- Tone: {status['summary']}",
+        f"- Affective pulse: {status['pulse']}",
+        f"- Volatility profile: {status['volatility_profile']}",
         f"- Trust tier: {status['trust_tier']}",
         f"- Style: {status['style']}",
         f"- Session count: {status['session_count']}",
@@ -145,6 +165,7 @@ def build_guidance(state, message=None, lang="en"):
             "Advisory appraisal:",
             f"- The deterministic helper sees this message as {advisory['appraisal']}.",
             f"- Suggested PAD shift: {advisory['actual_delta']}",
+            f"- Suggested affective pulse: {advisory['affective_pulse']}",
             "- Treat this as a hint, not the final judgment.",
         ])
 
@@ -169,6 +190,8 @@ def build_json_payload(state, message=None, lang="en"):
         "recent_memories": recent_memories(state),
         "message": message,
         "advisory_appraisal": advisory,
+        "affective_pulse": state["affective_pulse"],
+        "volatility_profile": state["volatility_profile"],
         "llm_responsibility": [
             "interpret context",
             "choose final appraisal",

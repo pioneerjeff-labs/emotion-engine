@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## 0.2.0 - 2026-06-25
+
+- Added an expressiveness layer: slow PAD mood remains the stable continuity state, while `affective_pulse` captures short-lived visible per-turn movement.
+- Added `volatility_profile` (`steady`, `expressive`, `dramatic_test`) so work assistants and companion-style agents can use different movement envelopes without changing the core trust model.
+- Improved style onboarding so warm, intimate, playful, and assertive profiles infer a more appropriate personality baseline instead of always drifting back to the generic default.
+- Updated protocol/schema, prompt preview, and the minimal agent example to expose affective pulse separately from PAD mood.
+- Preserved existing state baselines during shape upgrades; hosts can still recalibrate character baselines explicitly through configuration.
+
 ## 0.1.2 - 2026-06-12
 
 - Added `settle_trust`, a conservative host-side trust settlement command that reuses session patterns, checks recent turn-level evidence, applies trust deltas once per trajectory, and returns `already_settled` on repeat execution.

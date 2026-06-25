@@ -39,6 +39,8 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(state["_schema"], "emotion-engine-state/v2")
         self.assertTrue(state["enabled"])
         self.assertEqual(state["emotion"]["pleasure"], 0.0)
+        self.assertEqual(state["volatility_profile"], "steady")
+        self.assertEqual(state["affective_pulse"]["intensity"], 0.0)
         self.assertEqual(state["trust"], 0.1)
         self.assertEqual(state["emotion_log"], [])
 
@@ -53,6 +55,20 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertGreater(configured["personality_baseline"]["pleasure"], 0.0)
         self.assertIn("bounded", configured["character_profile"]["traits"])
 
+    def test_companion_style_infers_expressive_profile_and_warmer_baseline(self):
+        state = emotion_engine_utils.default_state()
+
+        configured = emotion_engine_utils.apply_configuration(
+            state,
+            "warm, intimate, lightly assertive, occasionally sharp and teasing, playful without becoming cruel",
+        )
+
+        self.assertEqual(configured["volatility_profile"], "expressive")
+        self.assertIn("intimate", configured["character_profile"]["traits"])
+        self.assertIn("playful", configured["character_profile"]["traits"])
+        self.assertGreater(configured["personality_baseline"]["pleasure"], 0.3)
+        self.assertGreater(configured["personality_baseline"]["dominance"], 0.55)
+
     def test_appraise_warmth_suggests_positive_shift(self):
         state = emotion_engine_utils.default_state()
 
@@ -63,6 +79,19 @@ class EmotionEngineUtilsTest(unittest.TestCase):
 
         self.assertEqual(result["appraisal"], "warmth")
         self.assertGreater(result["suggested"]["P"], result["current"]["P"])
+        self.assertGreater(result["affective_pulse"]["intensity"], 0.0)
+
+    def test_affective_pulse_preserves_negative_movement_dimensions(self):
+        pulse = emotion_engine_utils.pulse_from_delta(
+            {"P": -0.04, "A": -0.03, "D": -0.02},
+            profile="expressive",
+            label="repair",
+        )
+
+        self.assertLess(pulse["P"], 0.0)
+        self.assertLess(pulse["A"], 0.0)
+        self.assertLess(pulse["D"], 0.0)
+        self.assertGreater(pulse["intensity"], 0.0)
 
     def test_appraise_multi_intent_challenge_prefers_collaboration(self):
         state = emotion_engine_utils.default_state()
@@ -125,7 +154,28 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(state["total_turns"], 1)
         self.assertEqual(len(state["emotion_trajectory"]), 1)
         self.assertEqual(state["emotion"]["pleasure"], 0.12)
+        self.assertGreater(state["affective_pulse"]["intensity"], 0.0)
+        self.assertIn("pulse", state["emotion_trajectory"][-1])
         self.assertEqual(state["emotion_log"][-1]["appraisal"], "warmth")
+
+    def test_patterns_use_pulse_to_distinguish_visible_movement_from_flat_mood(self):
+        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
+        state["volatility_profile"] = "expressive"
+        for p in [0.48, 0.5, 0.49]:
+            state = emotion_engine_utils.record_turn(
+                state,
+                p,
+                0.22,
+                0.6,
+                appraisal="warmth",
+                situation="warm visible exchange with little long-term mood drift",
+            )
+
+        patterns = emotion_engine_utils.extract_patterns(state)
+
+        self.assertLess(patterns["mood_volatility"], 0.05)
+        self.assertGreater(patterns["pulse_max"], 0.12)
+        self.assertFalse(patterns["too_smooth"])
 
     def test_save_and_load_round_trip(self):
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -228,6 +278,7 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(policy["salience"], 0.0)
         self.assertFalse(policy["trust_eligible"])
         self.assertEqual(policy["actual_delta"], {"P": 0.0, "A": 0.0, "D": 0.0})
+        self.assertEqual(policy["affective_pulse"]["intensity"], 0.0)
 
     def test_record_policy_milestone_context_records_turn(self):
         policy = emotion_engine_utils.record_policy(

@@ -37,10 +37,43 @@ from copy import deepcopy
 from datetime import datetime, timezone
 
 
+DEFAULT_AFFECTIVE_PULSE = {
+    "P": 0.0,
+    "A": 0.0,
+    "D": 0.0,
+    "intensity": 0.0,
+    "label": "none",
+    "source": "default",
+    "created_at": None,
+}
+
+VOLATILITY_PROFILES = {
+    "steady": {
+        "mood_multiplier": 1.0,
+        "pulse_multiplier": 1.0,
+        "pulse_retention": 0.18,
+        "baseline_pull": 0.08,
+    },
+    "expressive": {
+        "mood_multiplier": 1.05,
+        "pulse_multiplier": 1.55,
+        "pulse_retention": 0.28,
+        "baseline_pull": 0.05,
+    },
+    "dramatic_test": {
+        "mood_multiplier": 1.2,
+        "pulse_multiplier": 2.1,
+        "pulse_retention": 0.35,
+        "baseline_pull": 0.03,
+    },
+}
+
 DEFAULT_STATE = {
     "_schema": "emotion-engine-state/v2",
     "enabled": True,
+    "volatility_profile": "steady",
     "emotion": {"pleasure": 0.0, "arousal": 0.3, "dominance": 0.5},
+    "affective_pulse": deepcopy(DEFAULT_AFFECTIVE_PULSE),
     "personality_baseline": {"pleasure": 0.0, "arousal": 0.3, "dominance": 0.5},
     "character_profile": {
         "source": "default",
@@ -218,6 +251,51 @@ def normalize_emotion(values):
     }
 
 
+def normalize_volatility_profile(value):
+    text = str(value or "steady").strip().lower().replace("-", "_")
+    return text if text in VOLATILITY_PROFILES else "steady"
+
+
+def volatility_settings(profile):
+    return VOLATILITY_PROFILES[normalize_volatility_profile(profile)]
+
+
+def normalize_affective_pulse(values):
+    if not isinstance(values, dict):
+        return deepcopy(DEFAULT_AFFECTIVE_PULSE)
+
+    pulse = {}
+    for short in ["P", "A", "D"]:
+        try:
+            value = float(values.get(short, 0.0))
+        except (TypeError, ValueError):
+            value = 0.0
+        pulse[short] = round(clamp(value, -1.0, 1.0), 4)
+    inferred_intensity = min(1.0, sum(abs(pulse[short]) for short in ["P", "A", "D"]) / 0.6)
+    intensity = values.get("intensity", inferred_intensity)
+    try:
+        intensity = round(clamp(float(intensity), 0.0, 1.0), 4)
+    except (TypeError, ValueError):
+        intensity = round(inferred_intensity, 4)
+
+    label = str(values.get("label") or "none").strip() or "none"
+    source = str(values.get("source") or "unknown").strip() or "unknown"
+    created_at = values.get("created_at")
+    if created_at is not None:
+        created_at = str(created_at)
+
+    if intensity <= 0.005:
+        label = "none"
+
+    return {
+        **pulse,
+        "intensity": intensity,
+        "label": label[:80],
+        "source": source[:80],
+        "created_at": created_at,
+    }
+
+
 def ensure_state_shape(state):
     merged = default_state()
     if isinstance(state, dict):
@@ -225,7 +303,9 @@ def ensure_state_shape(state):
 
     merged["_schema"] = "emotion-engine-state/v2"
     merged["enabled"] = bool(merged.get("enabled", True))
+    merged["volatility_profile"] = normalize_volatility_profile(merged.get("volatility_profile"))
     merged["emotion"] = normalize_emotion(merged.get("emotion"))
+    merged["affective_pulse"] = normalize_affective_pulse(merged.get("affective_pulse"))
     merged["personality_baseline"] = normalize_emotion(merged.get("personality_baseline"))
     if not isinstance(merged.get("character_profile"), dict):
         merged["character_profile"] = deepcopy(DEFAULT_STATE["character_profile"])
@@ -275,6 +355,56 @@ def emotion_delta(before, after):
     }
 
 
+def zero_affective_pulse(source="system"):
+    pulse = deepcopy(DEFAULT_AFFECTIVE_PULSE)
+    pulse["source"] = source
+    return pulse
+
+
+def pulse_from_delta(delta, profile="steady", label=None, source="turn"):
+    settings = volatility_settings(profile)
+    multiplier = settings["pulse_multiplier"]
+    pulse = {
+        short: round(clamp(float(delta.get(short, 0.0)) * multiplier, -0.45, 0.45), 4)
+        for short in ["P", "A", "D"]
+    }
+    intensity = min(1.0, sum(abs(pulse[short]) for short in ["P", "A", "D"]) / 0.6)
+    return normalize_affective_pulse({
+        **pulse,
+        "intensity": intensity,
+        "label": label or "event",
+        "source": source,
+        "created_at": now_iso() if intensity > 0.005 else None,
+    })
+
+
+def decay_affective_pulse(pulse, profile="steady"):
+    pulse = normalize_affective_pulse(pulse)
+    retention = volatility_settings(profile)["pulse_retention"]
+    decayed = {
+        short: round(float(pulse[short]) * retention, 4)
+        for short in ["P", "A", "D"]
+    }
+    intensity = min(1.0, sum(abs(decayed[short]) for short in ["P", "A", "D"]) / 0.6)
+    if intensity <= 0.015:
+        return zero_affective_pulse("decay")
+    return normalize_affective_pulse({
+        **decayed,
+        "intensity": intensity,
+        "label": pulse.get("label", "event"),
+        "source": "decay",
+        "created_at": pulse.get("created_at"),
+    })
+
+
+def apply_mood_volatility(delta, profile="steady"):
+    multiplier = volatility_settings(profile)["mood_multiplier"]
+    return {
+        short: round(clamp(float(delta.get(short, 0.0)) * multiplier, -0.18, 0.18), 4)
+        for short in ["P", "A", "D"]
+    }
+
+
 def append_limited(state, key, entry, limit=None):
     if key not in state or not isinstance(state[key], list):
         state[key] = []
@@ -313,10 +443,11 @@ def infer_profile_from_text(description, source="style"):
 
     trait_rules = [
         ("warm", ["温柔", "亲切", "治愈", "关怀", "暖", "陪伴", "warm", "kind", "gentle"], 0.16, -0.03, 0.02),
-        ("playful", ["活泼", "兴奋", "元气", "热情", "开朗", "playful", "energetic", "lively"], 0.16, 0.26, 0.0),
+        ("intimate", ["亲密", "亲近", "贴近", "close", "intimate", "affectionate", "romantic"], 0.18, 0.03, 0.02),
+        ("playful", ["活泼", "兴奋", "元气", "热情", "开朗", "调皮", "逗", "playful", "energetic", "lively", "teasing"], 0.16, 0.14, 0.0),
         ("calm", ["冷静", "沉稳", "安静", "可靠", "稳定", "calm", "steady", "reliable"], 0.08, -0.15, 0.12),
         ("bounded", ["边界", "主见", "不讨好", "独立", "自尊", "boundary", "boundaries", "independent"], 0.0, 0.02, 0.18),
-        ("assertive", ["强势", "坚定", "掌控", "自信", "assertive", "confident", "dominant"], -0.02, 0.08, 0.22),
+        ("assertive", ["强势", "坚定", "掌控", "自信", "assertive", "confident", "dominant"], -0.02, 0.05, 0.22),
         ("shy", ["害羞", "内向", "不安", "腼腆", "顺从", "shy", "introvert", "submissive"], -0.02, -0.08, -0.18),
         ("tsundere", ["傲娇", "嘴硬", "别扭", "防备", "tsundere", "proud"], -0.13, 0.24, 0.22),
         ("soft", ["柔和", "温顺", "软", "soft", "mellow"], 0.12, -0.08, -0.08),
@@ -339,9 +470,11 @@ def infer_profile_from_text(description, source="style"):
     if not traits:
         traits = ["warm", "steady", "balanced"]
 
+    volatility_profile = infer_volatility_profile(text, traits)
     interpretation = describe_baseline(baseline, traits)
     return {
         "baseline": baseline,
+        "volatility_profile": volatility_profile,
         "profile": {
             "source": source,
             "description": truncate_text(text, 800) or "warm, steady, lightly bounded",
@@ -349,6 +482,19 @@ def infer_profile_from_text(description, source="style"):
             "traits": traits[:8],
         },
     }
+
+
+def infer_volatility_profile(text, traits):
+    lowered = (text or "").lower()
+    trait_set = set(traits or [])
+    if any(keyword in lowered for keyword in ["dramatic", "roleplay test", "high volatility", "大幅波动", "戏剧"]):
+        return "dramatic_test"
+    if trait_set.intersection({"intimate", "playful", "tsundere"}) or any(
+        keyword in lowered
+        for keyword in ["close personal bond", "companion", "teasing", "亲密", "陪伴", "调皮"]
+    ):
+        return "expressive"
+    return "steady"
 
 
 def describe_baseline(baseline, traits=None):
@@ -384,6 +530,7 @@ def apply_configuration(state, description, source="style"):
     state = ensure_state_shape(state)
     inferred = infer_profile_from_text(description, source)
     state["personality_baseline"] = inferred["baseline"]
+    state["volatility_profile"] = inferred["volatility_profile"]
     state["character_profile"] = inferred["profile"]
     state["emotion"] = {
         dim: clamp_dimension(dim, state["emotion"][dim] * 0.35 + inferred["baseline"][dim] * 0.65)
@@ -505,12 +652,30 @@ def emotion_summary(state):
     return ", ".join(tone)
 
 
+def pulse_summary(state):
+    state = ensure_state_shape(state)
+    pulse = state["affective_pulse"]
+    intensity = pulse["intensity"]
+    if intensity <= 0.03:
+        strength = "quiet"
+    elif intensity <= 0.18:
+        strength = "subtle"
+    elif intensity <= 0.35:
+        strength = "noticeable"
+    else:
+        strength = "strong"
+    return f"{strength} {pulse['label']} pulse"
+
+
 def public_status(state):
     state = ensure_state_shape(state)
     progress = trust_progress(state["trust"])
     return {
         "enabled": state["enabled"],
         "summary": emotion_summary(state),
+        "pulse": pulse_summary(state),
+        "volatility_profile": state["volatility_profile"],
+        "affective_pulse": state["affective_pulse"],
         "style": state["character_profile"].get("interpretation"),
         "trust_tier": trust_tier(state["trust"]),
         "trust_progress": progress["progress"],
@@ -617,6 +782,7 @@ def compute_mood_time_decay(state):
         emotion[dim] = clamp_dimension(dim, current * decay + base * (1 - decay))
 
     state["emotion"] = emotion
+    state["affective_pulse"] = zero_affective_pulse("time_decay")
     return state
 
 
@@ -666,15 +832,20 @@ def apply_in_session_decay(state):
     if not state.get("enabled", True):
         return state
     before = state["emotion"].copy()
+    pulse_before = state["affective_pulse"].copy()
     baseline = state["personality_baseline"]
     after = {}
+    baseline_pull = volatility_settings(state["volatility_profile"])["baseline_pull"]
+    keep = 1.0 - baseline_pull
 
     for dim in ["pleasure", "arousal", "dominance"]:
-        after[dim] = clamp_dimension(dim, before[dim] * 0.92 + baseline[dim] * 0.08)
+        after[dim] = clamp_dimension(dim, before[dim] * keep + baseline[dim] * baseline_pull)
 
     state["emotion"] = after
+    state["affective_pulse"] = decay_affective_pulse(pulse_before, state["volatility_profile"])
     delta = emotion_delta(before, after)
-    if max(abs(v) for v in delta.values()) >= 0.005:
+    pulse_changed = pulse_before != state["affective_pulse"]
+    if max(abs(v) for v in delta.values()) >= 0.005 or pulse_changed:
         state = add_emotion_log(
             state,
             "pre_turn_decay",
@@ -683,6 +854,11 @@ def apply_in_session_decay(state):
             after=after,
             delta=delta,
             tags=["decay"],
+            extra={
+                "pulse_before": pulse_before,
+                "pulse_after": state["affective_pulse"],
+                "volatility_profile": state["volatility_profile"],
+            },
         )
     return state
 
@@ -751,8 +927,15 @@ def appraise_message(state, message):
         key: round(clamp(value * intensity, -0.15, 0.15), 4)
         for key, value in profile["delta"].items()
     }
-    actual_delta = trust_modulate(raw_delta, state["trust"])
+    trust_delta = trust_modulate(raw_delta, state["trust"])
+    actual_delta = apply_mood_volatility(trust_delta, state["volatility_profile"])
     current = emotion_to_pad(state["emotion"])
+    pulse = pulse_from_delta(
+        trust_delta,
+        state["volatility_profile"],
+        label=label,
+        source="appraise",
+    )
 
     suggested = {}
     for short, value in current.items():
@@ -764,9 +947,12 @@ def appraise_message(state, message):
         "cue": profile["cue"],
         "keyword_hits": hits,
         "trust": state["trust"],
+        "volatility_profile": state["volatility_profile"],
         "current": current,
         "raw_delta": raw_delta,
+        "trust_delta": trust_delta,
         "actual_delta": actual_delta,
+        "affective_pulse": pulse,
         "suggested": suggested,
         "tags": profile["tags"],
     }
@@ -913,6 +1099,8 @@ def record_policy(state, message, mode=None, contexts=None):
             "context": normalized_contexts,
             "current": appraisal["current"],
             "suggested": appraisal["current"],
+            "actual_delta": {"P": 0.0, "A": 0.0, "D": 0.0},
+            "affective_pulse": zero_affective_pulse("record_policy"),
         }
 
     concrete = (
@@ -990,6 +1178,7 @@ def record_policy(state, message, mode=None, contexts=None):
         "current": appraisal["current"],
         "suggested": appraisal["suggested"] if decision == "record_turn" else appraisal["current"],
         "actual_delta": appraisal["actual_delta"] if decision == "record_turn" else {"P": 0.0, "A": 0.0, "D": 0.0},
+        "affective_pulse": appraisal["affective_pulse"] if decision == "record_turn" else zero_affective_pulse("record_policy"),
     }
 
 
@@ -1007,6 +1196,10 @@ def extract_patterns(state):
 
     pleasures = [t["P"] for t in trajectory]
     dominances = [t["D"] for t in trajectory]
+    pulse_intensities = [
+        normalize_affective_pulse(t.get("pulse"))["intensity"]
+        for t in trajectory
+    ]
 
     p_deltas = [pleasures[i+1] - pleasures[i] for i in range(len(pleasures)-1)]
     avg_p_delta = sum(p_deltas) / len(p_deltas)
@@ -1030,9 +1223,11 @@ def extract_patterns(state):
 
     mean_p = sum(pleasures) / len(pleasures)
     variance = sum((p - mean_p) ** 2 for p in pleasures) / len(pleasures)
-    volatility = math.sqrt(variance)
+    mood_volatility = math.sqrt(variance)
+    pulse_mean = sum(pulse_intensities) / len(pulse_intensities)
+    pulse_max = max(pulse_intensities)
 
-    too_smooth = volatility < 0.05 and mean_p > 0.3
+    too_smooth = mood_volatility < 0.05 and pulse_max < 0.12 and mean_p > 0.3
     end_vs_start_p = pleasures[-1] - pleasures[0]
 
     negative_ratio = sum(1 for p in pleasures if p < 0) / len(pleasures)
@@ -1057,7 +1252,10 @@ def extract_patterns(state):
         "had_repair": had_repair,
         "v_shape": v_shape,
         "dominance_suppressed": dominance_suppressed,
-        "volatility": round(volatility, 4),
+        "volatility": round(mood_volatility, 4),
+        "mood_volatility": round(mood_volatility, 4),
+        "pulse_mean": round(pulse_mean, 4),
+        "pulse_max": round(pulse_max, 4),
         "too_smooth": too_smooth,
         "end_vs_start_pleasure": round(end_vs_start_p, 4),
         "sustained_negative": sustained_negative,
@@ -1354,6 +1552,7 @@ def session_start(state):
     if not state.get("enabled", True):
         return state
     before = state["emotion"].copy()
+    pulse_before = state["affective_pulse"].copy()
     trust_before = state["trust"]
     state = compute_mood_time_decay(state)
     state = compute_trust_time_decay(state)
@@ -1369,7 +1568,13 @@ def session_start(state):
         after=after,
         delta=emotion_delta(before, after),
         tags=["session"],
-        extra={"trust_before": round(trust_before, 4), "trust_after": state["trust"]},
+        extra={
+            "trust_before": round(trust_before, 4),
+            "trust_after": state["trust"],
+            "pulse_before": pulse_before,
+            "pulse_after": state["affective_pulse"],
+            "volatility_profile": state["volatility_profile"],
+        },
     )
     return state
 
@@ -1395,6 +1600,13 @@ def record_turn(
         return state
     before = state["emotion"].copy()
     after = pad_to_emotion(p, a, d)
+    delta = emotion_delta(before, after)
+    pulse = pulse_from_delta(
+        delta,
+        state["volatility_profile"],
+        label=appraisal or "turn",
+        source="record_turn",
+    )
     turn = len(state["emotion_trajectory"]) + 1
     if cue and not situation:
         situation = cue
@@ -1405,6 +1617,7 @@ def record_turn(
         "A": after["arousal"],
         "D": after["dominance"],
         "timestamp": now_iso(),
+        "pulse": pulse,
     }
     if appraisal:
         entry["appraisal"] = appraisal
@@ -1413,6 +1626,7 @@ def record_turn(
     state["emotion_trajectory"].append(entry)
 
     state["emotion"] = after
+    state["affective_pulse"] = pulse
     state["total_turns"] = state.get("total_turns", 0) + 1
     state["last_interaction_iso"] = now_iso()
 
@@ -1429,10 +1643,14 @@ def record_turn(
         salience=salience,
         before=before,
         after=after,
-        delta=emotion_delta(before, after),
+        delta=delta,
         appraisal=appraisal,
         tags=tags,
         turn=turn,
+        extra={
+            "affective_pulse": pulse,
+            "volatility_profile": state["volatility_profile"],
+        },
     )
     return state
 
@@ -1533,7 +1751,9 @@ def main():
             "ok": True,
             "schema": state["_schema"],
             "enabled": state["enabled"],
+            "volatility_profile": state["volatility_profile"],
             "emotion": state["emotion"],
+            "affective_pulse": state["affective_pulse"],
             "trust": state["trust"],
             "character_profile": state["character_profile"],
             "log_entries": len(state.get("emotion_log", [])),
@@ -1571,6 +1791,7 @@ def main():
         print_json({
             "ok": True,
             "baseline": state["personality_baseline"],
+            "volatility_profile": state["volatility_profile"],
             "profile": state["character_profile"],
             "status": public_status(state),
         })
@@ -1604,9 +1825,11 @@ def main():
         else:
             profile = deepcopy(state.get("character_profile", DEFAULT_STATE["character_profile"]))
             baseline = state.get("personality_baseline", DEFAULT_STATE["personality_baseline"])
+            volatility_profile = state.get("volatility_profile", DEFAULT_STATE["volatility_profile"])
             enabled = state.get("enabled", True)
             state = default_state()
             state["enabled"] = enabled
+            state["volatility_profile"] = normalize_volatility_profile(volatility_profile)
             state["personality_baseline"] = normalize_emotion(baseline)
             state["emotion"] = normalize_emotion(baseline)
             state["character_profile"] = profile
@@ -1629,12 +1852,12 @@ def main():
             extra={"trust_before": round(trust_before, 4), "trust_after": state["trust"]},
         )
         save_state(state_file, state)
-        print_json({"emotion": state["emotion"], "trust": state["trust"]})
+        print_json({"emotion": state["emotion"], "affective_pulse": state["affective_pulse"], "trust": state["trust"]})
 
     elif command == "pre_turn_decay":
         state = apply_in_session_decay(state)
         save_state(state_file, state)
-        print_json({"emotion": state["emotion"]})
+        print_json({"emotion": state["emotion"], "affective_pulse": state["affective_pulse"]})
 
     elif command == "appraise":
         if len(sys.argv) < 4:
@@ -1677,7 +1900,11 @@ def main():
         memory = parse_memory_args(sys.argv[6:])
         state = record_turn(state, sys.argv[3], sys.argv[4], sys.argv[5], **memory)
         save_state(state_file, state)
-        print_json({"emotion": state["emotion"], "turn": len(state["emotion_trajectory"])})
+        print_json({
+            "emotion": state["emotion"],
+            "affective_pulse": state["affective_pulse"],
+            "turn": len(state["emotion_trajectory"]),
+        })
 
     elif command == "log_event":
         if len(sys.argv) < 5:
@@ -1702,6 +1929,7 @@ def main():
         save_state(state_file, state)
         print_json({
             "emotion": state["emotion"],
+            "affective_pulse": state["affective_pulse"],
             "trust": state["trust"],
             "session_count": state["session_count"],
         })

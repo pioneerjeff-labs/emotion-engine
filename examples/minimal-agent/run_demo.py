@@ -50,6 +50,13 @@ def pad_line(emotion):
     )
 
 
+def pulse_line(pulse):
+    return (
+        f"{pulse['label']} intensity={pulse['intensity']:.4f} "
+        f"(P={pulse['P']:+.4f}, A={pulse['A']:+.4f}, D={pulse['D']:+.4f})"
+    )
+
+
 def recent_interaction_memories(state, limit=3):
     recent = []
     for entry in reversed(state.get("emotion_log", [])):
@@ -74,6 +81,8 @@ def compact_prelude(state):
     lines = [
         "Continuity prelude for the next LLM call:",
         f"- Tone: {status['summary']}",
+        f"- Affective pulse: {status['pulse']}",
+        f"- Volatility profile: {status['volatility_profile']}",
         f"- Trust tier: {status['trust_tier']}",
         f"- Style: {status['style']}",
     ]
@@ -118,6 +127,7 @@ def run(turns_path=DEFAULT_TURNS, state_path=DEFAULT_STATE):
         print_step(f"turn {idx}: pre_turn_decay")
         state = engine.apply_in_session_decay(state)
         print(f"State before prompt: {pad_line(state['emotion'])}")
+        print(f"Pulse before prompt: {pulse_line(state['affective_pulse'])}")
 
         print_step("build prompt prelude")
         print(compact_prelude(state))
@@ -126,6 +136,7 @@ def run(turns_path=DEFAULT_TURNS, state_path=DEFAULT_STATE):
         advisory = engine.appraise_message(state, user_message)
         print(f"User: {user_message}")
         print(f"Helper hint: {advisory['appraisal']} | suggested {advisory['suggested']}")
+        print(f"Helper pulse: {pulse_line(advisory['affective_pulse'])}")
         print("Treat this as a hint. A real LLM/app can override it using full context.")
 
         print_step("mock LLM final decision")
@@ -149,6 +160,7 @@ def run(turns_path=DEFAULT_TURNS, state_path=DEFAULT_STATE):
             character_lens=state["character_profile"].get("interpretation"),
         )
         print(f"Recorded turn {len(state['emotion_trajectory'])}; state is now {pad_line(state['emotion'])}")
+        print(f"Visible pulse is now {pulse_line(state['affective_pulse'])}")
 
     print_step("settle_trust")
     trust_before = state["trust"]

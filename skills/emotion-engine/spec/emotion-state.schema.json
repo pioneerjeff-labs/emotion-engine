@@ -28,8 +28,20 @@
     "enabled": {
       "type": "boolean"
     },
+    "volatility_profile": {
+      "description": "Host-selected expressiveness envelope for mood inertia and short-lived affective pulse visibility.",
+      "type": "string",
+      "enum": [
+        "steady",
+        "expressive",
+        "dramatic_test"
+      ]
+    },
     "emotion": {
       "$ref": "#/$defs/padState"
+    },
+    "affective_pulse": {
+      "$ref": "#/$defs/affectivePulse"
     },
     "personality_baseline": {
       "$ref": "#/$defs/padState"
@@ -161,6 +173,33 @@
         }
       }
     },
+    "compactPadDelta": {
+      "description": "Compact PAD movement delta. Unlike absolute PAD state, all dimensions may move negative or positive.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "P",
+        "A",
+        "D"
+      ],
+      "properties": {
+        "P": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0
+        },
+        "A": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0
+        },
+        "D": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0
+        }
+      }
+    },
     "characterProfile": {
       "type": "object",
       "additionalProperties": true,
@@ -210,17 +249,20 @@
         },
         "A": {
           "type": "number",
-          "minimum": 0.0,
+          "minimum": -1.0,
           "maximum": 1.0
         },
         "D": {
           "type": "number",
-          "minimum": 0.0,
+          "minimum": -1.0,
           "maximum": 1.0
         },
         "timestamp": {
           "type": "string",
           "format": "date-time"
+        },
+        "pulse": {
+          "$ref": "#/$defs/affectivePulse"
         },
         "appraisal": {
           "type": "string"
@@ -288,7 +330,24 @@
           "$ref": "#/$defs/compactPadState"
         },
         "delta": {
-          "$ref": "#/$defs/compactPadState"
+          "$ref": "#/$defs/compactPadDelta"
+        },
+        "affective_pulse": {
+          "$ref": "#/$defs/affectivePulse"
+        },
+        "pulse_before": {
+          "$ref": "#/$defs/affectivePulse"
+        },
+        "pulse_after": {
+          "$ref": "#/$defs/affectivePulse"
+        },
+        "volatility_profile": {
+          "type": "string",
+          "enum": [
+            "steady",
+            "expressive",
+            "dramatic_test"
+          ]
         },
         "tags": {
           "type": "array",
@@ -302,6 +361,51 @@
           "items": {
             "$ref": "#/$defs/sourceRef"
           }
+        }
+      }
+    },
+    "affectivePulse": {
+      "description": "Short-lived visible affective movement for the latest event. It complements slow PAD mood and should not be treated as durable relationship state.",
+      "type": "object",
+      "additionalProperties": true,
+      "required": [
+        "P",
+        "A",
+        "D",
+        "intensity",
+        "label",
+        "source",
+        "created_at"
+      ],
+      "properties": {
+        "P": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0
+        },
+        "A": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0
+        },
+        "D": {
+          "type": "number",
+          "minimum": -1.0,
+          "maximum": 1.0
+        },
+        "intensity": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        },
+        "label": {
+          "type": "string"
+        },
+        "source": {
+          "type": "string"
+        },
+        "created_at": {
+          "$ref": "#/$defs/nullableIsoTimestamp"
         }
       }
     },
@@ -563,6 +667,17 @@
         },
         "emotion": {
           "$ref": "#/$defs/padState"
+        },
+        "affective_pulse": {
+          "$ref": "#/$defs/affectivePulse"
+        },
+        "volatility_profile": {
+          "type": "string",
+          "enum": [
+            "steady",
+            "expressive",
+            "dramatic_test"
+          ]
         },
         "trust": {
           "type": "number",

@@ -21,7 +21,7 @@ It is not a memory stack. It is a portable emotional-continuity state layer that
 
 Emotion Engine is part of PioneerJeff Labs, an open-source lab building reusable infrastructure layers for creative AI applications.
 
-Status: experimental / v0.1.2. Current release: [v0.1.2 - Conservative trust settlement](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v0.1.2).
+Status: experimental / v0.2.0. Current release: [v0.2.0 - Affective pulse expressiveness layer](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v0.2.0).
 
 ## Start Here
 
@@ -328,6 +328,8 @@ For GPT/API integrations, keep Emotion Engine state in your host application and
 Emotion Engine stores and updates:
 
 - **PAD state**: Pleasure, Arousal, Dominance; short-lived mood state that drifts back toward baseline.
+- **Affective pulse**: short-lived visible per-turn movement, separate from slow PAD mood.
+- **Volatility profile**: `steady`, `expressive`, or `dramatic_test` movement envelope for different agent types.
 - **Trust**: a slow-moving agent-to-user relationship coefficient with its own decay policy. It is not the user's trust in the agent.
 - **Personality baseline**: where the agent naturally drifts back to.
 - **Emotion trajectory**: numeric state during a session.

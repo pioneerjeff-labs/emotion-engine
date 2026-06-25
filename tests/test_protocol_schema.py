@@ -19,9 +19,29 @@ class ProtocolSchemaTest(unittest.TestCase):
         self.assertEqual(self.schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
         self.assertEqual(self.schema["properties"]["_schema"]["const"], "emotion-engine-state/v2")
         self.assertEqual(self.template["_schema"], "emotion-engine-state/v2")
+        self.assertIn("affective_pulse", self.template)
+        self.assertIn("volatility_profile", self.template)
 
         for field in self.schema["required"]:
             self.assertIn(field, self.template)
+
+    def test_schema_documents_affective_pulse_as_optional_extension(self):
+        self.assertIn("affective_pulse", self.schema["properties"])
+        self.assertIn("volatility_profile", self.schema["properties"])
+        self.assertNotIn("affective_pulse", self.schema["required"])
+        self.assertNotIn("volatility_profile", self.schema["required"])
+        self.assertIn("affectivePulse", self.schema["$defs"])
+        self.assertEqual(
+            self.schema["$defs"]["emotionTrajectoryEntry"]["properties"]["pulse"]["$ref"],
+            "#/$defs/affectivePulse",
+        )
+        self.assertEqual(
+            self.schema["$defs"]["compactSnapshot"]["properties"]["affective_pulse"]["$ref"],
+            "#/$defs/affectivePulse",
+        )
+        pulse_properties = self.schema["$defs"]["affectivePulse"]["properties"]
+        self.assertEqual(pulse_properties["A"]["minimum"], -1.0)
+        self.assertEqual(pulse_properties["D"]["minimum"], -1.0)
 
     def test_schema_exposes_adapter_envelopes(self):
         defs = self.schema["$defs"]
@@ -48,7 +68,9 @@ class ProtocolSchemaTest(unittest.TestCase):
 
         self.assertEqual(properties["before"]["$ref"], "#/$defs/compactPadState")
         self.assertEqual(properties["after"]["$ref"], "#/$defs/compactPadState")
-        self.assertEqual(properties["delta"]["$ref"], "#/$defs/compactPadState")
+        self.assertEqual(properties["delta"]["$ref"], "#/$defs/compactPadDelta")
+        self.assertEqual(self.schema["$defs"]["compactPadDelta"]["properties"]["A"]["minimum"], -1.0)
+        self.assertEqual(self.schema["$defs"]["compactPadDelta"]["properties"]["D"]["minimum"], -1.0)
         self.assertIn("source_refs", properties)
 
     def test_trust_history_stays_numeric_ledger(self):

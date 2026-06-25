@@ -39,6 +39,11 @@ load state
 -> save final state
 ```
 
+The prompt prelude now shows two affective layers:
+
+- slow PAD mood, used for stable tone continuity;
+- short-lived `affective_pulse`, used to surface visible movement from the latest event.
+
 The important boundary is that Emotion Engine does not generate the assistant
 reply. A real application still owns:
 

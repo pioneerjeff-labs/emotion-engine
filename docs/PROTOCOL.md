@@ -11,6 +11,8 @@ This is not a memory stack, retrieval system, vector database, graph memory, cha
 Emotion Engine keeps a small, inspectable continuity packet:
 
 - current PAD emotion state
+- short-lived affective pulse for visible per-turn movement
+- volatility profile for steady vs expressive agents
 - personality baseline for decay
 - trust and trust history
 - compact emotion log
@@ -31,6 +33,8 @@ Emotion Engine remembers.
 Emotion Engine separates compact numeric state from the explanation for that state.
 
 - `emotion` is the current PAD state.
+- `affective_pulse` is the latest short-lived visible movement signal. It complements mood; it is not durable relationship state.
+- `volatility_profile` controls how strongly short-term movement is surfaced for a steady assistant, expressive companion, or dramatic test character.
 - `emotion_trajectory` is the current-session PAD numeric trajectory.
 - `trust` is the current agent-to-user trust coefficient.
 - `trust_history` is a numeric ledger for applied trust changes.
@@ -82,10 +86,20 @@ A minimal v2 packet looks like this:
 {
   "_schema": "emotion-engine-state/v2",
   "enabled": true,
+  "volatility_profile": "steady",
   "emotion": {
     "pleasure": 0.0,
     "arousal": 0.3,
     "dominance": 0.5
+  },
+  "affective_pulse": {
+    "P": 0.0,
+    "A": 0.0,
+    "D": 0.0,
+    "intensity": 0.0,
+    "label": "none",
+    "source": "default",
+    "created_at": null
   },
   "personality_baseline": {
     "pleasure": 0.0,
@@ -130,6 +144,20 @@ Boolean switch for lifecycle updates.
 
 When `enabled` is `false`, helper operations preserve the state but skip emotion lifecycle updates. This is for user control, debugging, or temporarily disabling continuity.
 
+### `volatility_profile`
+
+Optional expressiveness envelope for state movement.
+
+Current profiles:
+
+| Profile | Use |
+|---|---|
+| `steady` | Work assistants and practical agents. Mood changes are conservative and pulse fades quickly. |
+| `expressive` | Companion-style or character agents that should show visible per-turn movement while keeping slow mood stable. |
+| `dramatic_test` | Test/demo scenarios that intentionally need stronger movement. Do not use as a default production companion setting. |
+
+Missing or unknown values default to `steady`.
+
 ### `emotion`
 
 Current PAD state.
@@ -153,6 +181,34 @@ Short-form PAD keys are used in trajectory entries and command arguments:
 | `P` | `pleasure` |
 | `A` | `arousal` |
 | `D` | `dominance` |
+
+### `affective_pulse`
+
+Short-lived visible affective movement for the latest event.
+
+`emotion` is the slow mood layer. `affective_pulse` is the fast movement layer. A companion can have a stable warm mood while still showing that a specific turn landed as playful, tense, touching, or corrective.
+
+Shape:
+
+```json
+{
+  "P": 0.08,
+  "A": 0.03,
+  "D": 0.01,
+  "intensity": 0.2,
+  "label": "warmth",
+  "source": "record_turn",
+  "created_at": "2026-05-29T15:20:00.000000+00:00"
+}
+```
+
+Rules:
+
+- `P/A/D` are movement deltas, not absolute PAD state.
+- `intensity` is a normalized visibility score in `[0.0, 1.0]`.
+- Pulse decays within the session and is cleared by time decay.
+- Trust settlement should rely on session evidence and compact logs, not on pulse alone.
+- Existing state files without this field remain valid; helpers fill a quiet default pulse.
 
 ### `personality_baseline`
 
@@ -246,6 +302,15 @@ Each `record_turn` appends a compact entry:
   "A": 0.32,
   "D": 0.61,
   "timestamp": "2026-05-29T15:20:00.000000+00:00",
+  "pulse": {
+    "P": 0.04,
+    "A": 0.02,
+    "D": 0.03,
+    "intensity": 0.15,
+    "label": "collaboration",
+    "source": "record_turn",
+    "created_at": "2026-05-29T15:20:00.000000+00:00"
+  },
   "appraisal": "collaboration",
   "situation": "user challenged the design in a constructive way"
 }
@@ -276,7 +341,9 @@ Common fields:
 | `salience` | `[0.0, 1.0]` importance score. |
 | `appraisal` | Label such as `collaboration`, `repair`, or `boundary_pressure`. |
 | `before` / `after` | Optional compact PAD snapshots with `P/A/D`. |
-| `delta` | Optional PAD delta. |
+| `delta` | Optional PAD delta; `P/A/D` may be negative because this is movement, not absolute state. |
+| `affective_pulse` | Optional short-lived movement signal associated with this event. |
+| `volatility_profile` | Optional expressiveness envelope active when the event was recorded. |
 | `tags` | Small list of labels for pattern extraction or filtering. |
 
 Example:
@@ -357,6 +424,7 @@ Emotion Engine uses separate decay policies for mood and trust:
 | State | Role | Decay policy |
 |---|---|---|
 | PAD mood | Short-lived working emotional state | Hour-level exponential drift toward `personality_baseline`. Trust may add limited emotional inertia, but old mood should still fade quickly. |
+| Affective pulse | Very short-lived event movement | In-session decay toward quiet; cleared by longer time decay. It helps prompt/demo expressiveness without rewriting durable mood. |
 | Trust | Slow relationship-level continuity | Day-level decay with a `trust_anchor` floor. Trust should survive client switches and should usually update from session-level evidence. |
 
 Adapters should not treat the whole emotional packet as one uniformly decaying memory. Mood, trust, and optional boundary-related signals may need different update cadence, floor, and decay curves.
