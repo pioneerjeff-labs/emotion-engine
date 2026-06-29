@@ -21,7 +21,7 @@ It is not a memory stack. It is a portable emotional-continuity state layer that
 
 Emotion Engine is part of PioneerJeff Labs, an open-source lab building reusable infrastructure layers for creative AI applications.
 
-Status: experimental / v0.2.0. Current release: [v0.2.0 - Affective pulse expressiveness layer](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v0.2.0).
+Status: experimental / v0.2.1 candidate. Current release: [v0.2.0 - Affective pulse expressiveness layer](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v0.2.0).
 
 ## Start Here
 

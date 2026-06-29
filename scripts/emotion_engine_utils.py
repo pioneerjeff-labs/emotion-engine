@@ -127,6 +127,21 @@ APPRAISAL_PROFILES = {
         "cue": "collaborative request",
         "tags": ["collaboration"],
     },
+    "playful": {
+        "delta": {"P": 0.07, "A": 0.05, "D": 0.01},
+        "cue": "playful banter or teasing",
+        "tags": ["playful", "positive"],
+    },
+    "intimacy": {
+        "delta": {"P": 0.09, "A": 0.03, "D": -0.01},
+        "cue": "affectionate closeness or companion warmth",
+        "tags": ["relationship", "warmth"],
+    },
+    "relationship_calibration": {
+        "delta": {"P": 0.02, "A": 0.03, "D": 0.04},
+        "cue": "relationship, address, or tone calibration",
+        "tags": ["relationship", "calibration"],
+    },
     "vulnerability": {
         "delta": {"P": 0.03, "A": 0.04, "D": -0.02},
         "cue": "user vulnerability or distress",
@@ -163,6 +178,22 @@ APPRAISAL_KEYWORDS = {
         "help", "can you", "could you", "let's", "work with", "explain",
         "review", "build", "fix", "challenge", "帮我", "一起", "解释",
         "看看", "改一下", "做一个", "生成", "挑战", "质疑",
+    ],
+    "playful": [
+        "joke", "tease", "teasing", "banter", "playful", "haha", "lol",
+        "wink", "kidding", "逗", "开玩笑", "玩笑", "调皮", "撒娇",
+        "嘿嘿", "哈哈", "坏笑", "嘴尖", "皮一下", "闹你",
+    ],
+    "intimacy": [
+        "miss you", "hug", "kiss", "cuddle", "hold me", "stay with me",
+        "affection", "affectionate", "想你", "抱抱", "亲亲", "亲一下",
+        "贴贴", "陪我", "哄我", "老公", "老婆", "亲密", "靠近",
+    ],
+    "relationship_calibration": [
+        "relationship", "nickname", "address me", "call me", "tone",
+        "boundary", "private context", "serious context", "称呼", "叫我",
+        "别叫", "语气", "关系", "边界", "校准", "私下", "认真事情",
+        "私人秘书", "亲密边界", "相处方式",
     ],
     "vulnerability": [
         "sad", "scared", "afraid", "lonely", "hurt", "anxious", "worried",
@@ -686,6 +717,80 @@ def public_status(state):
     }
 
 
+DEDUPABLE_LOW_VALUE_APPRAISALS = {"neutral", "collaboration", "warmth", "playful"}
+
+
+def max_abs_delta(delta):
+    if not isinstance(delta, dict) or not delta:
+        return 0.0
+    values = []
+    for value in delta.values():
+        try:
+            values.append(abs(float(value)))
+        except (TypeError, ValueError):
+            continue
+    return max(values) if values else 0.0
+
+
+def pulse_intensity_from_entry(entry, key="affective_pulse"):
+    pulse = entry.get(key)
+    if pulse is None and key == "affective_pulse":
+        pulse = entry.get("pulse_after")
+    if not isinstance(pulse, dict):
+        return 0.0
+    try:
+        return float(pulse.get("intensity", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def is_low_value_pre_turn_decay_entry(entry):
+    return (
+        max_abs_delta(entry.get("delta")) < 0.01
+        and pulse_intensity_from_entry(entry, "pulse_after") < 0.04
+    )
+
+
+def is_low_value_turn_entry(entry):
+    appraisal = entry.get("appraisal") or "neutral"
+    if appraisal not in DEDUPABLE_LOW_VALUE_APPRAISALS:
+        return False
+    if bool(entry.get("open_loop")):
+        return False
+    try:
+        salience = float(entry.get("salience", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        salience = 0.0
+    return salience <= 0.12 and pulse_intensity_from_entry(entry) < 0.12
+
+
+def should_compact_low_value_log(previous, entry):
+    if not isinstance(previous, dict):
+        return False
+    if previous.get("event_type") != entry.get("event_type"):
+        return False
+
+    event_type = entry.get("event_type")
+    if event_type == "pre_turn_decay":
+        return is_low_value_pre_turn_decay_entry(previous) and is_low_value_pre_turn_decay_entry(entry)
+
+    if event_type != "turn":
+        return False
+    if previous.get("appraisal") != entry.get("appraisal"):
+        return False
+    return is_low_value_turn_entry(previous) and is_low_value_turn_entry(entry)
+
+
+def compact_low_value_log(previous, entry):
+    previous["duplicate_count"] = int(previous.get("duplicate_count", 1)) + 1
+    previous["last_compacted_at"] = entry["timestamp"]
+    for key in ["after", "delta", "affective_pulse", "pulse_after"]:
+        if key in entry:
+            previous[key] = entry[key]
+    if "turn" in entry:
+        previous["last_turn"] = entry["turn"]
+
+
 def add_emotion_log(
     state,
     event_type,
@@ -741,6 +846,10 @@ def add_emotion_log(
         entry["tags"] = list(tags)
     if extra:
         entry.update(extra)
+    log = state.setdefault("emotion_log", [])
+    if log and should_compact_low_value_log(log[-1], entry):
+        compact_low_value_log(log[-1], entry)
+        return state
     append_limited(state, "emotion_log", entry, state.get("log_limit", 200))
     return state
 
@@ -890,6 +999,12 @@ def classify_message(message):
         return "repair", scores["repair"]
     if scores["vulnerability"]:
         return "vulnerability", scores["vulnerability"]
+    if scores["relationship_calibration"]:
+        return "relationship_calibration", scores["relationship_calibration"]
+    if scores["intimacy"]:
+        return "intimacy", scores["intimacy"]
+    if scores["playful"]:
+        return "playful", scores["playful"]
     if scores["collaboration"] and has_collaboration_action(text):
         return "collaboration", scores["collaboration"]
     if scores["warmth"]:
@@ -967,9 +1082,12 @@ POLICY_CONTEXT_ALIASES = {
     "stable_preference": {"preference", "future", "default", "remember"},
     "repair": {"repair", "apology", "correction"},
     "boundary_pressure": {"boundary", "pressure"},
+    "relationship_calibration": {"relationship", "relationship_calibration", "tone", "address", "nickname"},
+    "intimacy": {"intimacy", "affection", "companion", "close"},
+    "playful": {"play", "playful", "banter", "tease", "joke"},
 }
 CONCRETE_FEEDBACK_KEYWORDS = [
-    "because", "when you", "the way you", "that part", "this part", "具体", "刚才",
+    "because", "when you", "the way you", "that part", "this part", "具体",
     "这次", "这个判断", "这个做法", "这里", "因为", "你刚", "你这",
 ]
 STABLE_PREFERENCE_KEYWORDS = [
@@ -1037,6 +1155,12 @@ def policy_reply_bias(reason, appraisal, decision):
         return ["keep boundaries", "stay calm", "do not escalate", *base]
     if reason == "repair":
         return ["acknowledge repair", "return to useful forward motion", *base]
+    if reason == "relationship_calibration":
+        return ["honor the relationship calibration", "make the tone adjustment explicit but brief", *base]
+    if reason == "intimacy":
+        return ["respond warmly within established boundaries", "do not over-escalate", *base]
+    if reason == "playful":
+        return ["allow light banter", "keep the practical thread available", *base]
     if reason == "stable_preference":
         return ["acknowledge preference", "consider durable memory only if future work benefits", *base]
     if appraisal == "warmth":
@@ -1059,6 +1183,9 @@ def policy_salience(reason, appraisal, mode, habituation_count):
         "milestone_warmth": 0.38,
         "milestone_collaboration": 0.35,
         "vulnerability": 0.45,
+        "relationship_calibration": 0.55,
+        "intimacy": 0.35,
+        "playful": 0.24,
         "generic_praise": 0.2,
         "generic_praise_habituated": 0.08,
         "neutral_task": 0.04,
@@ -1117,6 +1244,10 @@ def record_policy(state, message, mode=None, contexts=None):
     )
     explicit_trust = any(keyword in text for keyword in TRUST_SETTLEMENT_KEYWORDS)
     warmth_habituation = recent_turn_appraisal_count(state, "warmth")
+    relationship_context = any(
+        context in normalized_contexts
+        for context in {"relationship_calibration", "intimacy", "playful"}
+    )
 
     decision = "respond_only"
     reason = "neutral_task"
@@ -1126,6 +1257,10 @@ def record_policy(state, message, mode=None, contexts=None):
         decision = "record_turn"
         reason = label
         trust_eligible = label in {"hostility", "boundary_pressure", "repair"}
+    elif label in {"relationship_calibration", "intimacy", "playful"} or relationship_context:
+        decision = "record_turn"
+        reason = label if label in {"relationship_calibration", "intimacy", "playful"} else "relationship_calibration"
+        trust_eligible = False
     elif stable_preference:
         decision = "record_turn"
         reason = "stable_preference"
@@ -1147,9 +1282,9 @@ def record_policy(state, message, mode=None, contexts=None):
         reason = "milestone_collaboration"
         trust_eligible = False
     elif label == "warmth":
-        if requested_mode == "always":
+        if requested_mode == "always" and not warmth_habituation:
             decision = "record_turn"
-            reason = "generic_praise_habituated" if warmth_habituation else "generic_praise"
+            reason = "generic_praise"
         else:
             decision = "respond_only"
             reason = "generic_praise_habituated" if warmth_habituation else "generic_praise"
@@ -1162,7 +1297,7 @@ def record_policy(state, message, mode=None, contexts=None):
         reason = "neutral_task"
 
     salience = policy_salience(reason, label, requested_mode, warmth_habituation)
-    if requested_mode == "light" and decision == "respond_only":
+    if decision == "respond_only":
         salience = 0.0
 
     return {

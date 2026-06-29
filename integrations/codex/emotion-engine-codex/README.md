@@ -58,6 +58,12 @@ scripts/codex_emotion.sh status
 scripts/codex_emotion.sh nora-demo --packet low --reply-prompt
 ```
 
+Agent Harness installs `scripts/codex_emotion.sh` as a project-root wrapper. If you only copied the skill folder manually, call the bundled script directly:
+
+```bash
+.codex/skills/emotion-engine-codex/scripts/codex_emotion.sh status
+```
+
 ## Project-Local State
 
 When used inside a project folder with `.git` or `.codex`, the wrapper stores state at:

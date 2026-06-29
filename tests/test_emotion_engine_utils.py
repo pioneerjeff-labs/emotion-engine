@@ -113,6 +113,27 @@ class EmotionEngineUtilsTest(unittest.TestCase):
 
         self.assertEqual(result["appraisal"], "warmth")
 
+    def test_appraise_relationship_cues_are_not_flattened_to_collaboration(self):
+        state = emotion_engine_utils.default_state()
+
+        intimate = emotion_engine_utils.appraise_message(
+            state,
+            "Norah 我今天有点想你，能不能陪我一下",
+        )
+        playful = emotion_engine_utils.appraise_message(
+            state,
+            "哈哈你还嘴尖，故意逗我是吧",
+        )
+        calibration = emotion_engine_utils.appraise_message(
+            state,
+            "刚才那个称呼有点别扭，我们把语气调回私人秘书一点",
+        )
+
+        self.assertEqual(intimate["appraisal"], "intimacy")
+        self.assertEqual(playful["appraisal"], "playful")
+        self.assertEqual(calibration["appraisal"], "relationship_calibration")
+        self.assertGreater(intimate["affective_pulse"]["intensity"], 0.0)
+
     def test_mood_and_trust_time_decay_use_distinct_policies(self):
         state = emotion_engine_utils.default_state()
         state["emotion"] = {"pleasure": 0.8, "arousal": 0.8, "dominance": 0.8}
@@ -329,9 +350,115 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             mode="always",
         )
 
-        self.assertEqual(policy["decision"], "record_turn")
+        self.assertEqual(policy["decision"], "respond_only")
         self.assertEqual(policy["reason"], "generic_praise_habituated")
+        self.assertEqual(policy["salience"], 0.0)
         self.assertEqual(policy["habituation"]["recent_warmth_turns"], 1)
+
+    def test_record_policy_always_records_first_generic_praise_only(self):
+        policy = emotion_engine_utils.record_policy(
+            emotion_engine_utils.default_state(),
+            "thanks, that was helpful",
+            mode="always",
+        )
+
+        self.assertEqual(policy["decision"], "record_turn")
+        self.assertEqual(policy["reason"], "generic_praise")
+        self.assertGreater(policy["salience"], 0.0)
+
+    def test_record_policy_repeated_chinese_generic_praise_is_not_concrete_feedback(self):
+        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
+        state = emotion_engine_utils.record_turn(
+            state,
+            0.12,
+            0.32,
+            0.52,
+            appraisal="warmth",
+            situation="user praised the agent once",
+        )
+
+        policy = emotion_engine_utils.record_policy(
+            state,
+            "谢谢你，刚才很有帮助",
+            mode="always",
+        )
+
+        self.assertEqual(policy["decision"], "respond_only")
+        self.assertEqual(policy["reason"], "generic_praise_habituated")
+        self.assertEqual(policy["salience"], 0.0)
+
+    def test_record_policy_light_records_relationship_calibration(self):
+        policy = emotion_engine_utils.record_policy(
+            emotion_engine_utils.default_state(),
+            "刚才那个称呼有点别扭，我们把语气调回私人秘书一点",
+            mode="light",
+        )
+
+        self.assertEqual(policy["decision"], "record_turn")
+        self.assertEqual(policy["appraisal"], "relationship_calibration")
+        self.assertEqual(policy["reason"], "relationship_calibration")
+        self.assertGreater(policy["salience"], 0.0)
+
+    def test_low_value_turn_logs_compact_consecutive_duplicates(self):
+        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
+
+        state = emotion_engine_utils.record_turn(
+            state,
+            0.0,
+            0.3,
+            0.5,
+            appraisal="neutral",
+            situation="routine neutral turn",
+            salience=0.04,
+        )
+        state = emotion_engine_utils.record_turn(
+            state,
+            0.0,
+            0.3,
+            0.5,
+            appraisal="neutral",
+            situation="routine neutral turn",
+            salience=0.04,
+        )
+
+        turn_logs = [
+            entry for entry in state["emotion_log"]
+            if entry.get("event_type") == "turn"
+        ]
+        self.assertEqual(state["total_turns"], 2)
+        self.assertEqual(len(state["emotion_trajectory"]), 2)
+        self.assertEqual(len(turn_logs), 1)
+        self.assertEqual(turn_logs[0]["duplicate_count"], 2)
+        self.assertEqual(turn_logs[0]["last_turn"], 2)
+
+    def test_low_value_compaction_does_not_absorb_salient_previous_turn(self):
+        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
+
+        state = emotion_engine_utils.record_turn(
+            state,
+            0.07,
+            0.35,
+            0.51,
+            appraisal="playful",
+            situation="user made a specific relationship joke",
+            salience=0.4,
+        )
+        state = emotion_engine_utils.record_turn(
+            state,
+            0.07,
+            0.35,
+            0.51,
+            appraisal="playful",
+            situation="light repeated banter",
+            salience=0.04,
+        )
+
+        turn_logs = [
+            entry for entry in state["emotion_log"]
+            if entry.get("event_type") == "turn"
+        ]
+        self.assertEqual(len(turn_logs), 2)
+        self.assertNotIn("duplicate_count", turn_logs[0])
 
 
 if __name__ == "__main__":

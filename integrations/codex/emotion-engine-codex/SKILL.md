@@ -13,13 +13,19 @@ Trust is agent-to-user only: it is the agent/persona's internal continuity estim
 
 ## Quick Reference
 
-Use the bundled wrapper:
+Use the project wrapper when Agent Harness installed one:
 
 ```bash
 scripts/codex_emotion.sh status
 scripts/codex_emotion.sh record_policy --mode light --context milestone "that migration was handled well"
 scripts/codex_emotion.sh configure --style "warm but not over-compliant, with clear boundaries"
 scripts/codex_emotion.sh tune "make it calmer"
+```
+
+If the target only has this skill folder and no project wrapper, use:
+
+```bash
+.codex/skills/emotion-engine-codex/scripts/codex_emotion.sh status
 ```
 
 The wrapper automatically initializes a state file if missing. State path priority:
@@ -73,7 +79,7 @@ The command is deterministic and side-effect free. It returns a JSON decision su
 Mode contract:
 
 - `light`: event-triggered. Generic praise, small talk, and ordinary task progress should usually be `respond_only`; concrete feedback, milestones, repair, stable preferences, boundary pressure, or explicit emotional-continuity discussion may be recorded.
-- `always`: per-meaningful-turn tracking. Compact turn records are allowed more often, but habituation, salience, and trust-settlement rules still apply.
+- `always`: per-meaningful-turn tracking. Compact turn records are allowed more often, but habituation, salience, low-value duplicate compaction, and trust-settlement rules still apply.
 - `paused`: preserve local state but do not record lifecycle updates or modulate replies.
 
 Habituation rules:
