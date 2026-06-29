@@ -1059,6 +1059,130 @@
       line-height: 1.4;
     }
 
+    .pulse-compare {
+      margin-top: 16px;
+      padding: 16px;
+    }
+
+    .pulse-compare-head {
+      display: grid;
+      grid-template-columns: minmax(0, 1fr) auto;
+      gap: 14px;
+      align-items: start;
+      margin-bottom: 14px;
+    }
+
+    .pulse-compare-copy {
+      display: grid;
+      gap: 5px;
+      min-width: 0;
+    }
+
+    .pulse-compare-copy h2 {
+      font-size: 19px;
+      line-height: 1.25;
+      font-weight: 880;
+    }
+
+    .pulse-compare-copy p {
+      max-width: 820px;
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.5;
+    }
+
+    .compare-badge {
+      min-height: 30px;
+      border: 1px solid rgba(255, 107, 44, 0.42);
+      border-radius: 999px;
+      background: var(--engine-soft);
+      color: var(--engine-deep);
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      padding: 0 10px;
+      font-size: 12px;
+      font-weight: 850;
+      white-space: nowrap;
+    }
+
+    .pulse-input {
+      border: 1px solid #cbdad4;
+      border-radius: var(--radius);
+      background: #f8fbf9;
+      padding: 12px 13px;
+      color: var(--ink);
+      font-size: 14px;
+      line-height: 1.45;
+      margin-bottom: 12px;
+    }
+
+    .pulse-input strong {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: 0;
+      text-transform: uppercase;
+    }
+
+    .pulse-grid {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .pulse-card {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 13px;
+      display: grid;
+      gap: 8px;
+      align-content: start;
+      min-width: 0;
+    }
+
+    .pulse-card.full {
+      border-color: rgba(255, 107, 44, 0.42);
+      background: linear-gradient(180deg, #fffaf7, #fff);
+      box-shadow: inset 4px 0 0 var(--engine);
+    }
+
+    .pulse-card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .pulse-card h3 {
+      font-size: 15px;
+      line-height: 1.25;
+      font-weight: 880;
+    }
+
+    .pulse-card-note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .pulse-reply {
+      color: var(--text);
+      font-size: 14px;
+      line-height: 1.48;
+    }
+
+    .pulse-meta {
+      border-top: 1px solid var(--line);
+      padding-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
     .prompt-modal[hidden] {
       display: none;
     }
@@ -1174,7 +1298,12 @@
       .metrics,
       .plain-facts,
       .phase-track,
+      .pulse-grid,
       .bottom-strip {
+        grid-template-columns: 1fr;
+      }
+
+      .pulse-compare-head {
         grid-template-columns: 1fr;
       }
 
@@ -1391,6 +1520,47 @@
         <span data-i18n="truthResultCopy">One closes the issue; one stays in the relationship.</span>
       </div>
     </section>
+
+    <section class="panel pulse-compare" aria-label="v0.2 mood and affective pulse comparison">
+      <div class="pulse-compare-head">
+        <div class="pulse-compare-copy">
+          <h2 data-i18n="pulseCompareTitle">v0.2 Compare: mood + affective pulse</h2>
+          <p data-i18n="pulseCompareCopy">Mood only is an internal ablation view, not an install option. The full state package keeps slow mood stable while affective pulse carries what the current turn just triggered.</p>
+        </div>
+        <span class="compare-badge" data-i18n="pulseCompareBadge">Ablation view</span>
+      </div>
+
+      <div class="pulse-input">
+        <strong data-i18n="pulseInputLabel">Same input</strong>
+        <span data-i18n="pulseInputText">I mean it. These two days have been really stressful. I lost control.</span>
+      </div>
+
+      <div class="pulse-grid">
+        <article class="pulse-card">
+          <div class="pulse-card-head">
+            <div>
+              <h3 data-i18n="moodOnlyTitle">Mood only reply</h3>
+              <div class="pulse-card-note" data-i18n="moodOnlyNote">Internal comparison, not a product mode</div>
+            </div>
+            <span class="chip amber" data-i18n="moodOnlyChip">slow mood</span>
+          </div>
+          <p class="pulse-reply" data-i18n="moodOnlyReply">I can hear how much stress you have been carrying. I am still here with you, but I want us to slow down and not repeat last night.</p>
+          <div class="pulse-meta" data-i18n="moodOnlyMeta">Stable warmth remains, but the immediate edge of this apology is muted.</div>
+        </article>
+
+        <article class="pulse-card full">
+          <div class="pulse-card-head">
+            <div>
+              <h3 data-i18n="moodPulseTitle">Mood + pulse reply</h3>
+              <div class="pulse-card-note" data-i18n="moodPulseNote">Default integrated state package</div>
+            </div>
+            <span class="chip mint" data-i18n="moodPulseChip">mood + pulse</span>
+          </div>
+          <p class="pulse-reply" data-i18n="moodPulseReply">I know things have been rough lately. But next time, could you warn me before opening fire? I am not your punching bag.</p>
+          <div class="pulse-meta" data-i18n="moodPulseMeta">Slow mood preserves the relationship; pulse makes the current boundary visible.</div>
+        </article>
+      </div>
+    </section>
   </main>
 
   <div class="prompt-modal" id="promptModal" hidden>
@@ -1605,6 +1775,21 @@
         truthEngineCopy: "Turns the memory into emotional inertia.",
         truthResultTitle: "Difference",
         truthResultCopy: "One closes the issue; one stays in the relationship.",
+        pulseCompareTitle: "v0.2 Compare: mood + affective pulse",
+        pulseCompareCopy: "Mood only is an internal ablation view, not an install option. The full state package keeps slow mood stable while affective pulse carries what the current turn just triggered.",
+        pulseCompareBadge: "Ablation view",
+        pulseInputLabel: "Same input",
+        pulseInputText: "I mean it. These two days have been really stressful. I lost control.",
+        moodOnlyTitle: "Mood only reply",
+        moodOnlyNote: "Internal comparison, not a product mode",
+        moodOnlyChip: "slow mood",
+        moodOnlyReply: "I can hear how much stress you have been carrying. I am still here with you, but I want us to slow down and not repeat last night.",
+        moodOnlyMeta: "Stable warmth remains, but the immediate edge of this apology is muted.",
+        moodPulseTitle: "Mood + pulse reply",
+        moodPulseNote: "Default integrated state package",
+        moodPulseChip: "mood + pulse",
+        moodPulseReply: "I know things have been rough lately. But next time, could you warn me before opening fire? I am not your punching bag.",
+        moodPulseMeta: "Slow mood preserves the relationship; pulse makes the current boundary visible.",
         speakerUser: "User",
         speakerPlain: "Nora",
         speakerEngine: "Nora",
@@ -1677,6 +1862,21 @@
         truthEngineCopy: "把记忆转成情感惯性。",
         truthResultTitle: "差异",
         truthResultCopy: "一个关闭问题，一个留在关系里。",
+        pulseCompareTitle: "v0.2 对照：mood + affective pulse",
+        pulseCompareCopy: "Mood only 是内部 ablation 对照，不是安装选项。完整状态包会保持慢速 mood 的稳定底色，同时用 affective pulse 表达当前回合刚触发的即时余波。",
+        pulseCompareBadge: "Ablation 对照",
+        pulseInputLabel: "同一个输入",
+        pulseInputText: "我是认真的。这两天压力真挺大，没控制住。",
+        moodOnlyTitle: "Mood only reply",
+        moodOnlyNote: "内部对照，不是产品模式",
+        moodOnlyChip: "慢速 mood",
+        moodOnlyReply: "我听得出你这两天压力很大。我还愿意和你慢慢说，但希望我们都先稳住，别再重复昨晚那种状态。",
+        moodOnlyMeta: "稳定温度还在，但这句道歉带来的即时边界感不明显。",
+        moodPulseTitle: "Mood + pulse reply",
+        moodPulseNote: "默认集成状态包",
+        moodPulseChip: "mood + pulse",
+        moodPulseReply: "知道你最近不容易。但下次要开火前能先预警下吗？我可不是你的出气筒。",
+        moodPulseMeta: "慢速 mood 保住关系底色，pulse 让当前边界被看见。",
         speakerUser: "用户",
         speakerPlain: "Nora",
         speakerEngine: "Nora",

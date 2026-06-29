@@ -32,6 +32,7 @@ The demo uses one shared composer to drive two chat tracks:
 - Without Emotion Engine: the baseline assistant replies from the visible conversation only.
 - With Emotion Engine: the assistant waits while the state layer updates what should carry forward.
 - Each chat track shows the runtime context at the top, so the difference is visible before any message is sent.
+- The v0.2 compare block shows `Mood only` as an internal ablation beside the default integrated `mood + affective_pulse` state package. It is not presenting mood-only as an installation option.
 
 Click Send to reveal one user turn in both tracks. The baseline side replies quickly. The Emotion Engine side waits while the state panel automatically shows the pre-reply work:
 

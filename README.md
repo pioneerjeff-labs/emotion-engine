@@ -30,6 +30,7 @@ Status: experimental / v0.2.1 candidate. Current release: [v0.2.0 - Affective pu
 | See the idea in 30 seconds | [Live web demo](https://pioneerjeff-labs.github.io/emotion-engine/demo/) |
 | Inspect the state packet | [Hugging Face state playground](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground) |
 | Wire the smallest agent loop | `python3 examples/minimal-agent/run_demo.py` |
+| Ask a coding agent to install it | [INSTALL_WITH_AGENT.md](INSTALL_WITH_AGENT.md) |
 | Integrate with an OpenAI/API host | [docs/OPENAI_GPT.md](docs/OPENAI_GPT.md) |
 | Implement an adapter | [docs/PROTOCOL.md](docs/PROTOCOL.md) |
 
@@ -76,7 +77,7 @@ In short: **the LLM decides; Emotion Engine remembers.**
 
 ## Web Demo
 
-The best first look is the side-by-side web demo in [demo](demo). It compares a baseline assistant with one using an Emotion Engine state packet, so the difference is visible as a conversation unfolds.
+The best first look is the side-by-side web demo in [demo](demo). It compares a baseline assistant with one using an Emotion Engine state packet, so the difference is visible as a conversation unfolds. The demo also includes a small v0.2 compare block showing `Mood only` as an internal ablation against the default integrated `mood + affective_pulse` state package.
 
 <p align="center">
   <img src="demo/screenshot.png" alt="Emotion Engine web demo showing baseline memory beside Emotion Engine state" width="900">
@@ -161,6 +162,7 @@ LLM task:
 | Scripted web demo for product explanation | [demo](demo) |
 | Hosted state playground for inspecting prompt prelude and state packets | [Hugging Face Space](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground) |
 | 5-minute reference loop for wiring Emotion Engine into an agent | [examples/minimal-agent](examples/minimal-agent) |
+| Coding-agent assisted local install | [INSTALL_WITH_AGENT.md](INSTALL_WITH_AGENT.md) |
 | Core state engine checks and local tooling | [scripts](scripts) |
 | OpenClaw skill | [integrations/openclaw](integrations/openclaw) |
 | Claude Skill / Claude Code package | [integrations/claude-skill](integrations/claude-skill) |
@@ -327,9 +329,9 @@ For GPT/API integrations, keep Emotion Engine state in your host application and
 
 Emotion Engine stores and updates:
 
-- **PAD state**: Pleasure, Arousal, Dominance; short-lived mood state that drifts back toward baseline.
-- **Affective pulse**: short-lived visible per-turn movement, separate from slow PAD mood.
-- **Volatility profile**: `steady`, `expressive`, or `dramatic_test` movement envelope for different agent types.
+- **PAD mood state**: Pleasure, Arousal, Dominance; a slow mood layer that drifts back toward baseline.
+- **Affective pulse**: short-lived visible per-turn movement, integrated with mood in the default state package.
+- **Volatility profile**: internal or advanced movement envelope for different agent types.
 - **Trust**: a slow-moving agent-to-user relationship coefficient with its own decay policy. It is not the user's trust in the agent.
 - **Personality baseline**: where the agent naturally drifts back to.
 - **Emotion trajectory**: numeric state during a session.
@@ -387,6 +389,7 @@ Starter logo assets live in [assets](assets). Brand guidance lives in [Brand Not
 
 ```text
 emotion-engine/
+├── INSTALL_WITH_AGENT.md
 ├── emotion-state-template.json
 ├── spec/
 │   └── emotion-state.schema.json
