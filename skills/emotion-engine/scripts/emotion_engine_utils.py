@@ -33,8 +33,21 @@ import math
 import os
 import sys
 import hashlib
+import tempfile
+import warnings
+from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
+
+try:
+    import fcntl
+except ImportError:  # pragma: no cover - Windows fallback
+    fcntl = None
+
+try:
+    import msvcrt
+except ImportError:  # pragma: no cover - Unix fallback
+    msvcrt = None
 
 
 DEFAULT_AFFECTIVE_PULSE = {
@@ -92,6 +105,8 @@ DEFAULT_STATE = {
     "trust_settlements": [],
     "log_limit": 200,
 }
+
+_STATE_LOCKS_HELD = set()
 
 PAD_LIMITS = {
     "pleasure": (-1.0, 1.0),
@@ -236,18 +251,162 @@ def default_state():
     return deepcopy(DEFAULT_STATE)
 
 
+def state_lock_path(path):
+    return f"{os.fspath(path)}.lock"
+
+
+def state_backup_path(path):
+    return f"{os.fspath(path)}.bak"
+
+
+def acquire_file_lock(lock_file):
+    if fcntl is not None:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_EX)
+        return
+    if msvcrt is not None:  # pragma: no cover - Windows fallback
+        lock_file.seek(0)
+        if not lock_file.read(1):
+            lock_file.write("0")
+            lock_file.flush()
+        lock_file.seek(0)
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_LOCK, 1)
+        return
+    raise RuntimeError("No supported file locking mechanism is available")
+
+
+def release_file_lock(lock_file):
+    if fcntl is not None:
+        fcntl.flock(lock_file.fileno(), fcntl.LOCK_UN)
+        return
+    if msvcrt is not None:  # pragma: no cover - Windows fallback
+        lock_file.seek(0)
+        msvcrt.locking(lock_file.fileno(), msvcrt.LK_UNLCK, 1)
+
+
+@contextmanager
+def state_file_lock(path):
+    lock_path = state_lock_path(path)
+    lock_key = os.path.abspath(lock_path)
+    if lock_key in _STATE_LOCKS_HELD:
+        yield
+        return
+
+    with open(lock_path, "a+", encoding="utf-8") as lock_file:
+        acquire_file_lock(lock_file)
+        _STATE_LOCKS_HELD.add(lock_key)
+        try:
+            yield
+        finally:
+            _STATE_LOCKS_HELD.discard(lock_key)
+            release_file_lock(lock_file)
+
+
+def state_directory(path):
+    return os.path.dirname(os.path.abspath(os.fspath(path))) or "."
+
+
+def fsync_directory(directory):
+    if os.name == "nt":  # pragma: no cover - directory fsync is Unix-specific
+        return
+    flags = os.O_RDONLY
+    if hasattr(os, "O_DIRECTORY"):
+        flags |= os.O_DIRECTORY
+    try:
+        dir_fd = os.open(directory, flags)
+    except OSError:
+        return
+    try:
+        os.fsync(dir_fd)
+    finally:
+        os.close(dir_fd)
+
+
+def read_json_file(path):
+    with open(path, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def write_json_file_atomic(path, value):
+    path = os.fspath(path)
+    directory = state_directory(path)
+    basename = os.path.basename(path) or "emotion-state"
+    fd, tmp_path = tempfile.mkstemp(
+        prefix=f".{basename}.",
+        suffix=".tmp",
+        dir=directory,
+    )
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as f:
+            json.dump(value, f, indent=2, ensure_ascii=False)
+            f.write("\n")
+            f.flush()
+            os.fsync(f.fileno())
+        os.replace(tmp_path, path)
+        fsync_directory(directory)
+    except Exception:
+        try:
+            os.unlink(tmp_path)
+        except FileNotFoundError:
+            pass
+        raise
+
+
+def load_state_from_path(path):
+    return ensure_state_shape(read_json_file(path))
+
+
+def backup_current_state(path):
+    if not os.path.exists(path):
+        return
+    try:
+        existing = load_state_from_path(path)
+    except (json.JSONDecodeError, OSError, TypeError, ValueError):
+        return
+    write_json_file_atomic(state_backup_path(path), existing)
+
+
+def recover_state_from_backup(path, error):
+    backup_path = state_backup_path(path)
+    if not os.path.exists(backup_path):
+        raise error
+    try:
+        recovered = load_state_from_path(backup_path)
+    except (json.JSONDecodeError, OSError, TypeError, ValueError) as backup_error:
+        raise error from backup_error
+    warnings.warn(
+        f"Recovered Emotion Engine state from backup after failed read of {path}: {error}",
+        RuntimeWarning,
+    )
+    write_json_file_atomic(path, recovered)
+    return recovered
+
+
+def load_state_unlocked(path):
+    if not os.path.exists(path):
+        return default_state()
+    try:
+        return load_state_from_path(path)
+    except (json.JSONDecodeError, OSError, TypeError, ValueError) as error:
+        return recover_state_from_backup(path, error)
+
+
 def load_state(path):
     if not os.path.exists(path):
         return default_state()
-    with open(path, "r") as f:
-        return ensure_state_shape(json.load(f))
+    with state_file_lock(path):
+        return load_state_unlocked(path)
+
+
+def save_state_unlocked(path, state):
+    state = ensure_state_shape(state)
+    backup_current_state(path)
+    write_json_file_atomic(path, state)
 
 
 def save_state(path, state):
     state = ensure_state_shape(state)
-    with open(path, "w") as f:
-        json.dump(state, f, indent=2, ensure_ascii=False)
-        f.write("\n")
+    with state_file_lock(path):
+        save_state_unlocked(path, state)
 
 
 def print_json(value):
@@ -1864,21 +2023,26 @@ def parse_memory_args(args):
 
 # ── CLI ──────────────────────────────────────────────────────────────
 
-def main():
-    if len(sys.argv) < 3:
-        print(__doc__)
-        sys.exit(1)
+STATE_MUTATING_COMMANDS = {
+    "validate",
+    "configure",
+    "tune",
+    "pause",
+    "resume",
+    "clear_log",
+    "reset",
+    "decay",
+    "pre_turn_decay",
+    "settle_trust",
+    "update_trust",
+    "record_turn",
+    "log_event",
+    "session_start",
+    "session_end",
+}
 
-    command = sys.argv[1]
-    state_file = sys.argv[2]
 
-    if command == "init":
-        state = default_state()
-        save_state(state_file, state)
-        print_json({"ok": True, "state_file": state_file, "schema": state["_schema"]})
-        return
-
-    state = load_state(state_file)
+def run_command(command, state_file, state):
 
     if command == "validate":
         save_state(state_file, state)
@@ -2077,6 +2241,31 @@ def main():
     else:
         print(f"Unknown command: {command}")
         sys.exit(1)
+
+
+def main():
+    if len(sys.argv) < 3:
+        print(__doc__)
+        sys.exit(1)
+
+    command = sys.argv[1]
+    state_file = sys.argv[2]
+
+    if command == "init":
+        with state_file_lock(state_file):
+            state = default_state()
+            save_state_unlocked(state_file, state)
+        print_json({"ok": True, "state_file": state_file, "schema": state["_schema"]})
+        return
+
+    if command in STATE_MUTATING_COMMANDS:
+        with state_file_lock(state_file):
+            state = load_state_unlocked(state_file)
+            run_command(command, state_file, state)
+        return
+
+    state = load_state(state_file)
+    run_command(command, state_file, state)
 
 
 if __name__ == "__main__":

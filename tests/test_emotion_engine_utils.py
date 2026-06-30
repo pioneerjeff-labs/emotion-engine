@@ -1,4 +1,8 @@
 import importlib.util
+import json
+import os
+import subprocess
+import sys
 import tempfile
 import unittest
 from copy import deepcopy
@@ -208,6 +212,57 @@ class EmotionEngineUtilsTest(unittest.TestCase):
 
         self.assertEqual(loaded["_schema"], "emotion-engine-state/v2")
         self.assertEqual(loaded["trust"], 0.1)
+
+    def test_load_state_recovers_corrupt_file_from_backup(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            previous_state = emotion_engine_utils.default_state()
+            previous_state["trust"] = 0.2
+            current_state = emotion_engine_utils.default_state()
+            current_state["trust"] = 0.4
+
+            emotion_engine_utils.save_state(state_file, previous_state)
+            emotion_engine_utils.save_state(state_file, current_state)
+            state_file.write_text('{"_schema": ', encoding="utf-8")
+
+            with self.assertWarns(RuntimeWarning):
+                recovered = emotion_engine_utils.load_state(state_file)
+
+            self.assertEqual(recovered["trust"], 0.2)
+            with state_file.open("r", encoding="utf-8") as f:
+                repaired_file = json.load(f)
+            self.assertEqual(repaired_file["trust"], 0.2)
+
+    def test_cli_session_start_serializes_concurrent_updates(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            worker_count = 12
+            env = os.environ.copy()
+            env["PYTHONDONTWRITEBYTECODE"] = "1"
+
+            processes = [
+                subprocess.Popen(
+                    [sys.executable, str(SCRIPT), "session_start", str(state_file)],
+                    env=env,
+                    text=True,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                )
+                for _ in range(worker_count)
+            ]
+
+            failures = []
+            for process in processes:
+                stdout, stderr = process.communicate(timeout=20)
+                if process.returncode != 0:
+                    failures.append((process.returncode, stdout, stderr))
+
+            if failures:
+                self.fail(f"Concurrent session_start failed: {failures!r}")
+
+            loaded = emotion_engine_utils.load_state(state_file)
+
+        self.assertEqual(loaded["session_count"], worker_count)
 
     def test_settle_trust_positive_multi_turn_trajectory_gives_positive_delta(self):
         state = self.collaborative_state()
