@@ -2,6 +2,15 @@
 
 ## Unreleased
 
+## 0.2.1 - 2026-06-30
+
+- Hardened state persistence with state-file locking, atomic temp-file writes, fsync/replace, backup recovery for corrupt JSON reads, and locked CLI transactions for mutating commands.
+- Added `INSTALL_WITH_AGENT.md`, a copy-ready guide for asking Codex, Claude Code, Cursor, or similar coding agents to install Emotion Engine as a local state sidecar.
+- Added a `v0.2 Compare` block to the web demo that explains `Mood only` as an internal ablation and the default integrated `mood + affective_pulse` state package as the real runtime path.
+- Improved Codex policy handling for playful, intimacy, and relationship-calibration turns; repeated generic praise now habituates instead of creating low-value records.
+- Documented the Agent Harness project wrapper path and kept the generated skill copy in sync with the root helper.
+- Expanded static and persistence tests for the demo/install assets, low-value log compaction, atomic writes, backup recovery, and concurrent state updates.
+
 ## 0.2.0 - 2026-06-25
 
 - Added an expressiveness layer: slow PAD mood remains the stable continuity state, while `affective_pulse` captures short-lived visible per-turn movement.
