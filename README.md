@@ -21,7 +21,7 @@ It is not a memory stack. It is a portable emotional-continuity state layer that
 
 Emotion Engine is part of PioneerJeff Labs, an open-source lab building reusable infrastructure layers for creative AI applications.
 
-Status: experimental / v0.2.1 candidate. Current release: [v0.2.0 - Affective pulse expressiveness layer](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v0.2.0).
+Status: experimental. Current release: [v0.2.1 - Persistence hardening and agent install guide](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v0.2.1).
 
 ## Start Here
 
@@ -31,6 +31,7 @@ Status: experimental / v0.2.1 candidate. Current release: [v0.2.0 - Affective pu
 | Inspect the state packet | [Hugging Face state playground](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground) |
 | Wire the smallest agent loop | `python3 examples/minimal-agent/run_demo.py` |
 | Ask a coding agent to install it | [INSTALL_WITH_AGENT.md](INSTALL_WITH_AGENT.md) |
+| Connect a local MCP-capable agent | [docs/MCP.md](docs/MCP.md) |
 | Integrate with an OpenAI/API host | [docs/OPENAI_GPT.md](docs/OPENAI_GPT.md) |
 | Implement an adapter | [docs/PROTOCOL.md](docs/PROTOCOL.md) |
 
@@ -163,6 +164,7 @@ LLM task:
 | Hosted state playground for inspecting prompt prelude and state packets | [Hugging Face Space](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground) |
 | 5-minute reference loop for wiring Emotion Engine into an agent | [examples/minimal-agent](examples/minimal-agent) |
 | Coding-agent assisted local install | [INSTALL_WITH_AGENT.md](INSTALL_WITH_AGENT.md) |
+| Local stdio MCP server for runtime/protocol tools | [docs/MCP.md](docs/MCP.md) |
 | Core state engine checks and local tooling | [scripts](scripts) |
 | OpenClaw skill | [integrations/openclaw](integrations/openclaw) |
 | Claude Skill / Claude Code package | [integrations/claude-skill](integrations/claude-skill) |

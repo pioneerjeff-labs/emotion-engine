@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Added a zero-dependency local stdio MCP server for Emotion Engine runtime/protocol tools, with explicit boundaries that Agent Harness owns install refresh, doctor, repair, and sidecar drift checks.
+
 ## 0.2.1 - 2026-06-30
 
 - Hardened state persistence with state-file locking, atomic temp-file writes, fsync/replace, backup recovery for corrupt JSON reads, and locked CLI transactions for mutating commands.

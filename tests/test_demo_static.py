@@ -53,6 +53,16 @@ class DemoStaticTest(unittest.TestCase):
         self.assertIn("Do not send state to any remote service.", install_doc)
         self.assertIn("Show me a prompt preview before changing my app code.", install_doc)
 
+    def test_mcp_docs_preserve_runtime_boundary(self):
+        readme = (ROOT / "README.md").read_text(encoding="utf-8")
+        mcp_doc = (ROOT / "docs" / "MCP.md").read_text(encoding="utf-8")
+
+        self.assertIn("[docs/MCP.md](docs/MCP.md)", readme)
+        self.assertIn("local stdio MCP server", mcp_doc)
+        self.assertIn("runtime/protocol", mcp_doc)
+        self.assertIn("Target refresh, doctor checks, repair", mcp_doc)
+        self.assertIn("belong to Agent Harness", mcp_doc)
+
 
 if __name__ == "__main__":
     unittest.main()
