@@ -1,6 +1,7 @@
 import json
 import os
 import subprocess
+import sys
 import tempfile
 import unittest
 import zipfile
@@ -109,6 +110,7 @@ class CodexIntegrationTest(unittest.TestCase):
             self.assertTrue((installed / "SKILL.md").exists())
             self.assertTrue((installed / "scripts" / "codex_emotion.sh").exists())
             self.assertTrue((installed / "scripts" / "emotion_engine_utils.py").exists())
+            self.assertTrue((installed / "scripts" / "emotion_engine_mcp.py").exists())
             self.assertTrue((installed / "spec" / "emotion-state.schema.json").exists())
             self.assertTrue(state_file.exists())
 
@@ -122,6 +124,18 @@ class CodexIntegrationTest(unittest.TestCase):
                 check=True,
             ).stdout
             self.assertEqual(json.loads(raw_status)["_schema"], "emotion-engine-state/v2")
+
+            listed = subprocess.run(
+                [sys.executable, str(installed / "scripts" / "emotion_engine_mcp.py"), "--state", str(state_file)],
+                input=json.dumps({"jsonrpc": "2.0", "id": 1, "method": "tools/list"}) + "\n",
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            ).stdout
+            tool_names = {tool["name"] for tool in json.loads(listed)["result"]["tools"]}
+            self.assertIn("emotion_engine_record_policy", tool_names)
+            self.assertNotIn("emotion_engine_repair", tool_names)
 
     def test_installer_defaults_to_agents_skills_without_existing_codex_dir(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -211,6 +225,7 @@ class CodexIntegrationTest(unittest.TestCase):
             self.assertIn("emotion-engine-codex/scripts/codex_emotion.sh", names)
             self.assertIn("emotion-engine-codex/scripts/nora_demo.py", names)
             self.assertIn("emotion-engine-codex/scripts/emotion_engine_utils.py", names)
+            self.assertIn("emotion-engine-codex/scripts/emotion_engine_mcp.py", names)
             self.assertIn("emotion-engine-codex/spec/emotion-state.schema.json", names)
             self.assertIn("emotion-engine-codex/emotion-state-template.json", names)
             self.assertIn("emotion-engine-codex/LICENSE", names)

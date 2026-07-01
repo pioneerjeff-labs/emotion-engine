@@ -6,6 +6,7 @@ It contains:
 
 - `SKILL.md` for Codex skills.
 - `scripts/codex_emotion.sh`, a Codex wrapper that manages state path and initialization.
+- `scripts/emotion_engine_mcp.py`, a local stdio MCP server for runtime/protocol tools.
 - `scripts/nora_demo.py`, a prompt-packet demo for no-state/factual/low-trust/high-trust comparison.
 - `install.sh` for personal Codex installation.
 
@@ -63,6 +64,15 @@ Agent Harness installs `scripts/codex_emotion.sh` as a project-root wrapper. If 
 ```bash
 .codex/skills/emotion-engine-codex/scripts/codex_emotion.sh status
 ```
+
+For MCP-capable local clients, use the bundled stdio server and point it at the same state file:
+
+```bash
+python3 .codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py \
+  --state .emotion-engine/codex-state.json
+```
+
+The MCP server exposes runtime/protocol tools only. Agent Harness owns target refresh, doctor, repair, manifest checks, and sidecar projection drift checks.
 
 ## Project-Local State
 
