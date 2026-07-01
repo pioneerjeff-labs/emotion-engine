@@ -34,11 +34,22 @@ The server wraps the existing `scripts/emotion_engine_utils.py` state helpers. M
 python3 scripts/emotion_engine_mcp.py --state .emotion-engine/emotion-state.json
 ```
 
+For Codex/Agent Harness project installs, point the server at the same state file as the Codex wrapper:
+
+```bash
+python3 .codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py \
+  --state .emotion-engine/codex-state.json
+```
+
 If `--state` is omitted, the server resolves state in this order:
 
 1. tool argument `state_file`
-2. `EMOTION_ENGINE_STATE`
-3. `.emotion-engine/emotion-state.json` under `EMOTION_ENGINE_PROJECT_DIR` or the current directory
+2. `CODEX_EMOTION_STATE`
+3. `EMOTION_ENGINE_STATE`
+4. `.emotion-engine/codex-state.json` under `EMOTION_ENGINE_PROJECT_DIR` or the current directory when a Codex project marker is present
+5. `.emotion-engine/emotion-state.json` under `EMOTION_ENGINE_PROJECT_DIR` or the current directory
+
+Use an explicit `--state` in MCP client registration to avoid accidental state-file splits across clients.
 
 The server speaks JSON-RPC over stdin/stdout, as local MCP clients expect.
 

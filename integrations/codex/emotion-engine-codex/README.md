@@ -72,6 +72,8 @@ python3 .codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py \
   --state .emotion-engine/codex-state.json
 ```
 
+Use that exact `--state` in MCP client registration. The server also honors `CODEX_EMOTION_STATE` and will prefer `.emotion-engine/codex-state.json` inside a Codex project, but explicit registration is the safest way to avoid shell-wrapper and MCP state files diverging.
+
 The MCP server exposes runtime/protocol tools only. Agent Harness owns target refresh, doctor, repair, manifest checks, and sidecar projection drift checks.
 
 ## Project-Local State

@@ -29,10 +29,18 @@ class JsonRpcError(Exception):
 
 def resolve_state_file(arguments=None, default_state_file=None):
     arguments = arguments or {}
-    raw = arguments.get("state_file") or default_state_file or os.environ.get("EMOTION_ENGINE_STATE")
+    raw = (
+        arguments.get("state_file")
+        or default_state_file
+        or os.environ.get("CODEX_EMOTION_STATE")
+        or os.environ.get("EMOTION_ENGINE_STATE")
+    )
     if raw:
         return os.path.abspath(os.path.expanduser(os.fspath(raw)))
     project_dir = os.environ.get("EMOTION_ENGINE_PROJECT_DIR") or os.getcwd()
+    codex_state = os.path.join(project_dir, ".emotion-engine", "codex-state.json")
+    if os.path.exists(codex_state) or os.path.isdir(os.path.join(project_dir, ".codex")):
+        return os.path.abspath(codex_state)
     return os.path.abspath(os.path.join(project_dir, ".emotion-engine", "emotion-state.json"))
 
 
@@ -224,7 +232,8 @@ def tool_schema():
             "type": "string",
             "description": (
                 "Optional path to emotion-engine-state/v2 JSON. Defaults to --state, "
-                "EMOTION_ENGINE_STATE, or .emotion-engine/emotion-state.json."
+                "CODEX_EMOTION_STATE, EMOTION_ENGINE_STATE, Codex project state, "
+                "or .emotion-engine/emotion-state.json."
             ),
         }
     }

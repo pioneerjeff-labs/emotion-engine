@@ -1,5 +1,6 @@
 import importlib.util
 import json
+import os
 import sys
 import tempfile
 import unittest
@@ -15,6 +16,13 @@ sys.path.insert(0, str(SCRIPTS))
 spec = importlib.util.spec_from_file_location("emotion_engine_mcp", MCP_SERVER)
 emotion_engine_mcp = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(emotion_engine_mcp)
+
+
+def _restore_env(name, value):
+    if value is None:
+        os.environ.pop(name, None)
+    else:
+        os.environ[name] = value
 
 
 class EmotionEngineMcpTest(unittest.TestCase):
@@ -58,6 +66,44 @@ class EmotionEngineMcpTest(unittest.TestCase):
             self.assertEqual(content["policy"]["decision"], "record_turn")
             self.assertEqual(content["policy"]["reason"], "milestone_collaboration")
             self.assertFalse(state_file.exists())
+
+    def test_state_resolution_matches_codex_wrapper(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            root = Path(tmpdir)
+            env_state = root / "env" / "codex-state.json"
+            project = root / "project"
+            (project / ".codex").mkdir(parents=True)
+            old_cwd = Path.cwd()
+            old_codex_state = os.environ.get("CODEX_EMOTION_STATE")
+            old_engine_state = os.environ.get("EMOTION_ENGINE_STATE")
+            old_project_dir = os.environ.get("EMOTION_ENGINE_PROJECT_DIR")
+            try:
+                os.environ["CODEX_EMOTION_STATE"] = str(env_state)
+                os.environ["EMOTION_ENGINE_STATE"] = str(root / "engine-state.json")
+                self.assertEqual(
+                    os.path.realpath(emotion_engine_mcp.resolve_state_file()),
+                    os.path.realpath(env_state),
+                )
+
+                os.environ.pop("CODEX_EMOTION_STATE", None)
+                os.environ.pop("EMOTION_ENGINE_STATE", None)
+                os.environ["EMOTION_ENGINE_PROJECT_DIR"] = str(project)
+                self.assertEqual(
+                    os.path.realpath(emotion_engine_mcp.resolve_state_file()),
+                    os.path.realpath(project / ".emotion-engine" / "codex-state.json"),
+                )
+
+                os.environ.pop("EMOTION_ENGINE_PROJECT_DIR", None)
+                os.chdir(project)
+                self.assertEqual(
+                    os.path.realpath(emotion_engine_mcp.resolve_state_file()),
+                    os.path.realpath(project / ".emotion-engine" / "codex-state.json"),
+                )
+            finally:
+                os.chdir(old_cwd)
+                _restore_env("CODEX_EMOTION_STATE", old_codex_state)
+                _restore_env("EMOTION_ENGINE_STATE", old_engine_state)
+                _restore_env("EMOTION_ENGINE_PROJECT_DIR", old_project_dir)
 
     def test_record_turn_persists_with_existing_state_helpers(self):
         with tempfile.TemporaryDirectory() as tmpdir:
