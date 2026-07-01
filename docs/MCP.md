@@ -30,6 +30,8 @@ The server wraps the existing `scripts/emotion_engine_utils.py` state helpers. M
 
 ## Run Locally
 
+For a generic Emotion Engine project, use the normal local state file:
+
 ```bash
 python3 scripts/emotion_engine_mcp.py --state .emotion-engine/emotion-state.json
 ```
@@ -52,6 +54,68 @@ If `--state` is omitted, the server resolves state in this order:
 Use an explicit `--state` in MCP client registration to avoid accidental state-file splits across clients.
 
 The server speaks JSON-RPC over stdin/stdout, as local MCP clients expect.
+
+## MCP Client Registration
+
+Use absolute paths in client config when possible. Replace `/path/to/project` with your target project path and `/path/to/emotion-engine` with this repository checkout.
+
+For Codex or Agent Harness project installs, register the bundled server against the Codex state file:
+
+```bash
+codex mcp add emotion-engine -- \
+  python3 /path/to/project/.codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py \
+  --state /path/to/project/.emotion-engine/codex-state.json
+```
+
+Then verify:
+
+```bash
+codex mcp list
+```
+
+For Claude Code, add the same local stdio server:
+
+```bash
+claude mcp add --transport stdio emotion-engine -- \
+  python3 /path/to/project/.codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py \
+  --state /path/to/project/.emotion-engine/codex-state.json
+```
+
+For Claude Desktop or a checked-in `.mcp.json`, use the standard `mcpServers` shape:
+
+```json
+{
+  "mcpServers": {
+    "emotion-engine": {
+      "command": "python3",
+      "args": [
+        "/path/to/project/.codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py",
+        "--state",
+        "/path/to/project/.emotion-engine/codex-state.json"
+      ]
+    }
+  }
+}
+```
+
+If you are not using a Codex/Agent Harness project install, point the client at the repository script and a generic state file instead:
+
+```json
+{
+  "mcpServers": {
+    "emotion-engine": {
+      "command": "python3",
+      "args": [
+        "/path/to/emotion-engine/scripts/emotion_engine_mcp.py",
+        "--state",
+        "/path/to/project/.emotion-engine/emotion-state.json"
+      ]
+    }
+  }
+}
+```
+
+After changing MCP config, start a fresh client session or reload MCP servers so the native tool namespace is exposed. The server does not make MCP clients discover it automatically.
 
 ## Tools
 

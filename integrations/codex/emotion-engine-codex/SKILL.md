@@ -28,6 +28,14 @@ If the target only has this skill folder and no project wrapper, use:
 .codex/skills/emotion-engine-codex/scripts/codex_emotion.sh status
 ```
 
+MCP is optional. Use it when a local MCP-capable client should expose Emotion Engine as native tools instead of shell commands. Register the bundled stdio server with the same Codex state file used by the wrapper:
+
+```bash
+python3 .codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py --state .emotion-engine/codex-state.json
+```
+
+The MCP server exposes runtime/protocol tools only. Agent Harness owns install refresh, doctor, repair, manifest checks, and sidecar drift checks.
+
 The wrapper automatically initializes a state file if missing. State path priority:
 
 1. `CODEX_EMOTION_STATE` environment variable

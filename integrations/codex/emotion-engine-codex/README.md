@@ -33,10 +33,16 @@ and stores personal state in the matching local home:
 ~/.agents/emotion-engine/emotion-state.json
 ```
 
+When used through the project wrapper inside a Codex or Agent Harness target, state is project-local:
+
+```text
+./.emotion-engine/codex-state.json
+```
+
 Override state location with:
 
 ```bash
-export CODEX_EMOTION_STATE=/path/to/emotion-state.json
+export CODEX_EMOTION_STATE=/path/to/codex-state.json
 ```
 
 ## Use In Codex
@@ -59,17 +65,25 @@ scripts/codex_emotion.sh status
 scripts/codex_emotion.sh nora-demo --packet low --reply-prompt
 ```
 
-Agent Harness installs `scripts/codex_emotion.sh` as a project-root wrapper. If you only copied the skill folder manually, call the bundled script directly:
+Agent Harness installs `scripts/codex_emotion.sh` as a project-root wrapper. Use that wrapper for normal Codex skill flows: status, configure, tune, record policy, lifecycle commands, and local prompt demos. If you only copied the skill folder manually, call the bundled script directly:
 
 ```bash
 .codex/skills/emotion-engine-codex/scripts/codex_emotion.sh status
 ```
 
-For MCP-capable local clients, use the bundled stdio server and point it at the same state file:
+MCP is optional. Use it when a local MCP-capable client should expose Emotion Engine as native tools instead of shell commands. Point the bundled stdio server at the same state file:
 
 ```bash
 python3 .codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py \
   --state .emotion-engine/codex-state.json
+```
+
+For Codex CLI registration:
+
+```bash
+codex mcp add emotion-engine -- \
+  python3 /path/to/project/.codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py \
+  --state /path/to/project/.emotion-engine/codex-state.json
 ```
 
 Use that exact `--state` in MCP client registration. The server also honors `CODEX_EMOTION_STATE` and will prefer `.emotion-engine/codex-state.json` inside a Codex project, but explicit registration is the safest way to avoid shell-wrapper and MCP state files diverging.

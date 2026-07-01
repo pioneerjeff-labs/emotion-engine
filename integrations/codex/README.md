@@ -14,6 +14,7 @@ integrations/codex/
 │   ├── install.sh
 │   └── scripts/
 │       ├── codex_emotion.sh
+│       ├── emotion_engine_mcp.py
 │       └── nora_demo.py
 └── package_codex_skill.sh
 ```
@@ -33,12 +34,16 @@ The installer creates a user-level Codex skill, not a bundled/system skill. It u
 
 Personal state defaults to the matching local home: `~/.codex/emotion-engine/emotion-state.json` when `~/.codex` is active, or `~/.agents/emotion-engine/emotion-state.json` for the `~/.agents` fallback.
 
+Project-local Codex wrappers use `./.emotion-engine/codex-state.json`. Agent Harness targets use the same project-local state path.
+
 Override with:
 
 ```bash
 export CODEX_SKILLS_DIR=/path/to/codex/skills
-export CODEX_EMOTION_STATE=/path/to/emotion-state.json
+export CODEX_EMOTION_STATE=/path/to/codex-state.json
 ```
+
+For MCP-capable clients, register the bundled stdio server with an explicit state path. Codex/Agent Harness project targets should pass `--state .emotion-engine/codex-state.json`; see [../../docs/MCP.md](../../docs/MCP.md).
 
 ## Build Zip
 

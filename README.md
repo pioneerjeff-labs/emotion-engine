@@ -175,6 +175,8 @@ LLM task:
 The repository root is the Emotion Engine project. Platform-specific packages live under `integrations/`.
 The first-party starter integrations are OpenClaw, Claude Skill, Hermes Agent, and Codex. Codex ships as a user-installed skill package. GPT/API usage is documented as a host-side integration pattern because the host application owns persistence and model calls.
 
+For Codex or Agent Harness project targets, register MCP clients with an explicit `--state .emotion-engine/codex-state.json`; see [docs/MCP.md](docs/MCP.md).
+
 For the smallest concrete loop before choosing a platform package, see [examples/minimal-agent](examples/minimal-agent).
 
 ## Protocol And Adapter Boundary

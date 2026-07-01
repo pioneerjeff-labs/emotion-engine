@@ -3,6 +3,9 @@
 ## Unreleased
 
 - Added a zero-dependency local stdio MCP server for Emotion Engine runtime/protocol tools, with explicit boundaries that Agent Harness owns install refresh, doctor, repair, and sidecar drift checks.
+- Bundled the MCP server into the Codex skill package and documented using `--state .emotion-engine/codex-state.json` for Codex and Agent Harness project targets.
+- Added MCP client registration examples for Codex CLI, Claude Code, and Claude Desktop / `.mcp.json`.
+- Clarified that generic projects use `.emotion-engine/emotion-state.json`, while Codex and Agent Harness targets use `.emotion-engine/codex-state.json` so wrappers and MCP clients do not split state.
 
 ## 0.2.1 - 2026-06-30
 

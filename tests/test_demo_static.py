@@ -49,9 +49,11 @@ class DemoStaticTest(unittest.TestCase):
 
         self.assertIn("Install Emotion Engine into this project as a local state sidecar.", install_doc)
         self.assertIn("Use the minimal-agent example first.", install_doc)
-        self.assertIn("Keep state in .emotion-engine/emotion-state.json.", install_doc)
+        self.assertIn("For a generic app, keep state in .emotion-engine/emotion-state.json.", install_doc)
+        self.assertIn("For a Codex or Agent Harness project, use .emotion-engine/codex-state.json.", install_doc)
         self.assertIn("Do not send state to any remote service.", install_doc)
         self.assertIn("Show me a prompt preview before changing my app code.", install_doc)
+        self.assertIn("--state .emotion-engine/codex-state.json", install_doc)
 
     def test_mcp_docs_preserve_runtime_boundary(self):
         readme = (ROOT / "README.md").read_text(encoding="utf-8")
@@ -62,6 +64,11 @@ class DemoStaticTest(unittest.TestCase):
         self.assertIn("runtime/protocol", mcp_doc)
         self.assertIn("Target refresh, doctor checks, repair", mcp_doc)
         self.assertIn("belong to Agent Harness", mcp_doc)
+        self.assertIn("codex mcp add emotion-engine", mcp_doc)
+        self.assertIn("claude mcp add --transport stdio emotion-engine", mcp_doc)
+        self.assertIn("\"mcpServers\"", mcp_doc)
+        self.assertIn("--state", mcp_doc)
+        self.assertIn(".emotion-engine/codex-state.json", mcp_doc)
 
 
 if __name__ == "__main__":
