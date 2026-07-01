@@ -23,7 +23,8 @@ Show me a prompt preview before changing my app code.
    Use `.emotion-engine/codex-state.json` for a Codex or Agent Harness target.
 3. Run the local state flow before touching your app code.
 4. Show the prompt prelude or preview that your LLM would receive.
-5. If you register the MCP server, pass the same state path with `--state`.
+5. If you register the MCP server, prefer `python3 scripts/register_mcp_client.py ...`.
+   Otherwise pass the same state path with `--state`.
 6. Only then wire the state sidecar into your app's existing agent loop.
 
 The minimal-agent example does not require an API key or live LLM call. It demonstrates the load, preview, record, trust-settle, and save cycle locally.
@@ -46,6 +47,14 @@ If you use both the shell wrapper and an MCP client, point both at the same stat
 
 ```bash
 --state .emotion-engine/codex-state.json
+```
+
+The helper script can do this for local MCP clients:
+
+```bash
+python3 scripts/register_mcp_client.py codex --project-dir . --state-profile codex
+python3 scripts/register_mcp_client.py claude-code --project-dir . --state-profile codex
+python3 scripts/register_mcp_client.py mcp-json --project-dir . --state-profile codex
 ```
 
 Do not send the Emotion Engine state to a remote service by default. If your app later calls an LLM API, your host application decides what compact continuity guidance is included in the model prompt.

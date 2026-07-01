@@ -15,6 +15,7 @@ integrations/codex/
 │   └── scripts/
 │       ├── codex_emotion.sh
 │       ├── emotion_engine_mcp.py
+│       ├── register_mcp_client.py
 │       └── nora_demo.py
 └── package_codex_skill.sh
 ```
@@ -44,6 +45,14 @@ export CODEX_EMOTION_STATE=/path/to/codex-state.json
 ```
 
 For MCP-capable clients, register the bundled stdio server with an explicit state path. Codex/Agent Harness project targets should pass `--state .emotion-engine/codex-state.json`; see [../../docs/MCP.md](../../docs/MCP.md).
+
+The helper script can register Codex, Claude Code, or a project `.mcp.json`:
+
+```bash
+python3 scripts/register_mcp_client.py codex --project-dir /path/to/project --state-profile codex
+python3 scripts/register_mcp_client.py claude-code --project-dir /path/to/project --state-profile codex
+python3 scripts/register_mcp_client.py mcp-json --project-dir /path/to/project --state-profile codex
+```
 
 ## Build Zip
 

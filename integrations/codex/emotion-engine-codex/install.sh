@@ -27,6 +27,7 @@ PYTHON=${PYTHON:-python3}
 
 CORE_SCRIPT="$SCRIPT_DIR/scripts/emotion_engine_utils.py"
 MCP_SCRIPT="$SCRIPT_DIR/scripts/emotion_engine_mcp.py"
+REGISTER_SCRIPT="$SCRIPT_DIR/scripts/register_mcp_client.py"
 STATE_TEMPLATE="$SCRIPT_DIR/emotion-state-template.json"
 SCHEMA_FILE="$SCRIPT_DIR/spec/emotion-state.schema.json"
 LICENSE_FILE="$SCRIPT_DIR/LICENSE"
@@ -36,6 +37,9 @@ if [ ! -f "$CORE_SCRIPT" ]; then
 fi
 if [ ! -f "$MCP_SCRIPT" ]; then
   MCP_SCRIPT="$REPO_ROOT/scripts/emotion_engine_mcp.py"
+fi
+if [ ! -f "$REGISTER_SCRIPT" ]; then
+  REGISTER_SCRIPT="$REPO_ROOT/scripts/register_mcp_client.py"
 fi
 if [ ! -f "$STATE_TEMPLATE" ]; then
   STATE_TEMPLATE="$REPO_ROOT/emotion-state-template.json"
@@ -61,6 +65,9 @@ if [ "$SCRIPT_DIR" != "$DEST" ]; then
   if [ -f "$MCP_SCRIPT" ]; then
     cp "$MCP_SCRIPT" "$DEST/scripts/emotion_engine_mcp.py"
   fi
+  if [ -f "$REGISTER_SCRIPT" ]; then
+    cp "$REGISTER_SCRIPT" "$DEST/scripts/register_mcp_client.py"
+  fi
   cp "$STATE_TEMPLATE" "$DEST/emotion-state-template.json"
   if [ -f "$SCHEMA_FILE" ]; then
     cp "$SCHEMA_FILE" "$DEST/spec/emotion-state.schema.json"
@@ -73,6 +80,9 @@ fi
 chmod +x "$DEST/scripts/codex_emotion.sh" "$DEST/install.sh"
 if [ -f "$DEST/scripts/emotion_engine_mcp.py" ]; then
   chmod +x "$DEST/scripts/emotion_engine_mcp.py"
+fi
+if [ -f "$DEST/scripts/register_mcp_client.py" ]; then
+  chmod +x "$DEST/scripts/register_mcp_client.py"
 fi
 
 if [ ! -f "$STATE_FILE" ]; then

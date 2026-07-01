@@ -111,6 +111,7 @@ class CodexIntegrationTest(unittest.TestCase):
             self.assertTrue((installed / "scripts" / "codex_emotion.sh").exists())
             self.assertTrue((installed / "scripts" / "emotion_engine_utils.py").exists())
             self.assertTrue((installed / "scripts" / "emotion_engine_mcp.py").exists())
+            self.assertTrue((installed / "scripts" / "register_mcp_client.py").exists())
             self.assertTrue((installed / "spec" / "emotion-state.schema.json").exists())
             self.assertTrue(state_file.exists())
 
@@ -226,6 +227,7 @@ class CodexIntegrationTest(unittest.TestCase):
             self.assertIn("emotion-engine-codex/scripts/nora_demo.py", names)
             self.assertIn("emotion-engine-codex/scripts/emotion_engine_utils.py", names)
             self.assertIn("emotion-engine-codex/scripts/emotion_engine_mcp.py", names)
+            self.assertIn("emotion-engine-codex/scripts/register_mcp_client.py", names)
             self.assertIn("emotion-engine-codex/spec/emotion-state.schema.json", names)
             self.assertIn("emotion-engine-codex/emotion-state-template.json", names)
             self.assertIn("emotion-engine-codex/LICENSE", names)

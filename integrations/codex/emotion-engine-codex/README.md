@@ -7,6 +7,7 @@ It contains:
 - `SKILL.md` for Codex skills.
 - `scripts/codex_emotion.sh`, a Codex wrapper that manages state path and initialization.
 - `scripts/emotion_engine_mcp.py`, a local stdio MCP server for runtime/protocol tools.
+- `scripts/register_mcp_client.py`, a helper for Codex, Claude Code, and `.mcp.json` registration.
 - `scripts/nora_demo.py`, a prompt-packet demo for no-state/factual/low-trust/high-trust comparison.
 - `install.sh` for personal Codex installation.
 
@@ -76,6 +77,14 @@ MCP is optional. Use it when a local MCP-capable client should expose Emotion En
 ```bash
 python3 .codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py \
   --state .emotion-engine/codex-state.json
+```
+
+Or let the helper register it:
+
+```bash
+python3 .codex/skills/emotion-engine-codex/scripts/register_mcp_client.py codex \
+  --project-dir /path/to/project \
+  --state-profile codex
 ```
 
 For Codex CLI registration:

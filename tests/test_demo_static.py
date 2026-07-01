@@ -66,6 +66,7 @@ class DemoStaticTest(unittest.TestCase):
         self.assertIn("belong to Agent Harness", mcp_doc)
         self.assertIn("codex mcp add emotion-engine", mcp_doc)
         self.assertIn("claude mcp add --transport stdio emotion-engine", mcp_doc)
+        self.assertIn("scripts/register_mcp_client.py codex", mcp_doc)
         self.assertIn("\"mcpServers\"", mcp_doc)
         self.assertIn("--state", mcp_doc)
         self.assertIn(".emotion-engine/codex-state.json", mcp_doc)

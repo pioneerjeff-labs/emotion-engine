@@ -34,6 +34,12 @@ MCP is optional. Use it when a local MCP-capable client should expose Emotion En
 python3 .codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py --state .emotion-engine/codex-state.json
 ```
 
+For local client setup, prefer the registration helper:
+
+```bash
+python3 .codex/skills/emotion-engine-codex/scripts/register_mcp_client.py codex --project-dir . --state-profile codex
+```
+
 The MCP server exposes runtime/protocol tools only. Agent Harness owns install refresh, doctor, repair, manifest checks, and sidecar drift checks.
 
 The wrapper automatically initializes a state file if missing. State path priority:

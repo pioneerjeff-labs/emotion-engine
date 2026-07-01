@@ -59,6 +59,16 @@ The server speaks JSON-RPC over stdin/stdout, as local MCP clients expect.
 
 Use absolute paths in client config when possible. Replace `/path/to/project` with your target project path and `/path/to/emotion-engine` with this repository checkout.
 
+The helper script can register the local stdio server for common MCP clients:
+
+```bash
+python3 scripts/register_mcp_client.py codex --project-dir /path/to/project --state-profile codex
+python3 scripts/register_mcp_client.py claude-code --project-dir /path/to/project --state-profile codex
+python3 scripts/register_mcp_client.py mcp-json --project-dir /path/to/project --state-profile codex
+```
+
+Use `--dry-run` to preview the command or `.mcp.json` update first. Use `--state-profile generic` for non-Codex projects that should store state at `.emotion-engine/emotion-state.json`.
+
 For Codex or Agent Harness project installs, register the bundled server against the Codex state file:
 
 ```bash
