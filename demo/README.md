@@ -29,24 +29,18 @@ The demo reuses the repository-level logo assets from `../assets/`.
 
 The demo uses one shared composer to drive two chat tracks:
 
-- Without Emotion Engine: the baseline assistant replies from the visible conversation only.
-- With Emotion Engine: the assistant waits while the state layer updates what should carry forward.
-- Each chat track shows the runtime context at the top, so the difference is visible before any message is sent.
-- The v0.2 compare block shows `Mood only` as an internal ablation beside the default integrated `mood + affective_pulse` state package. It is not presenting mood-only as an installation option.
+- Without Emotion Engine: the baseline assistant replies from visible conversation, fact memory, and static prompt priors; those values do not update as the conversation unfolds.
+- With Emotion Engine: the same character receives a compact state packet with mood, trust, boundary signals, decay, and short-lived turn movement.
+- The lower panels use the same `Reply driver` structure, so the left and right sides answer the same question: static prompt priors or dynamic relationship state?
 
-Click Send to reveal one user turn in both tracks. The baseline side replies quickly. The Emotion Engine side waits while the state panel automatically shows the pre-reply work:
+Click Send to reveal one user turn in both tracks. The baseline side replies quickly. The Emotion Engine side waits briefly while the state layer reads the turn and updates the reply driver.
 
-1. turn captured
-2. tone appraised
-3. state persisted
+The state panel shows what Emotion Engine would make inspectable:
 
-The state panel shows what Emotion Engine would persist:
-
-- appraisal
-- PAD state
-- trust
-- tone guidance
-- compact emotional memory
+- interaction state
+- PAD and trust metrics
+- short-lived turn movement
+- reply guidance / compact emotional memory
 
 The core message:
 

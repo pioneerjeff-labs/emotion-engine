@@ -78,7 +78,7 @@ In short: **the LLM decides; Emotion Engine remembers.**
 
 ## Web Demo
 
-The best first look is the side-by-side web demo in [demo](demo). It compares a baseline assistant with one using an Emotion Engine state packet, so the difference is visible as a conversation unfolds. The demo also includes a small v0.2 compare block showing `Mood only` as an internal ablation against the default integrated `mood + affective_pulse` state package.
+The best first look is the side-by-side web demo in [demo](demo). It compares a baseline assistant with one using an Emotion Engine state packet, so the difference is visible as a conversation unfolds: ordinary memory drives closure, while Emotion Engine adds compact interaction state such as mood, trust, boundary signals, decay, and short-lived turn movement.
 
 <p align="center">
   <img src="demo/screenshot.png" alt="Emotion Engine web demo showing baseline memory beside Emotion Engine state" width="900">

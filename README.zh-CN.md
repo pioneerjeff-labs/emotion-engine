@@ -75,7 +75,7 @@ Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 
 
 ## 网页演示
 
-最适合作为第一眼介绍的是 [demo](demo) 里的并排网页演示。它会对比普通“逻辑记忆”助手和接入 Emotion Engine 状态包后的助手，让差异在一段对话里直接显出来。演示里也有一个小的 `v0.2 Compare` 区块，用 `Mood only` 作为内部 ablation，对比默认的 `mood + affective_pulse` 一体化状态包。
+最适合作为第一眼介绍的是 [demo](demo) 里的并排网页演示。它会对比普通“逻辑记忆”助手和接入 Emotion Engine 状态包后的助手，让差异在一段对话里直接显出来：普通记忆倾向于推动冲突闭环，Emotion Engine 额外保留 mood、trust、boundary signals、decay 和短期当轮波动等紧凑互动状态。
 
 <p align="center">
   <img src="demo/screenshot.zh-CN.png" alt="Emotion Engine 网页演示：左侧是普通记忆，右侧是情绪状态层" width="900">

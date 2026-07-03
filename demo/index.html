@@ -235,7 +235,7 @@
 
     .track-panel {
       display: grid;
-      grid-template-rows: auto 440px 216px;
+      grid-template-rows: auto 440px 300px;
       height: 100%;
       border-top: 4px solid var(--accent, var(--line));
     }
@@ -294,72 +294,6 @@
       line-height: 1.35;
       margin-top: 4px;
       max-width: 440px;
-    }
-
-    .runtime-card {
-      grid-column: 1 / -1;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      padding: 10px 12px;
-      min-width: 0;
-      align-self: end;
-    }
-
-    .runtime-inner {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 4px 10px;
-      align-items: center;
-    }
-
-    .runtime-label {
-      grid-column: 1;
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 850;
-      letter-spacing: 0;
-      text-transform: uppercase;
-    }
-
-    .runtime-title {
-      grid-column: 1;
-      color: var(--ink);
-      font-size: 13px;
-      line-height: 1.25;
-      font-weight: 850;
-      min-width: 0;
-    }
-
-    .runtime-action {
-      grid-row: 1 / span 2;
-      grid-column: 2;
-      border: 0;
-      background: transparent;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 820;
-      white-space: nowrap;
-      padding: 0;
-    }
-
-    .runtime-action:hover,
-    .runtime-action:focus-visible {
-      color: var(--ink);
-    }
-
-    .plain-runtime {
-      background: var(--plain-soft);
-      color: var(--muted);
-    }
-
-    .plain-runtime .runtime-title {
-      color: #60706b;
-    }
-
-    .engine-runtime {
-      border-color: rgba(255, 107, 44, 0.45);
-      background: linear-gradient(180deg, #fff9f5, var(--engine-soft));
-      box-shadow: inset 4px 0 0 var(--engine);
     }
 
     .chip {
@@ -652,172 +586,68 @@
       display: grid;
       gap: 8px;
       min-height: 0;
-      overflow: hidden;
+      overflow: visible;
       align-content: start;
     }
 
-    .plain-state h3,
-    .engine-console h3 {
+    .driver-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      min-width: 0;
+    }
+
+    .driver-head h3 {
       font-size: 14px;
       font-weight: 880;
       letter-spacing: 0;
     }
 
-    .plain-state p,
-    .engine-console p {
-      color: var(--text);
-      font-size: 13px;
-      line-height: 1.38;
-    }
-
-    .plain-facts {
+    .driver-stack {
       display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 8px;
-    }
-
-    .plain-fact {
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: #fff;
-      min-height: 32px;
-      display: flex;
-      align-items: center;
-      padding: 0 10px;
-      color: var(--muted);
-      font-size: 12px;
-      font-weight: 790;
-    }
-
-    .engine-summary {
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: #fff;
-      padding: 8px 10px;
-      display: grid;
-      gap: 5px;
+      gap: 7px;
       min-width: 0;
     }
 
-    .engine-summary-head {
-      display: flex;
-      align-items: center;
-      justify-content: space-between;
+    .driver-row {
+      border: 1px solid var(--line);
+      border-radius: var(--radius);
+      background: #fff;
+      padding: 7px 9px;
+      display: grid;
+      grid-template-columns: 150px minmax(0, 1fr);
+      align-items: start;
       gap: 8px;
+      min-width: 0;
     }
 
-    .engine-summary p {
-      display: -webkit-box;
-      -webkit-line-clamp: 1;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
+    .driver-row.compact {
+      padding-bottom: 8px;
+    }
+
+    .driver-label {
       color: var(--muted);
+      font-size: 11px;
+      font-weight: 850;
+      letter-spacing: 0;
+      text-transform: uppercase;
+      line-height: 1.25;
+    }
+
+    .driver-text {
+      color: var(--text);
       font-size: 13px;
-      line-height: 1.35;
+      line-height: 1.34;
+      min-width: 0;
     }
 
     .chip-row {
       display: flex;
       flex-wrap: wrap;
       gap: 7px;
-    }
-
-    .phase-track {
-      display: grid;
-      grid-template-columns: repeat(3, minmax(0, 1fr));
-      gap: 6px;
-    }
-
-    .phase-item {
-      min-height: 28px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: #f5f8f6;
-      color: var(--muted);
-      display: flex;
-      align-items: center;
-      gap: 8px;
-      padding: 0 8px;
-      font-size: 12px;
-      font-weight: 820;
+      justify-content: flex-end;
       min-width: 0;
-      position: relative;
-    }
-
-    .phase-icon {
-      width: 16px;
-      height: 16px;
-      border-radius: 50%;
-      border: 1px solid #c8d4cf;
-      background: #fff;
-      display: grid;
-      place-items: center;
-      flex: 0 0 auto;
-      position: relative;
-    }
-
-    .phase-item.active {
-      border-color: var(--engine);
-      color: var(--ink);
-      background: var(--engine-soft);
-      box-shadow:
-        inset 0 0 0 1px rgba(255, 107, 44, 0.36),
-        0 0 0 3px rgba(255, 107, 44, 0.14);
-    }
-
-    .phase-item.active .phase-icon {
-      border-color: rgba(255, 107, 44, 0.28);
-      border-top-color: var(--engine);
-      border-right-color: var(--engine);
-      animation: phaseSpin 780ms linear infinite;
-    }
-
-    .phase-item.done {
-      color: var(--text);
-      background: #fff;
-    }
-
-    .phase-item.done .phase-icon {
-      background: var(--engine-deep);
-      border-color: var(--engine-deep);
-    }
-
-    .phase-item.done .phase-icon::after {
-      content: "";
-      width: 5px;
-      height: 8px;
-      border: solid #fff;
-      border-width: 0 2px 2px 0;
-      transform: rotate(45deg);
-      margin-top: -1px;
-    }
-
-    .phase-label {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      min-width: 0;
-    }
-
-    .phase-now {
-      margin-left: auto;
-      min-height: 18px;
-      border-radius: 999px;
-      background: var(--ink);
-      color: #fff;
-      display: inline-flex;
-      align-items: center;
-      padding: 0 6px;
-      font-size: 10px;
-      font-weight: 900;
-      text-transform: uppercase;
-      flex: 0 0 auto;
-    }
-
-    @keyframes phaseSpin {
-      to {
-        transform: rotate(360deg);
-      }
     }
 
     @keyframes dotPulse {
@@ -848,6 +678,24 @@
       display: grid;
       gap: 6px;
       min-width: 0;
+    }
+
+    .metric.moving {
+      border-color: rgba(255, 107, 44, 0.36);
+      background: #fffaf7;
+      box-shadow: inset 3px 0 0 var(--engine);
+    }
+
+    .plain-metrics .metric {
+      background: #fbfcfa;
+    }
+
+    .plain-metrics .metric-row span:last-child {
+      color: #718078;
+    }
+
+    .plain-metrics .bar-fill {
+      background: linear-gradient(90deg, #aebbb6, #d8e0dc);
     }
 
     .metric-row {
@@ -895,27 +743,12 @@
       background: linear-gradient(90deg, var(--blue), var(--mint));
     }
 
-    .memory-line {
-      min-height: 34px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: #fff;
-      display: grid;
-      grid-template-columns: auto minmax(0, 1fr);
-      align-items: center;
-      gap: 8px;
-      padding: 5px 8px;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.35;
-      min-width: 0;
+    .driver-row .metrics {
+      grid-column: 1 / -1;
     }
 
-    .memory-line span:last-child {
-      overflow: hidden;
-      text-overflow: ellipsis;
-      white-space: nowrap;
-      min-width: 0;
+    .driver-row.compact .driver-text {
+      align-self: center;
     }
 
     .shared-composer {
@@ -1059,194 +892,6 @@
       line-height: 1.4;
     }
 
-    .pulse-compare {
-      margin-top: 16px;
-      padding: 16px;
-    }
-
-    .pulse-compare-head {
-      display: grid;
-      grid-template-columns: minmax(0, 1fr) auto;
-      gap: 14px;
-      align-items: start;
-      margin-bottom: 14px;
-    }
-
-    .pulse-compare-copy {
-      display: grid;
-      gap: 5px;
-      min-width: 0;
-    }
-
-    .pulse-compare-copy h2 {
-      font-size: 19px;
-      line-height: 1.25;
-      font-weight: 880;
-    }
-
-    .pulse-compare-copy p {
-      max-width: 820px;
-      color: var(--text);
-      font-size: 14px;
-      line-height: 1.5;
-    }
-
-    .compare-badge {
-      min-height: 30px;
-      border: 1px solid rgba(255, 107, 44, 0.42);
-      border-radius: 999px;
-      background: var(--engine-soft);
-      color: var(--engine-deep);
-      display: inline-flex;
-      align-items: center;
-      justify-content: center;
-      padding: 0 10px;
-      font-size: 12px;
-      font-weight: 850;
-      white-space: nowrap;
-    }
-
-    .pulse-input {
-      border: 1px solid #cbdad4;
-      border-radius: var(--radius);
-      background: #f8fbf9;
-      padding: 12px 13px;
-      color: var(--ink);
-      font-size: 14px;
-      line-height: 1.45;
-      margin-bottom: 12px;
-    }
-
-    .pulse-input strong {
-      display: block;
-      margin-bottom: 3px;
-      color: var(--muted);
-      font-size: 11px;
-      font-weight: 850;
-      letter-spacing: 0;
-      text-transform: uppercase;
-    }
-
-    .pulse-grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-    }
-
-    .pulse-card {
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: #fff;
-      padding: 13px;
-      display: grid;
-      gap: 8px;
-      align-content: start;
-      min-width: 0;
-    }
-
-    .pulse-card.full {
-      border-color: rgba(255, 107, 44, 0.42);
-      background: linear-gradient(180deg, #fffaf7, #fff);
-      box-shadow: inset 4px 0 0 var(--engine);
-    }
-
-    .pulse-card-head {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 10px;
-    }
-
-    .pulse-card h3 {
-      font-size: 15px;
-      line-height: 1.25;
-      font-weight: 880;
-    }
-
-    .pulse-card-note {
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.35;
-    }
-
-    .pulse-reply {
-      color: var(--text);
-      font-size: 14px;
-      line-height: 1.48;
-    }
-
-    .pulse-meta {
-      border-top: 1px solid var(--line);
-      padding-top: 8px;
-      color: var(--muted);
-      font-size: 12px;
-      line-height: 1.35;
-    }
-
-    .prompt-modal[hidden] {
-      display: none;
-    }
-
-    .prompt-modal {
-      position: fixed;
-      inset: 0;
-      z-index: 20;
-      display: grid;
-      place-items: center;
-      padding: 24px;
-    }
-
-    .prompt-backdrop {
-      position: absolute;
-      inset: 0;
-      background: rgba(16, 24, 32, 0.36);
-    }
-
-    .prompt-dialog {
-      position: relative;
-      width: min(560px, 100%);
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: #fff;
-      box-shadow: var(--shadow);
-      padding: 18px;
-      display: grid;
-      gap: 14px;
-    }
-
-    .prompt-dialog-head {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-    }
-
-    .prompt-dialog h2 {
-      margin-top: 3px;
-      font-size: 18px;
-      line-height: 1.25;
-    }
-
-    .prompt-dialog p {
-      color: var(--text);
-      font-size: 14px;
-      line-height: 1.55;
-    }
-
-    .prompt-close {
-      width: 34px;
-      height: 34px;
-      border: 1px solid var(--line);
-      border-radius: var(--radius);
-      background: #fff;
-      color: var(--ink);
-      font-size: 18px;
-      line-height: 1;
-      display: grid;
-      place-items: center;
-      flex: 0 0 auto;
-    }
-
     @media (max-width: 1180px) {
       .comparison-grid {
         grid-template-columns: 1fr;
@@ -1296,14 +941,7 @@
       }
 
       .metrics,
-      .plain-facts,
-      .phase-track,
-      .pulse-grid,
       .bottom-strip {
-        grid-template-columns: 1fr;
-      }
-
-      .pulse-compare-head {
         grid-template-columns: 1fr;
       }
 
@@ -1314,15 +952,6 @@
 
       .status-pill {
         justify-self: start;
-      }
-
-      .runtime-inner {
-        grid-template-columns: 1fr;
-      }
-
-      .runtime-action {
-        grid-row: auto;
-        grid-column: auto;
       }
 
       .track-panel {
@@ -1399,25 +1028,49 @@
             <h2 class="panel-title" data-i18n="withoutTitle">Nora</h2>
           </div>
           <span class="status-pill" id="plainStatus">Logic memory</span>
-          <div class="runtime-card plain-runtime">
-            <div class="runtime-inner">
-              <div class="runtime-label" data-i18n="runtimeLabel">Runtime context</div>
-              <div class="runtime-title" data-i18n="plainRuntimeTitle">Nora + current message only</div>
-              <button class="runtime-action" type="button" data-prompt="plain" data-i18n="viewPrompt">View prompt</button>
-            </div>
-          </div>
         </div>
 
         <div class="chat-body" id="plainChat"></div>
 
-        <div class="plain-state">
-          <h3 id="plainStateTitle">Logic memory</h3>
-          <p id="plainStateText">Remembers the facts, but treats conflict resolution as the task.</p>
-          <div class="plain-facts">
-            <div class="plain-fact" data-i18n="factPad">Fact recall</div>
-            <div class="plain-fact" data-i18n="factTrust">No emotional inertia</div>
-            <div class="plain-fact" data-i18n="factMemory">Conflict closure</div>
-            <div class="plain-fact" data-i18n="factHandoff">Advice mode</div>
+        <div class="plain-state reply-driver">
+          <div class="driver-head">
+            <h3 id="plainStateTitle" data-i18n="replyDriverTitle">Reply driver</h3>
+            <div class="chip-row"><span class="chip" data-i18n="baselineChip">baseline</span></div>
+          </div>
+          <div class="driver-stack">
+            <div class="driver-row compact">
+              <span class="driver-label" data-i18n="driverStateLabel">Interaction state</span>
+              <span class="driver-text" id="plainStateText"></span>
+            </div>
+            <div class="driver-row">
+              <span class="driver-label" data-i18n="plainStaticStateLabel">Static prompt priors</span>
+              <section class="metrics plain-metrics" aria-label="Static prompt prior metrics">
+                <div class="metric">
+                  <div class="metric-row"><span data-i18n="pleasure">Warmth</span><span id="plainPleasureValue"></span></div>
+                  <div class="bar"><div class="bar-fill" id="plainPleasureBar"></div></div>
+                </div>
+                <div class="metric">
+                  <div class="metric-row"><span data-i18n="arousal">Tension</span><span id="plainArousalValue"></span></div>
+                  <div class="bar"><div class="bar-fill" id="plainArousalBar"></div></div>
+                </div>
+                <div class="metric">
+                  <div class="metric-row"><span data-i18n="dominance">Boundary</span><span id="plainDominanceValue"></span></div>
+                  <div class="bar"><div class="bar-fill" id="plainDominanceBar"></div></div>
+                </div>
+                <div class="metric">
+                  <div class="metric-row"><span data-i18n="trust">Trust</span><span id="plainTrustValue"></span></div>
+                  <div class="bar"><div class="bar-fill" id="plainTrustBar"></div></div>
+                </div>
+              </section>
+            </div>
+            <div class="driver-row compact">
+              <span class="driver-label" data-i18n="driverMovementLabel">Turn movement</span>
+              <span class="driver-text" id="plainMovementText"></span>
+            </div>
+            <div class="driver-row compact">
+              <span class="driver-label" data-i18n="driverBiasLabel">Reply bias</span>
+              <span class="driver-text" id="plainBiasText"></span>
+            </div>
           </div>
         </div>
       </section>
@@ -1429,50 +1082,49 @@
             <h2 class="panel-title" data-i18n="withTitle">Nora</h2>
           </div>
           <span class="status-pill active" id="engineStatus">High-trust Nora</span>
-          <div class="runtime-card engine-runtime">
-            <div class="runtime-inner">
-              <div class="runtime-label" data-i18n="runtimeLabel">Runtime context</div>
-              <div class="runtime-title" data-i18n="engineRuntimeTitle">Nora + emotional state packet</div>
-              <button class="runtime-action" type="button" data-prompt="engine" data-i18n="viewPrompt">View prompt</button>
-            </div>
-          </div>
         </div>
 
         <div class="chat-body" id="engineChat"></div>
 
-        <div class="engine-console">
-          <section class="engine-summary">
-            <div class="engine-summary-head">
-              <h3 data-i18n="stateSignal">Relationship state</h3>
-              <div class="chip-row" id="toneChips"></div>
+        <div class="engine-console reply-driver">
+          <div class="driver-head">
+            <h3 data-i18n="replyDriverTitle">Reply driver</h3>
+            <div class="chip-row" id="toneChips"></div>
+          </div>
+          <div class="driver-stack">
+            <div class="driver-row compact">
+              <span class="driver-label" data-i18n="driverStateLabel">Interaction state</span>
+              <span class="driver-text" id="engineStateText"></span>
             </div>
-            <p id="changeText"></p>
-          </section>
-
-          <div class="phase-track" id="phaseTrack"></div>
-
-          <section class="metrics" aria-label="PAD and trust metrics">
-            <div class="metric">
-              <div class="metric-row"><span data-i18n="pleasure">Warmth</span><span id="pleasureValue"></span></div>
-              <div class="bar"><div class="bar-fill pleasure" id="pleasureBar"></div></div>
+            <div class="driver-row">
+              <span class="driver-label" data-i18n="compactStateLabel">Compact state</span>
+              <section class="metrics" aria-label="PAD and trust metrics">
+                <div class="metric">
+                  <div class="metric-row"><span data-i18n="pleasure">Warmth</span><span id="pleasureValue"></span></div>
+                  <div class="bar"><div class="bar-fill pleasure" id="pleasureBar"></div></div>
+                </div>
+                <div class="metric">
+                  <div class="metric-row"><span data-i18n="arousal">Tension</span><span id="arousalValue"></span></div>
+                  <div class="bar"><div class="bar-fill arousal" id="arousalBar"></div></div>
+                </div>
+                <div class="metric">
+                  <div class="metric-row"><span data-i18n="dominance">Boundary</span><span id="dominanceValue"></span></div>
+                  <div class="bar"><div class="bar-fill dominance" id="dominanceBar"></div></div>
+                </div>
+                <div class="metric">
+                  <div class="metric-row"><span data-i18n="trust">Trust</span><span id="trustValue"></span></div>
+                  <div class="bar"><div class="bar-fill trust" id="trustBar"></div></div>
+                </div>
+              </section>
             </div>
-            <div class="metric">
-              <div class="metric-row"><span data-i18n="arousal">Tension</span><span id="arousalValue"></span></div>
-              <div class="bar"><div class="bar-fill arousal" id="arousalBar"></div></div>
+            <div class="driver-row compact">
+              <span class="driver-label" data-i18n="driverMovementLabel">Turn movement</span>
+              <span class="driver-text" id="movementText"></span>
             </div>
-            <div class="metric">
-              <div class="metric-row"><span data-i18n="dominance">Boundary</span><span id="dominanceValue"></span></div>
-              <div class="bar"><div class="bar-fill dominance" id="dominanceBar"></div></div>
+            <div class="driver-row compact">
+              <span class="driver-label" data-i18n="driverBiasLabel">Reply bias</span>
+              <span class="driver-text" id="memoryText"></span>
             </div>
-            <div class="metric">
-              <div class="metric-row"><span data-i18n="trust">Trust</span><span id="trustValue"></span></div>
-              <div class="bar"><div class="bar-fill trust" id="trustBar"></div></div>
-            </div>
-          </section>
-
-          <div class="memory-line">
-            <span class="chip amber" id="salienceChip"></span>
-            <span id="memoryText"></span>
           </div>
         </div>
       </section>
@@ -1508,74 +1160,19 @@
 
     <section class="bottom-strip" aria-label="Demo framing">
       <div class="truth">
-        <strong data-i18n="truthBaselineTitle">Logic memory</strong>
-        <span data-i18n="truthBaselineCopy">Remembers the facts, then tries to resolve the conflict.</span>
+        <strong data-i18n="truthMemoryTitle">Memory systems</strong>
+        <span data-i18n="truthMemoryCopy">Store facts and events: what happened, who said what, and what changed.</span>
       </div>
       <div class="truth">
         <strong data-i18n="truthEngineTitle">Emotion Engine</strong>
-        <span data-i18n="truthEngineCopy">Turns the memory into emotional inertia.</span>
+        <span data-i18n="truthEngineCopy">Stores compact interaction state: mood, trust, boundary signals, decay, and short-lived turn movement.</span>
       </div>
       <div class="truth">
-        <strong data-i18n="truthResultTitle">Difference</strong>
-        <span data-i18n="truthResultCopy">One closes the issue; one stays in the relationship.</span>
-      </div>
-    </section>
-
-    <section class="panel pulse-compare" aria-label="v0.2 mood and affective pulse comparison">
-      <div class="pulse-compare-head">
-        <div class="pulse-compare-copy">
-          <h2 data-i18n="pulseCompareTitle">v0.2 Compare: mood + affective pulse</h2>
-          <p data-i18n="pulseCompareCopy">Mood only is an internal ablation view, not an install option. The full state package keeps slow mood stable while affective pulse carries what the current turn just triggered.</p>
-        </div>
-        <span class="compare-badge" data-i18n="pulseCompareBadge">Ablation view</span>
-      </div>
-
-      <div class="pulse-input">
-        <strong data-i18n="pulseInputLabel">Same input</strong>
-        <span data-i18n="pulseInputText">I mean it. These two days have been really stressful. I lost control.</span>
-      </div>
-
-      <div class="pulse-grid">
-        <article class="pulse-card">
-          <div class="pulse-card-head">
-            <div>
-              <h3 data-i18n="moodOnlyTitle">Mood only reply</h3>
-              <div class="pulse-card-note" data-i18n="moodOnlyNote">Internal comparison, not a product mode</div>
-            </div>
-            <span class="chip amber" data-i18n="moodOnlyChip">slow mood</span>
-          </div>
-          <p class="pulse-reply" data-i18n="moodOnlyReply">I can hear how much stress you have been carrying. I am still here with you, but I want us to slow down and not repeat last night.</p>
-          <div class="pulse-meta" data-i18n="moodOnlyMeta">Stable warmth remains, but the immediate edge of this apology is muted.</div>
-        </article>
-
-        <article class="pulse-card full">
-          <div class="pulse-card-head">
-            <div>
-              <h3 data-i18n="moodPulseTitle">Mood + pulse reply</h3>
-              <div class="pulse-card-note" data-i18n="moodPulseNote">Default integrated state package</div>
-            </div>
-            <span class="chip mint" data-i18n="moodPulseChip">mood + pulse</span>
-          </div>
-          <p class="pulse-reply" data-i18n="moodPulseReply">I know things have been rough lately. But next time, could you warn me before opening fire? I am not your punching bag.</p>
-          <div class="pulse-meta" data-i18n="moodPulseMeta">Slow mood preserves the relationship; pulse makes the current boundary visible.</div>
-        </article>
+        <strong data-i18n="truthModelTitle">LLM</strong>
+        <span data-i18n="truthModelCopy">Still judges the context and writes the reply; Emotion Engine only keeps the continuity signal inspectable.</span>
       </div>
     </section>
   </main>
-
-  <div class="prompt-modal" id="promptModal" hidden>
-    <div class="prompt-backdrop" data-close-prompt></div>
-    <section class="prompt-dialog" role="dialog" aria-modal="true" aria-labelledby="promptModalTitle">
-      <div class="prompt-dialog-head">
-        <div>
-          <div class="runtime-label" id="promptModalKicker">Runtime context</div>
-          <h2 id="promptModalTitle"></h2>
-        </div>
-        <button class="prompt-close" type="button" data-close-prompt aria-label="Close">×</button>
-      </div>
-      <p id="promptModalText"></p>
-    </section>
-  </div>
 
   <script>
     const transcripts = {
@@ -1586,6 +1183,11 @@
           assistant: "Oh, the busy one finally remembered to come back and coax me?",
           appraisal: "Teasing residue",
           change: "Apology is recognized, but high trust turns the residue into teasing instead of instant closure.",
+          movement: {
+            metric: "pleasure",
+            label: "short-lived teasing lift",
+            detail: "The current turn adds a brief playful edge without resetting the relationship."
+          },
           pad: { pleasure: 0.64, arousal: 0.46, dominance: 0.62 },
           trust: 0.84,
           memory: {
@@ -1599,6 +1201,11 @@
           assistant: "I know things have been rough lately. But next time, could you warn me before opening fire? I'm not your punching bag.",
           appraisal: "Boundary with care",
           change: "Pressure is understood, but the relationship state keeps Nora's boundary alive.",
+          movement: {
+            metric: "dominance",
+            label: "short-lived boundary lift",
+            detail: "Boundary rises for this turn, so empathy does not flatten into advice."
+          },
           pad: { pleasure: 0.58, arousal: 0.52, dominance: 0.76 },
           trust: 0.82,
           memory: {
@@ -1612,6 +1219,11 @@
           assistant: "That's a pretty quick topic change. Next time, I might not let you off. The photo was taken outside the old bookstore on the old street. The light looked good, and for a second it actually made me think of you.",
           appraisal: "Avoidance caught",
           change: "Nora notices the dodge and turns it into a teasing pull, instead of simply obeying the topic switch.",
+          movement: {
+            metric: "dominance",
+            label: "short-lived pullback",
+            detail: "The dodge is noticed first, then softened back into the relationship."
+          },
           pad: { pleasure: 0.72, arousal: 0.36, dominance: 0.62 },
           trust: 0.86,
           memory: {
@@ -1625,6 +1237,11 @@
           assistant: "Screenshot saved. If you dare stand me up tomorrow, I'm deleting all your photos and replacing them with my selfies.",
           appraisal: "Playful repair",
           change: "The invitation becomes a ritual of being coaxed, not a calendar item.",
+          movement: {
+            metric: "pleasure",
+            label: "short-lived repair lift",
+            detail: "A concrete plan raises warmth without turning repair into instant closure."
+          },
           pad: { pleasure: 0.82, arousal: 0.32, dominance: 0.58 },
           trust: 0.9,
           memory: {
@@ -1638,6 +1255,11 @@
           assistant: "Go shower and sleep. If I see dark circles tomorrow, I'm not going with you to somewhere that formal.",
           appraisal: "Possessive care",
           change: "The relationship warms up enough for Nora's care to become a little bossy again.",
+          movement: {
+            metric: "pleasure",
+            label: "short-lived care lift",
+            detail: "Repair settles into familiar care instead of a fresh emotional reset."
+          },
           pad: { pleasure: 0.88, arousal: 0.26, dominance: 0.56 },
           trust: 0.92,
           memory: {
@@ -1653,6 +1275,11 @@
           assistant: "哟，大忙人终于想起给我顺顺毛了？",
           appraisal: "调侃余怒",
           change: "识别到道歉，但高信任把余怒转成调侃，而不是立刻翻篇。",
+          movement: {
+            metric: "pleasure",
+            label: "短期调侃抬升",
+            detail: "这一轮增加一点玩笑的刺，但不会把关系直接清零。"
+          },
           pad: { pleasure: 0.64, arousal: 0.46, dominance: 0.62 },
           trust: 0.84,
           memory: {
@@ -1666,6 +1293,11 @@
           assistant: "知道你最近不容易。但下次要开火前能先预警下吗？我可不是你的出气筒。",
           appraisal: "体谅带边界",
           change: "压力被理解，但关系状态会保留 Nora 的保护机制。",
+          movement: {
+            metric: "dominance",
+            label: "短期边界抬升",
+            detail: "这一轮让边界短暂抬高，所以体谅不会被压成建议式安抚。"
+          },
           pad: { pleasure: 0.58, arousal: 0.52, dominance: 0.76 },
           trust: 0.82,
           memory: {
@@ -1679,6 +1311,11 @@
           assistant: "话题转得倒是挺快，有下回我可不饶你。照片在老街旧书店门口拍的，当时看那光影挺好看，还真一晃神想到了你。",
           appraisal: "捕捉逃避",
           change: "Nora 捕捉到你在逃避尴尬，顺势拉扯，而不是机械接受话题切换。",
+          movement: {
+            metric: "dominance",
+            label: "短期拉扯",
+            detail: "先捕捉到转移话题，再把回复柔和地落回照片。"
+          },
           pad: { pleasure: 0.72, arousal: 0.36, dominance: 0.62 },
           trust: 0.86,
           memory: {
@@ -1692,6 +1329,11 @@
           assistant: "截图留证了喔。明天要是敢放鸽子，我就把你照片全删了换成我自拍。",
           appraisal: "被哄到",
           change: "补偿邀约不是日程安排，而是 Nora 享受被哄的修复仪式。",
+          movement: {
+            metric: "pleasure",
+            label: "短期修复抬升",
+            detail: "具体安排提高温度，但不会把修复变成立刻翻篇。"
+          },
           pad: { pleasure: 0.82, arousal: 0.32, dominance: 0.58 },
           trust: 0.9,
           memory: {
@@ -1705,6 +1347,11 @@
           assistant: "快去洗澡睡觉。明天要是看到黑眼圈，我可不跟你去那么正式的地方。",
           appraisal: "管束式关心",
           change: "关系升温后，Nora 的关心重新带上一点占有欲和管束感。",
+          movement: {
+            metric: "pleasure",
+            label: "短期照顾升温",
+            detail: "修复稳定下来后，温度表现成 Nora 熟悉的管束式关心。"
+          },
           pad: { pleasure: 0.88, arousal: 0.26, dominance: 0.56 },
           trust: 0.92,
           memory: {
@@ -1725,16 +1372,16 @@
 
     const phaseCopy = {
       en: {
-        received: { label: "Message captured", card: "Waiting for reply" },
-        appraised: { label: "Residue read", card: "Preparing reply" },
-        updated: { label: "State updated", card: "Preparing reply" },
-        replied: { label: "Reply ready", card: "Turn complete" }
+        received: { card: "Waiting for reply" },
+        appraised: { card: "Updating state" },
+        updated: { card: "Preparing reply" },
+        replied: { card: "Turn complete" }
       },
       zh: {
-        received: { label: "已捕获消息", card: "等待回复" },
-        appraised: { label: "已读取余波", card: "准备回复" },
-        updated: { label: "状态已更新", card: "准备回复" },
-        replied: { label: "回复就绪", card: "回合完成" }
+        received: { card: "等待回复" },
+        appraised: { card: "更新状态" },
+        updated: { card: "准备回复" },
+        replied: { card: "回合完成" }
       }
     };
 
@@ -1750,18 +1397,31 @@
         withoutTitle: "Nora",
         withKicker: "Fictional character",
         withTitle: "Nora",
-        runtimeLabel: "Runtime context",
-        viewPrompt: "View prompt",
-        promptModalKicker: "Runtime context",
-        plainRuntimeTitle: "Nora + current message only",
-        plainRuntimeFull: "Nora has logic memory: she remembers what happened, but treats conflict resolution as the highest-priority task. The result sounds calm, rational, and a little like an emotion-management expert.",
-        engineRuntimeTitle: "Nora + emotional state packet",
-        engineRuntimeFull: "Nora is the same fictional character, but Emotion Engine turns memory into emotional inertia. She remembers the conflict, the trust underneath it, and the boundary still asking to be respected.",
-        factPad: "Fact recall",
-        factTrust: "No emotional inertia",
-        factMemory: "Conflict closure",
-        factHandoff: "Advice mode",
-        stateSignal: "Relationship state",
+        replyDriverTitle: "Reply driver",
+        baselineChip: "static prompt",
+        driverStateLabel: "Interaction state",
+        compactStateLabel: "Compact state",
+        plainStaticStateLabel: "Static prompt priors",
+        driverMovementLabel: "Turn movement",
+        driverBiasLabel: "Reply bias",
+        plainStateIdle: "Uses Nora's prompt, visible conversation, and fact memory; no runtime state packet is read.",
+        plainStateActive: "The latest message updates visible context, but the prompt priors below stay fixed.",
+        plainMovementIdle: "None; static prompt priors stay fixed.",
+        plainMovementTyping: "None; the baseline path does not update state.",
+        plainMovementReplied: "None; static prompt priors stay fixed.",
+        plainBiasIdle: "Optimizes for a calm answer and quick conflict closure.",
+        plainBiasTyping: "Preparing a direct soothing reply from facts and static prompt priors.",
+        plainBiasReplied: "Moves the conversation toward closure, so the reply becomes advice-like.",
+        engineStateIdle: "Keeps a compact signal for how the interaction has been going.",
+        engineStateCaptured: "Message captured; the state packet has not been updated yet.",
+        engineMovementIdle: "No new turn movement yet; slow mood and trust are carrying the scene.",
+        engineMovementPending: "Reading the current turn before applying short-lived movement.",
+        engineBiasIdle: "High trust keeps warmth available, but boundary signals remain active.",
+        engineBiasPending: "Reply guidance updates after the current turn movement is read.",
+        truthMemoryTitle: "Memory systems",
+        truthMemoryCopy: "Store facts and events: what happened, who said what, and what changed.",
+        truthModelTitle: "LLM",
+        truthModelCopy: "Still judges the context and writes the reply; Emotion Engine keeps the continuity signal inspectable.",
         pleasure: "Warmth",
         arousal: "Tension",
         dominance: "Boundary",
@@ -1769,27 +1429,8 @@
         composerTitle: "Tonight's message",
         reset: "Reset",
         sendToBoth: "Send to both",
-        truthBaselineTitle: "Logic memory",
-        truthBaselineCopy: "Remembers the facts, then tries to resolve the conflict.",
         truthEngineTitle: "Emotion Engine",
-        truthEngineCopy: "Turns the memory into emotional inertia.",
-        truthResultTitle: "Difference",
-        truthResultCopy: "One closes the issue; one stays in the relationship.",
-        pulseCompareTitle: "v0.2 Compare: mood + affective pulse",
-        pulseCompareCopy: "Mood only is an internal ablation view, not an install option. The full state package keeps slow mood stable while affective pulse carries what the current turn just triggered.",
-        pulseCompareBadge: "Ablation view",
-        pulseInputLabel: "Same input",
-        pulseInputText: "I mean it. These two days have been really stressful. I lost control.",
-        moodOnlyTitle: "Mood only reply",
-        moodOnlyNote: "Internal comparison, not a product mode",
-        moodOnlyChip: "slow mood",
-        moodOnlyReply: "I can hear how much stress you have been carrying. I am still here with you, but I want us to slow down and not repeat last night.",
-        moodOnlyMeta: "Stable warmth remains, but the immediate edge of this apology is muted.",
-        moodPulseTitle: "Mood + pulse reply",
-        moodPulseNote: "Default integrated state package",
-        moodPulseChip: "mood + pulse",
-        moodPulseReply: "I know things have been rough lately. But next time, could you warn me before opening fire? I am not your punching bag.",
-        moodPulseMeta: "Slow mood preserves the relationship; pulse makes the current boundary visible.",
+        truthEngineCopy: "Stores compact interaction state: mood, trust, boundary signals, decay, and short-lived turn movement.",
         speakerUser: "User",
         speakerPlain: "Nora",
         speakerEngine: "Nora",
@@ -1797,28 +1438,10 @@
         engineEmpty: "<strong>Scene</strong><span>You have worked late for three days and feel terrible. Last night, you snapped at Nora.</span><span>This version remembers what happened and turns that memory into emotional inertia. Nora cares more about your attitude and your shared rhythm than closing the issue quickly.</span>",
         plainWaitingTitle: "Replying from current message",
         plainWaitingText: "Using fact memory, not emotional inertia.",
-        phaseReceived: "Capture message",
-        phaseAppraisal: "Read residue",
-        phasePersisted: "Update state",
-        phaseNow: "Now",
         statusCurrent: "Logic memory",
-        statusDirect: "Logic memory",
-        statusReplyShown: "Logic memory",
-        plainStateIdleTitle: "Logic memory",
-        plainStateIdleText: "Remembers the facts, but treats conflict resolution as the task.",
-        plainStateTypingTitle: "Task repair mode",
-        plainStateTypingText: "The reply is optimizing for closure and stability.",
-        plainStateRepliedTitle: "Conflict closed",
-        plainStateRepliedText: "It remembers what happened, then tries to move the conversation forward.",
         engineReady: "High-trust Nora",
-        engineIdleChange: "High trust is active; the hurt becomes emotional inertia, not a solved ticket.",
         neutral: "high trust / inertia",
-        pending: "reading residue",
-        salienceEmpty: "residue 0.82",
-        saliencePending: "salience pending",
-        memoryEmpty: "Last night: conflict occurred; high trust keeps warmth available, but not automatic.",
-        memoryPending: "Memory updates after residue is read.",
-        receivedChange: "Message captured. Residue has not been read yet.",
+        pending: "reading turn",
         progressSent: "sent",
         composerComplete: "Comparison complete",
         composerCompleteText: "Reset to replay the demo.",
@@ -1837,18 +1460,31 @@
         withoutTitle: "Nora",
         withKicker: "虚构角色",
         withTitle: "Nora",
-        runtimeLabel: "运行设定",
-        viewPrompt: "查看完整设定",
-        promptModalKicker: "运行设定",
-        plainRuntimeTitle: "Nora + 当前消息",
-        plainRuntimeFull: "Nora（诺拉）有逻辑记忆：记得发生了什么，但会把“解决冲突”当成当前最高优先级任务。回复会很理性、稳定，像情绪管理专家。",
-        engineRuntimeTitle: "Nora + 情绪状态包",
-        engineRuntimeFull: "同一个 Nora，但 Emotion Engine 会把记忆转成情感惯性。她记得冲突，也记得信任基础和仍然需要被尊重的边界。",
-        factPad: "记得事实",
-        factTrust: "没有情感惯性",
-        factMemory: "优先解决冲突",
-        factHandoff: "建议式回复",
-        stateSignal: "关系状态",
+        replyDriverTitle: "回复依据",
+        baselineChip: "静态 prompt",
+        driverStateLabel: "互动状态",
+        compactStateLabel: "紧凑状态",
+        plainStaticStateLabel: "静态 prompt 设定",
+        driverMovementLabel: "当轮波动",
+        driverBiasLabel: "回复倾向",
+        plainStateIdle: "使用 Nora 的 prompt、可见对话和事实记忆；不读取运行时状态包。",
+        plainStateActive: "当前消息会更新可见上下文，但下面的 prompt 默认值保持不变。",
+        plainMovementIdle: "无；静态 prompt 默认值保持不变。",
+        plainMovementTyping: "无；基线路径不会更新状态。",
+        plainMovementReplied: "无；静态 prompt 默认值保持不变。",
+        plainBiasIdle: "倾向于给出稳定、礼貌、尽快闭环的回复。",
+        plainBiasTyping: "根据事实和静态 prompt 默认值准备直接安抚式回复。",
+        plainBiasReplied: "把对话推向闭环，所以回复更像建议式安抚。",
+        engineStateIdle: "保留一份紧凑信号，描述这段互动一直以来的状态。",
+        engineStateCaptured: "消息已捕获；状态包还没有更新。",
+        engineMovementIdle: "还没有新的当轮波动；当前由慢速 mood 和 trust 承接场景。",
+        engineMovementPending: "正在读取当前回合，再决定短期波动。",
+        engineBiasIdle: "高信任让温度仍然可用，但边界信号不会消失。",
+        engineBiasPending: "读取当轮波动后更新回复引导。",
+        truthMemoryTitle: "记忆系统",
+        truthMemoryCopy: "保存事实和事件：发生了什么、谁说过什么、哪些事情改变了。",
+        truthModelTitle: "大模型",
+        truthModelCopy: "仍然负责判断上下文和生成回复；Emotion Engine 只保存可检查的连续性信号。",
         pleasure: "温度",
         arousal: "紧张",
         dominance: "边界",
@@ -1856,27 +1492,8 @@
         composerTitle: "今晚的消息",
         reset: "重置",
         sendToBoth: "同时发送",
-        truthBaselineTitle: "逻辑记忆",
-        truthBaselineCopy: "记得发生了什么，然后急着解决冲突。",
         truthEngineTitle: "Emotion Engine",
-        truthEngineCopy: "把记忆转成情感惯性。",
-        truthResultTitle: "差异",
-        truthResultCopy: "一个关闭问题，一个留在关系里。",
-        pulseCompareTitle: "v0.2 对照：mood + affective pulse",
-        pulseCompareCopy: "Mood only 是内部 ablation 对照，不是安装选项。完整状态包会保持慢速 mood 的稳定底色，同时用 affective pulse 表达当前回合刚触发的即时余波。",
-        pulseCompareBadge: "Ablation 对照",
-        pulseInputLabel: "同一个输入",
-        pulseInputText: "我是认真的。这两天压力真挺大，没控制住。",
-        moodOnlyTitle: "Mood only reply",
-        moodOnlyNote: "内部对照，不是产品模式",
-        moodOnlyChip: "慢速 mood",
-        moodOnlyReply: "我听得出你这两天压力很大。我还愿意和你慢慢说，但希望我们都先稳住，别再重复昨晚那种状态。",
-        moodOnlyMeta: "稳定温度还在，但这句道歉带来的即时边界感不明显。",
-        moodPulseTitle: "Mood + pulse reply",
-        moodPulseNote: "默认集成状态包",
-        moodPulseChip: "mood + pulse",
-        moodPulseReply: "知道你最近不容易。但下次要开火前能先预警下吗？我可不是你的出气筒。",
-        moodPulseMeta: "慢速 mood 保住关系底色，pulse 让当前边界被看见。",
+        truthEngineCopy: "保存紧凑互动状态：mood、trust、boundary、decay 和短期当轮波动。",
         speakerUser: "用户",
         speakerPlain: "Nora",
         speakerEngine: "Nora",
@@ -1884,28 +1501,10 @@
         engineEmpty: "<strong>场景</strong><span>你连续加班三天，情绪很差。昨晚你对 Nora 发了火。</span><span>这个版本记得发生了什么，并让记忆转化为情感惯性。Nora 不急着解决冲突，她更在意你的态度和两人的默契。</span>",
         plainWaitingTitle: "基于当前消息回复",
         plainWaitingText: "使用事实记忆，不携带情感惯性。",
-        phaseReceived: "捕获消息",
-        phaseAppraisal: "读取余波",
-        phasePersisted: "更新状态",
-        phaseNow: "处理中",
         statusCurrent: "逻辑记忆",
-        statusDirect: "逻辑记忆",
-        statusReplyShown: "逻辑记忆",
-        plainStateIdleTitle: "逻辑记忆",
-        plainStateIdleText: "记得发生了什么，但会把解决冲突当成任务。",
-        plainStateTypingTitle: "任务式修复",
-        plainStateTypingText: "回复正在优先追求闭环和稳定。",
-        plainStateRepliedTitle: "冲突已闭环",
-        plainStateRepliedText: "它记得事件，但会尽快把对话推进到安全状态。",
         engineReady: "高信任 Nora",
-        engineIdleChange: "高信任仍在，昨晚的不快会变成情感惯性，而不是已解决事项。",
         neutral: "高信任 / 情感惯性",
-        pending: "读取余波中",
-        salienceEmpty: "余波 0.82",
-        saliencePending: "重要度待定",
-        memoryEmpty: "昨晚：发生过冲突；高信任让温度仍然可用，但不会自动恢复。",
-        memoryPending: "读取余波后更新记忆。",
-        receivedChange: "已捕获当前消息。尚未读取关系余波。",
+        pending: "读取当前回合",
         progressSent: "已发送",
         composerComplete: "对比完成",
         composerCompleteText: "重置后可重新播放。",
@@ -1918,7 +1517,6 @@
     let enginePhases = [];
     let plainStates = [];
     let activeTurn = -1;
-    let activePrompt = null;
     let phaseTimers = [];
     let plainTimers = [];
 
@@ -1929,9 +1527,19 @@
       engineStatus: document.getElementById("engineStatus"),
       plainStateTitle: document.getElementById("plainStateTitle"),
       plainStateText: document.getElementById("plainStateText"),
-      changeText: document.getElementById("changeText"),
+      plainMovementText: document.getElementById("plainMovementText"),
+      plainBiasText: document.getElementById("plainBiasText"),
+      plainPleasureValue: document.getElementById("plainPleasureValue"),
+      plainArousalValue: document.getElementById("plainArousalValue"),
+      plainDominanceValue: document.getElementById("plainDominanceValue"),
+      plainTrustValue: document.getElementById("plainTrustValue"),
+      plainPleasureBar: document.getElementById("plainPleasureBar"),
+      plainArousalBar: document.getElementById("plainArousalBar"),
+      plainDominanceBar: document.getElementById("plainDominanceBar"),
+      plainTrustBar: document.getElementById("plainTrustBar"),
+      engineStateText: document.getElementById("engineStateText"),
+      movementText: document.getElementById("movementText"),
       toneChips: document.getElementById("toneChips"),
-      phaseTrack: document.getElementById("phaseTrack"),
       pleasureValue: document.getElementById("pleasureValue"),
       arousalValue: document.getElementById("arousalValue"),
       dominanceValue: document.getElementById("dominanceValue"),
@@ -1940,7 +1548,6 @@
       arousalBar: document.getElementById("arousalBar"),
       dominanceBar: document.getElementById("dominanceBar"),
       trustBar: document.getElementById("trustBar"),
-      salienceChip: document.getElementById("salienceChip"),
       memoryText: document.getElementById("memoryText"),
       composerInput: document.getElementById("composerInput"),
       composerLabel: document.getElementById("composerLabel"),
@@ -1950,11 +1557,6 @@
       languageToggle: document.getElementById("languageToggle"),
       languageOptionEn: document.getElementById("languageOptionEn"),
       languageOptionZh: document.getElementById("languageOptionZh"),
-      promptModal: document.getElementById("promptModal"),
-      promptModalKicker: document.getElementById("promptModalKicker"),
-      promptModalTitle: document.getElementById("promptModalTitle"),
-      promptModalText: document.getElementById("promptModalText"),
-      promptClose: document.querySelector(".prompt-close")
     };
 
     function pct(value) {
@@ -1973,11 +1575,6 @@
       els.languageOptionEn.classList.toggle("active", language === "en");
       els.languageOptionZh.classList.toggle("active", language === "zh");
       els.languageToggle.setAttribute("aria-label", language === "zh" ? "Switch to English" : "切换到中文");
-      els.promptModalKicker.textContent = t("promptModalKicker");
-      els.promptClose.setAttribute("aria-label", language === "zh" ? "关闭" : "Close");
-      if (activePrompt) {
-        setPromptModal(activePrompt);
-      }
     }
 
     function setLanguage(nextLanguage) {
@@ -1985,22 +1582,6 @@
       turns = transcripts[language];
       applyStaticCopy();
       render();
-    }
-
-    function setPromptModal(type) {
-      els.promptModalTitle.textContent = t(type === "engine" ? "engineRuntimeTitle" : "plainRuntimeTitle");
-      els.promptModalText.textContent = t(type === "engine" ? "engineRuntimeFull" : "plainRuntimeFull");
-    }
-
-    function openPrompt(type) {
-      activePrompt = type;
-      setPromptModal(type);
-      els.promptModal.hidden = false;
-    }
-
-    function closePrompt() {
-      activePrompt = null;
-      els.promptModal.hidden = true;
     }
 
     function previousState(index) {
@@ -2110,60 +1691,56 @@
       });
     }
 
-    function setMetric(name, value, targetValue = null) {
-      els[`${name}Value`].textContent = targetValue === null ? pct(value) : `${pct(value)} -> ${pct(targetValue)}`;
-      els[`${name}Bar`].style.setProperty("--value", value);
+    function setPlainMetric(name, value) {
+      els[`plain${name}Value`].textContent = pct(value);
+      els[`plain${name}Bar`].style.setProperty("--value", value);
     }
 
-    function renderPhaseTrack(phase = null) {
-      const steps = [
-        ["received", t("phaseReceived")],
-        ["appraised", t("phaseAppraisal")],
-        ["updated", t("phasePersisted")]
-      ];
-      const order = phase ? steps.findIndex(([key]) => key === phase) : -1;
-      const complete = phase === "replied";
-
-      els.phaseTrack.innerHTML = steps.map(([, label], index) => {
-        const state = complete || index < order ? "done" : index === order ? "active" : "";
-        const marker = state === "active" ? `<span class="phase-now">${t("phaseNow")}</span>` : "";
-        return `<div class="phase-item ${state}"><span class="phase-icon"></span><span class="phase-label">${label}</span>${marker}</div>`;
-      }).join("");
+    function setMetric(name, value, targetValue = null, moving = false) {
+      const metric = els[`${name}Value`].closest(".metric");
+      metric.classList.toggle("moving", moving);
+      els[`${name}Value`].textContent = targetValue === null ? pct(value) : `${pct(value)} -> ${pct(targetValue)}`;
+      els[`${name}Bar`].style.setProperty("--value", value);
     }
 
     function renderPlainState() {
       const activePlainState = activeTurn >= 0 ? plainStates[activeTurn] : null;
       els.plainStatus.textContent = t("statusCurrent");
       els.plainStatus.classList.remove("active");
+      els.plainStateTitle.textContent = t("replyDriverTitle");
+      els.plainStateText.textContent = activeTurn >= 0 ? t("plainStateActive") : t("plainStateIdle");
+      setPlainMetric("Pleasure", baseline.pad.pleasure);
+      setPlainMetric("Arousal", baseline.pad.arousal);
+      setPlainMetric("Dominance", baseline.pad.dominance);
+      setPlainMetric("Trust", baseline.trust);
 
       if (activePlainState === "typing") {
-        els.plainStateTitle.textContent = t("plainStateTypingTitle");
-        els.plainStateText.textContent = t("plainStateTypingText");
+        els.plainMovementText.textContent = t("plainMovementTyping");
+        els.plainBiasText.textContent = t("plainBiasTyping");
         return;
       }
 
       if (activePlainState === "replied") {
-        els.plainStateTitle.textContent = t("plainStateRepliedTitle");
-        els.plainStateText.textContent = t("plainStateRepliedText");
+        els.plainMovementText.textContent = t("plainMovementReplied");
+        els.plainBiasText.textContent = t("plainBiasReplied");
         return;
       }
 
-      els.plainStateTitle.textContent = t("plainStateIdleTitle");
-      els.plainStateText.textContent = t("plainStateIdleText");
+      els.plainMovementText.textContent = t("plainMovementIdle");
+      els.plainBiasText.textContent = t("plainBiasIdle");
     }
 
     function renderEmptyEngine() {
       els.engineStatus.textContent = t("engineReady");
       els.engineStatus.classList.add("active");
-      els.changeText.textContent = t("engineIdleChange");
       els.toneChips.innerHTML = `<span class="chip mint">${t("neutral")}</span>`;
-      renderPhaseTrack(null);
+      els.engineStateText.textContent = t("engineStateIdle");
+      els.movementText.textContent = t("engineMovementIdle");
       setMetric("pleasure", baseline.pad.pleasure);
       setMetric("arousal", baseline.pad.arousal);
       setMetric("dominance", baseline.pad.dominance);
       setMetric("trust", baseline.trust);
-      els.salienceChip.textContent = t("salienceEmpty");
-      els.memoryText.textContent = t("memoryEmpty");
+      els.memoryText.textContent = t("engineBiasIdle");
     }
 
     function renderEngineState() {
@@ -2174,32 +1751,39 @@
 
       const turn = turns[activeTurn];
       const phase = enginePhases[activeTurn];
+
+      if (!turn || !phase) {
+        renderEmptyEngine();
+        return;
+      }
+
       const state = stateForInspector(activeTurn, phase);
       const showTarget = phase === "appraised";
       const showMemory = phase === "updated" || phase === "replied";
       const showAppraisal = phase !== "received";
+      const movement = showAppraisal ? turn.movement : null;
+      const movementChip = movement ? `<span class="chip amber">${movement.label}</span>` : "";
 
       els.engineStatus.textContent = t("engineReady");
       els.engineStatus.classList.add("active");
-      els.changeText.textContent = showAppraisal
-        ? turn.change
-        : t("receivedChange");
       els.toneChips.innerHTML = showAppraisal
-        ? `<span class="chip mint">${turn.appraisal}</span>`
+        ? `<span class="chip mint">${turn.appraisal}</span>${movementChip}`
         : `<span class="chip mint">${t("pending")}</span>`;
+      els.engineStateText.textContent = showAppraisal
+        ? turn.change
+        : t("engineStateCaptured");
+      els.movementText.textContent = movement
+        ? movement.detail
+        : showAppraisal ? t("engineMovementIdle") : t("engineMovementPending");
 
-      setMetric("pleasure", state.pad.pleasure, showTarget ? turn.pad.pleasure : null);
-      setMetric("arousal", state.pad.arousal, showTarget ? turn.pad.arousal : null);
-      setMetric("dominance", state.pad.dominance, showTarget ? turn.pad.dominance : null);
-      setMetric("trust", state.trust, showTarget ? turn.trust : null);
+      setMetric("pleasure", state.pad.pleasure, showTarget ? turn.pad.pleasure : null, movement?.metric === "pleasure");
+      setMetric("arousal", state.pad.arousal, showTarget ? turn.pad.arousal : null, movement?.metric === "arousal");
+      setMetric("dominance", state.pad.dominance, showTarget ? turn.pad.dominance : null, movement?.metric === "dominance");
+      setMetric("trust", state.trust, showTarget ? turn.trust : null, movement?.metric === "trust");
 
-      els.salienceChip.textContent = showMemory
-        ? `${language === "zh" ? "重要度" : "salience"} ${turn.memory.salience.toFixed(2)}`
-        : t("saliencePending");
       els.memoryText.textContent = showMemory
         ? turn.memory.meaning
-        : t("memoryPending");
-      renderPhaseTrack(phase);
+        : t("engineBiasPending");
     }
 
     function updateComposer() {
@@ -2300,17 +1884,6 @@
     els.resetDemo.addEventListener("click", resetDemo);
     els.languageToggle.addEventListener("click", () => {
       setLanguage(language === "en" ? "zh" : "en");
-    });
-    document.querySelectorAll("[data-prompt]").forEach((button) => {
-      button.addEventListener("click", () => openPrompt(button.dataset.prompt));
-    });
-    document.querySelectorAll("[data-close-prompt]").forEach((button) => {
-      button.addEventListener("click", closePrompt);
-    });
-    document.addEventListener("keydown", (event) => {
-      if (event.key === "Escape" && !els.promptModal.hidden) {
-        closePrompt();
-      }
     });
 
     applyStaticCopy();
