@@ -63,8 +63,12 @@ scripts/codex_emotion.sh configure --style "warm but not over-compliant"
 scripts/codex_emotion.sh tune "calmer"
 scripts/codex_emotion.sh pause
 scripts/codex_emotion.sh status
+scripts/codex_emotion.sh audit_log
+scripts/codex_emotion.sh compact_log --dry-run
 scripts/codex_emotion.sh nora-demo --packet low --reply-prompt
 ```
+
+For long-running `always` mode agents, use `audit_log` to inspect retention pressure and `compact_log --dry-run` before applying safe low-value compaction with `compact_log --apply`. These commands govern Emotion Engine's compact continuity state only; factual memory routing belongs to the host runtime.
 
 Agent Harness installs `scripts/codex_emotion.sh` as a project-root wrapper. Use that wrapper for normal Codex skill flows: status, configure, tune, record policy, lifecycle commands, and local prompt demos. If you only copied the skill folder manually, call the bundled script directly:
 

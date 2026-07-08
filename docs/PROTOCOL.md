@@ -40,6 +40,8 @@ Emotion Engine separates compact numeric state from the explanation for that sta
 - `trust_history` is a numeric ledger for applied trust changes.
 - `emotion_log` is the explanation layer for both PAD and trust changes.
 
+`emotion_log` is not a factual memory store. It should carry compact continuity evidence such as repair, boundary pressure, relationship calibration, concrete feedback, affective movement, open loops, and high-salience session events. Ordinary facts, task state, documents, vector indexes, todo systems, and durable user profiles belong to the host runtime or adapter. Emotion Engine may expose retention diagnostics or host-facing routing hints, but it does not prescribe where factual memory is stored.
+
 Do not move semantic reasons into `trust_history`. If trust changes because of repair, collaboration, hostility, boundary pressure, or any other relational evidence, keep that reason in the surrounding `emotion_log` entries and session patterns. `trust_history` should record only the applied numeric effect: `old`, `new`, `raw_delta`, and `effective_delta`.
 
 Similarly, do not treat PAD numbers as self-explanatory. The reason a PAD state changed belongs in `emotion_log` through fields such as `situation`, `appraisal`, `relational_meaning`, `impact`, `before`, `after`, `delta`, `tags`, and optional `source_refs`.
@@ -55,6 +57,7 @@ Readers and writers should follow these rules:
 - Ignore unknown top-level fields so optional extensions can be added safely.
 - Treat missing known fields as defaultable. The Python helper fills missing fields through `ensure_state_shape`.
 - Do not store full private transcripts in `emotion_log`.
+- Keep low-value lifecycle noise out of `emotion_log`; routine in-session drift and ordinary neutral turns should be suppressed or compacted when they do not carry durable emotional continuity.
 - Do not treat deterministic `appraise` output as final emotional truth.
 - Do not use trust or emotion values for consequential decisions about real people.
 

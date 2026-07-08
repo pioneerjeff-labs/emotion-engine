@@ -40,6 +40,8 @@ class EmotionEngineMcpTest(unittest.TestCase):
         self.assertIn("emotion_engine_record_policy", tool_names)
         self.assertIn("emotion_engine_record_turn", tool_names)
         self.assertIn("emotion_engine_settle_trust", tool_names)
+        self.assertIn("emotion_engine_audit_log", tool_names)
+        self.assertIn("emotion_engine_compact_log", tool_names)
         self.assertNotIn("emotion_engine_doctor", tool_names)
         self.assertNotIn("emotion_engine_repair", tool_names)
 
@@ -161,6 +163,39 @@ class EmotionEngineMcpTest(unittest.TestCase):
             self.assertEqual(summary["recent_memories"][-1]["appraisal"], "collaboration")
             self.assertNotIn("emotion", summary)
             self.assertNotIn("trust", summary)
+
+    def test_audit_and_compact_log_tools(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            for _ in range(3):
+                emotion_engine_mcp.call_tool("emotion_engine_pre_turn_decay", {"state_file": str(state_file)})
+            emotion_engine_mcp.call_tool(
+                "emotion_engine_record_turn",
+                {
+                    "state_file": str(state_file),
+                    "pleasure": 0.0,
+                    "arousal": 0.3,
+                    "dominance": 0.5,
+                    "appraisal": "neutral",
+                    "situation": "ordinary neutral turn",
+                    "salience": 0.04,
+                },
+            )
+
+            audit = emotion_engine_mcp.call_tool("emotion_engine_audit_log", {"state_file": str(state_file)})["audit"]
+            self.assertIn("log_entries", audit)
+            before = json.loads(state_file.read_text(encoding="utf-8"))
+
+            dry_run = emotion_engine_mcp.call_tool("emotion_engine_compact_log", {"state_file": str(state_file)})
+            self.assertFalse(dry_run["report"]["applied"])
+            self.assertEqual(json.loads(state_file.read_text(encoding="utf-8")), before)
+
+            applied = emotion_engine_mcp.call_tool(
+                "emotion_engine_compact_log",
+                {"state_file": str(state_file), "apply": True},
+            )
+            self.assertTrue(applied["report"]["applied"])
+            self.assertTrue(state_file.exists())
 
 
 if __name__ == "__main__":

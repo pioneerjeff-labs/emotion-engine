@@ -17,6 +17,8 @@ Use the project wrapper when Agent Harness installed one:
 
 ```bash
 scripts/codex_emotion.sh status
+scripts/codex_emotion.sh audit_log
+scripts/codex_emotion.sh compact_log --dry-run
 scripts/codex_emotion.sh record_policy --mode light --context milestone "that migration was handled well"
 scripts/codex_emotion.sh configure --style "warm but not over-compliant, with clear boundaries"
 scripts/codex_emotion.sh tune "make it calmer"
@@ -73,6 +75,8 @@ Map natural-language user requests to commands:
 - "Configure it from this SOUL.md" -> `scripts/codex_emotion.sh configure --soul-file ./SOUL.md`
 - "Make it gentler" / "make it calmer" / "make it less compliant" -> `scripts/codex_emotion.sh tune "<request>"`
 - "What is the current status?" -> `scripts/codex_emotion.sh status`
+- "Audit emotion logging" -> `scripts/codex_emotion.sh audit_log`
+- "Preview emotion log compaction" -> `scripts/codex_emotion.sh compact_log --dry-run`
 - "Pause emotion logging" -> `scripts/codex_emotion.sh pause`
 - "Resume Emotion Engine" -> `scripts/codex_emotion.sh resume`
 
@@ -95,6 +99,8 @@ Mode contract:
 - `light`: event-triggered. Generic praise, small talk, and ordinary task progress should usually be `respond_only`; concrete feedback, milestones, repair, stable preferences, boundary pressure, or explicit emotional-continuity discussion may be recorded.
 - `always`: per-meaningful-turn tracking. Compact turn records are allowed more often, but habituation, salience, low-value duplicate compaction, and trust-settlement rules still apply.
 - `paused`: preserve local state but do not record lifecycle updates or modulate replies.
+
+`always` does not mean every neutral task turn belongs in `emotion_log`. Ordinary neutral turns and low-value in-session drift should usually affect only current state/reply. Emotion Engine owns retention policy and compact continuity signals; the host owns factual memory routing.
 
 Habituation rules:
 
@@ -198,6 +204,8 @@ full pasted user message or private transcript
 ```
 
 Useful fields: `situation`, `appraisal`, `character_lens`, `relational_meaning`, `impact`, `open_loop`, `follow_up_bias`, and `salience`.
+
+For long-running agents, use `audit_log` to inspect retention pressure and `compact_log --dry-run` before applying safe low-value compaction. `compact_log --apply` writes through the normal state backup path. Do not use `clear_log` or `reset` as routine maintenance.
 
 ## Pitfalls
 

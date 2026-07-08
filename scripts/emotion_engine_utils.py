@@ -16,6 +16,8 @@ Usage:
   python3 emotion_engine_utils.py record_turn <state_file> <P> <A> <D> [memory options]
   python3 emotion_engine_utils.py log_event <state_file> <event_type> [memory options]
   python3 emotion_engine_utils.py recent_log <state_file> [limit]
+  python3 emotion_engine_utils.py audit_log <state_file>
+  python3 emotion_engine_utils.py compact_log <state_file> [--dry-run|--apply]
   python3 emotion_engine_utils.py configure <state_file> --style <description>
   python3 emotion_engine_utils.py configure <state_file> --soul-file <SOUL.md>
   python3 emotion_engine_utils.py tune <state_file> <natural-language adjustment...>
@@ -877,6 +879,39 @@ def public_status(state):
 
 
 DEDUPABLE_LOW_VALUE_APPRAISALS = {"neutral", "collaboration", "warmth", "playful"}
+CORE_RETENTION_APPRAISALS = {
+    "repair",
+    "boundary_pressure",
+    "hostility",
+    "relationship_calibration",
+    "concrete_feedback",
+    "stable_preference",
+    "vulnerability",
+    "intimacy",
+}
+CORE_RETENTION_EVENT_TYPES = {
+    "session_start",
+    "session_end",
+    "trust_update",
+    "trust_settlement",
+    "migration",
+    "time_decay",
+    "log_compaction",
+}
+LOW_SALIENCE_THRESHOLD = 0.12
+CORE_SALIENCE_THRESHOLD = 0.35
+LOW_VALUE_PULSE_THRESHOLD = 0.12
+LOW_VALUE_DECAY_DELTA_THRESHOLD = 0.01
+LOW_VALUE_DECAY_PULSE_THRESHOLD = 0.04
+RECENT_LOW_VALUE_NEUTRAL_KEEP = 5
+RECENT_PRE_TURN_DECAY_KEEP = 3
+
+
+def effective_event_count(entry):
+    try:
+        return max(1, int(entry.get("duplicate_count", 1) or 1))
+    except (TypeError, ValueError):
+        return 1
 
 
 def max_abs_delta(delta):
@@ -905,8 +940,8 @@ def pulse_intensity_from_entry(entry, key="affective_pulse"):
 
 def is_low_value_pre_turn_decay_entry(entry):
     return (
-        max_abs_delta(entry.get("delta")) < 0.01
-        and pulse_intensity_from_entry(entry, "pulse_after") < 0.04
+        max_abs_delta(entry.get("delta")) < LOW_VALUE_DECAY_DELTA_THRESHOLD
+        and pulse_intensity_from_entry(entry, "pulse_after") < LOW_VALUE_DECAY_PULSE_THRESHOLD
     )
 
 
@@ -920,7 +955,36 @@ def is_low_value_turn_entry(entry):
         salience = float(entry.get("salience", 0.0) or 0.0)
     except (TypeError, ValueError):
         salience = 0.0
-    return salience <= 0.12 and pulse_intensity_from_entry(entry) < 0.12
+    return salience <= LOW_SALIENCE_THRESHOLD and pulse_intensity_from_entry(entry) < LOW_VALUE_PULSE_THRESHOLD
+
+
+def salience_value(entry):
+    try:
+        return float(entry.get("salience", 0.0) or 0.0)
+    except (TypeError, ValueError):
+        return 0.0
+
+
+def is_core_retention_entry(entry):
+    if not isinstance(entry, dict):
+        return False
+    if bool(entry.get("open_loop")):
+        return True
+    if salience_value(entry) >= CORE_SALIENCE_THRESHOLD:
+        return True
+    if entry.get("event_type") in CORE_RETENTION_EVENT_TYPES:
+        return True
+    if entry.get("appraisal") in CORE_RETENTION_APPRAISALS:
+        return True
+    return False
+
+
+def should_write_turn_log(entry):
+    if is_core_retention_entry(entry):
+        return True
+    if entry.get("event_type") == "turn" and entry.get("appraisal") == "neutral":
+        return not is_low_value_turn_entry(entry)
+    return True
 
 
 def should_compact_low_value_log(previous, entry):
@@ -1009,8 +1073,174 @@ def add_emotion_log(
     if log and should_compact_low_value_log(log[-1], entry):
         compact_low_value_log(log[-1], entry)
         return state
+    if event_type == "turn" and not should_write_turn_log(entry):
+        return state
     append_limited(state, "emotion_log", entry, state.get("log_limit", 200))
     return state
+
+
+def increment_count(counter, key, amount=1):
+    if key is None:
+        key = "<none>"
+    counter[str(key)] = counter.get(str(key), 0) + amount
+
+
+def salience_bucket(entry):
+    if "salience" not in entry:
+        return "missing"
+    value = salience_value(entry)
+    if value <= LOW_SALIENCE_THRESHOLD:
+        return "low"
+    if value < CORE_SALIENCE_THRESHOLD:
+        return "medium"
+    return "core"
+
+
+def audit_emotion_log(state):
+    state = ensure_state_shape(state)
+    log = state.get("emotion_log", [])
+    event_types = {}
+    appraisals = {}
+    salience_buckets = {}
+    low_value = {
+        "pre_turn_decay_entries": 0,
+        "pre_turn_decay_effective_events": 0,
+        "turn_entries": 0,
+        "turn_effective_events": 0,
+        "neutral_turn_entries": 0,
+        "neutral_turn_effective_events": 0,
+    }
+    open_loop_entries = 0
+    core_entries = 0
+
+    for entry in log:
+        count = effective_event_count(entry)
+        increment_count(event_types, entry.get("event_type"), count)
+        if entry.get("event_type") == "turn":
+            increment_count(appraisals, entry.get("appraisal") or "neutral", count)
+        increment_count(salience_buckets, salience_bucket(entry), count)
+        if bool(entry.get("open_loop")):
+            open_loop_entries += 1
+        if is_core_retention_entry(entry):
+            core_entries += 1
+        if entry.get("event_type") == "pre_turn_decay" and is_low_value_pre_turn_decay_entry(entry):
+            low_value["pre_turn_decay_entries"] += 1
+            low_value["pre_turn_decay_effective_events"] += count
+        if entry.get("event_type") == "turn" and is_low_value_turn_entry(entry):
+            low_value["turn_entries"] += 1
+            low_value["turn_effective_events"] += count
+            if (entry.get("appraisal") or "neutral") == "neutral":
+                low_value["neutral_turn_entries"] += 1
+                low_value["neutral_turn_effective_events"] += count
+
+    log_entries = len(log)
+    log_limit = state.get("log_limit", 200)
+    warnings_out = []
+    if log_entries >= log_limit:
+        warnings_out.append("emotion_log_at_limit")
+    pre_turn_decay_entries = event_types.get("pre_turn_decay", 0)
+    if log_entries and pre_turn_decay_entries / log_entries >= 0.25:
+        warnings_out.append("pre_turn_decay_noise_high")
+    if log_entries and (low_value["pre_turn_decay_entries"] + low_value["turn_entries"]) / log_entries >= 0.4:
+        warnings_out.append("low_value_log_pressure_high")
+
+    return {
+        "schema": state["_schema"],
+        "log_entries": log_entries,
+        "log_limit": log_limit,
+        "available_entries": max(0, log_limit - log_entries),
+        "effective_events": sum(effective_event_count(entry) for entry in log),
+        "event_types": dict(sorted(event_types.items())),
+        "appraisals": dict(sorted(appraisals.items())),
+        "salience_buckets": dict(sorted(salience_buckets.items())),
+        "open_loop_entries": open_loop_entries,
+        "core_retention_entries": core_entries,
+        "low_value": low_value,
+        "warnings": warnings_out,
+        "recommendations": [
+            "Keep emotion_log focused on compact continuity signals, not transcripts or factual memory.",
+            "Hosts own factual memory routing; Emotion Engine only provides retention and routing hints.",
+        ],
+    }
+
+
+def compact_emotion_log(state, neutral_keep=RECENT_LOW_VALUE_NEUTRAL_KEEP):
+    state = ensure_state_shape(state)
+    before_audit = audit_emotion_log(state)
+    log = state.get("emotion_log", [])
+    low_neutral_indices = [
+        idx for idx, entry in enumerate(log)
+        if entry.get("event_type") == "turn"
+        and (entry.get("appraisal") or "neutral") == "neutral"
+        and not is_core_retention_entry(entry)
+        and is_low_value_turn_entry(entry)
+    ]
+    neutral_keep_indices = set(low_neutral_indices[-neutral_keep:])
+    pre_turn_decay_indices = [
+        idx for idx, entry in enumerate(log)
+        if entry.get("event_type") == "pre_turn_decay"
+        and not is_core_retention_entry(entry)
+    ]
+    pre_turn_decay_keep_indices = set(pre_turn_decay_indices[-RECENT_PRE_TURN_DECAY_KEEP:])
+    compacted = {
+        "pre_turn_decay_entries": 0,
+        "pre_turn_decay_effective_events": 0,
+        "neutral_turn_entries": 0,
+        "neutral_turn_effective_events": 0,
+    }
+    retained = []
+
+    for idx, entry in enumerate(log):
+        if (
+            entry.get("event_type") == "pre_turn_decay"
+            and not is_core_retention_entry(entry)
+            and idx not in pre_turn_decay_keep_indices
+        ):
+            compacted["pre_turn_decay_entries"] += 1
+            compacted["pre_turn_decay_effective_events"] += effective_event_count(entry)
+            continue
+        if idx in low_neutral_indices and idx not in neutral_keep_indices:
+            compacted["neutral_turn_entries"] += 1
+            compacted["neutral_turn_effective_events"] += effective_event_count(entry)
+            continue
+        retained.append(entry)
+
+    total_removed_entries = compacted["pre_turn_decay_entries"] + compacted["neutral_turn_entries"]
+    if total_removed_entries:
+        retained.append({
+            "timestamp": now_iso(),
+            "event_type": "log_compaction",
+            "trust": round(float(state.get("trust", 0.1)), 4),
+            "situation": "low-value decay and neutral turn noise compacted by retention policy",
+            "relational_meaning": "routine drift and ordinary neutral turns did not carry durable emotional continuity",
+            "impact": "emotion_log remains focused on salient continuity signals",
+            "salience": 0.1,
+            "tags": ["retention", "compaction"],
+            "compacted": compacted,
+            "source": "compact_log",
+        })
+
+    compacted_state = deepcopy(state)
+    compacted_state["emotion_log"] = retained[-compacted_state.get("log_limit", 200):]
+    after_audit = audit_emotion_log(compacted_state)
+    report = {
+        "ok": True,
+        "before": before_audit,
+        "after": after_audit,
+        "compacted": compacted,
+        "removed_entries": total_removed_entries,
+        "added_rollup": bool(total_removed_entries),
+        "rules": {
+            "protect_open_loop": True,
+            "protect_salience_at_or_above": CORE_SALIENCE_THRESHOLD,
+            "drop_low_value_pre_turn_decay_below_delta": LOW_VALUE_DECAY_DELTA_THRESHOLD,
+            "drop_low_value_pre_turn_decay_below_pulse": LOW_VALUE_DECAY_PULSE_THRESHOLD,
+            "keep_recent_pre_turn_decay_entries": RECENT_PRE_TURN_DECAY_KEEP,
+            "keep_recent_low_value_neutral_turns": neutral_keep,
+            "host_memory_routing": "host-owned; Emotion Engine does not choose factual memory destinations",
+        },
+    }
+    return compacted_state, report
 
 
 # ── Decay ────────────────────────────────────────────────────────────
@@ -1112,8 +1342,11 @@ def apply_in_session_decay(state):
     state["emotion"] = after
     state["affective_pulse"] = decay_affective_pulse(pulse_before, state["volatility_profile"])
     delta = emotion_delta(before, after)
-    pulse_changed = pulse_before != state["affective_pulse"]
-    if max(abs(v) for v in delta.values()) >= 0.005 or pulse_changed:
+    pulse_after_intensity = state["affective_pulse"].get("intensity", 0.0)
+    if (
+        max(abs(v) for v in delta.values()) >= LOW_VALUE_DECAY_DELTA_THRESHOLD
+        or pulse_after_intensity >= LOW_VALUE_DECAY_PULSE_THRESHOLD
+    ):
         state = add_emotion_log(
             state,
             "pre_turn_decay",
@@ -1452,7 +1685,7 @@ def record_policy(state, message, mode=None, contexts=None):
         reason = label
         trust_eligible = label in {"collaboration", "repair", "boundary_pressure", "hostility"}
     elif requested_mode == "always":
-        decision = "record_turn"
+        decision = "respond_only"
         reason = "neutral_task"
 
     salience = policy_salience(reason, label, requested_mode, warmth_habituation)
@@ -2037,6 +2270,7 @@ STATE_MUTATING_COMMANDS = {
     "update_trust",
     "record_turn",
     "log_event",
+    "compact_log",
     "session_start",
     "session_end",
 }
@@ -2222,6 +2456,23 @@ def run_command(command, state_file, state):
     elif command == "recent_log":
         limit = int(sys.argv[3]) if len(sys.argv) >= 4 else 5
         print_json(state.get("emotion_log", [])[-limit:])
+
+    elif command == "audit_log":
+        print_json(audit_emotion_log(state))
+
+    elif command == "compact_log":
+        args = sys.argv[3:]
+        apply = "--apply" in args
+        if apply and "--dry-run" in args:
+            print("Usage: compact_log <state_file> [--dry-run|--apply]")
+            sys.exit(1)
+        compacted_state, report = compact_emotion_log(state)
+        report["applied"] = bool(apply)
+        if apply:
+            save_state(state_file, compacted_state)
+            report["backup_path"] = state_backup_path(state_file)
+            report["status"] = public_status(compacted_state)
+        print_json(report)
 
     elif command == "session_start":
         state = session_start(state)

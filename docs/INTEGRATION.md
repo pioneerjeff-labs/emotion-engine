@@ -151,6 +151,32 @@ Show raw debug state:
 python3 scripts/emotion_engine_utils.py status emotion-state.json --raw
 ```
 
+## Retention Maintenance
+
+For long-running agents, especially `always` mode companion-style agents, periodically audit log pressure:
+
+```bash
+python3 scripts/emotion_engine_utils.py audit_log emotion-state.json
+```
+
+Preview safe compaction before changing state:
+
+```bash
+python3 scripts/emotion_engine_utils.py compact_log emotion-state.json --dry-run
+```
+
+Apply only after the host accepts the report:
+
+```bash
+python3 scripts/emotion_engine_utils.py compact_log emotion-state.json --apply
+```
+
+`compact_log --apply` uses the normal state save path, including the `.bak` backup. It preserves open loops, high-salience entries, trust/session evidence, and core emotional-continuity appraisals such as repair, boundary pressure, relationship calibration, concrete feedback, vulnerability, and intimacy.
+
+Do not use `clear_log` or `reset` as routine retention maintenance. They are explicit destructive controls.
+
+Emotion Engine does not own factual memory routing. If a host detects an ordinary fact, stable preference, task state, or document reference, the host should decide where that belongs. Emotion Engine should keep only compact continuity evidence needed to shape future tone, trust, decay, and boundaries.
+
 ## Privacy Guidance
 
 Do not store full private transcripts in the emotion log. Store compact summaries and relational meaning.

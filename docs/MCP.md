@@ -140,6 +140,8 @@ After changing MCP config, start a fresh client session or reload MCP servers so
 | `emotion_engine_record_turn` | Yes | Persist host/LLM-approved final PAD values and compact memory fields. |
 | `emotion_engine_settle_trust` | Yes | Conservatively settle agent-to-user trust from recent evidence. |
 | `emotion_engine_recent_log` | No | Read recent compact emotion log entries. |
+| `emotion_engine_audit_log` | No | Inspect log pressure, low-value ratios, and retention warnings. |
+| `emotion_engine_compact_log` | Optional | Preview safe compaction by default; mutates only when `apply` is `true`. |
 
 ## Minimal JSON-RPC Smoke Test
 
@@ -163,4 +165,8 @@ Recommended loop for an MCP-capable local agent:
 4. Call `emotion_engine_record_turn` only for host-approved updates.
 5. Call `emotion_engine_settle_trust` at a meaningful session or milestone close.
 
+For long-running `always` mode agents, periodically call `emotion_engine_audit_log`. If low-value `pre_turn_decay` or neutral-turn pressure is high, call `emotion_engine_compact_log` first without `apply`, inspect the report, then call it with `apply: true` only when the host accepts the retention plan.
+
 Do not expose raw PAD, trust, or compact logs to end users unless they explicitly ask for debugging details.
+
+Emotion Engine retention tools do not choose where factual memory belongs. They may identify ordinary facts, stable preferences, or low-value continuity entries as storage candidates or retention noise, but the host runtime owns factual memory routing, retrieval, documents, and project-specific stores.

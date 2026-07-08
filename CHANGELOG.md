@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+- Added `audit_log` and `compact_log` retention tools for long-running agents, including dry-run reports and normal `.bak` state backup on apply.
+- Reduced low-value `always` mode log pressure by suppressing routine neutral task records and low-movement `pre_turn_decay` entries from the main emotion log.
+- Added safe log compaction that preserves open loops, high-salience entries, repair, boundary, relationship calibration, concrete feedback, vulnerability, intimacy, trust, and session evidence while rolling up low-value drift/neutral noise.
+- Exposed log audit and compaction through the local MCP runtime tools without adding install/repair responsibilities.
+- Clarified the core boundary: Emotion Engine owns compact continuity state and retention hints; host runtimes own factual memory routing and storage.
+
 ## 0.2.2 - 2026-07-01
 
 - Added a zero-dependency local stdio MCP server for Emotion Engine runtime/protocol tools, with explicit boundaries that Agent Harness owns install refresh, doctor, repair, and sidecar drift checks.

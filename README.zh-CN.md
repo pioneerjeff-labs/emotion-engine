@@ -167,6 +167,16 @@ python3 scripts/prompt_preview.py \
 - 回复后记录一条紧凑情绪记忆。
 ```
 
+长期运行的 `always` 模式 agent 可以定期检查日志压力：
+
+```bash
+python3 scripts/emotion_engine_utils.py audit_log emotion-state.json
+python3 scripts/emotion_engine_utils.py compact_log emotion-state.json --dry-run
+python3 scripts/emotion_engine_utils.py compact_log emotion-state.json --apply
+```
+
+这些命令只治理 Emotion Engine 的紧凑连续性状态：低价值 drift、普通 neutral turn、显著性分布、open loop 和保留规则。真实事实、待办、长期偏好、文档和检索上下文应该由宿主系统决定存在哪里。
+
 ## 我应该用哪一份？
 
 | 需求 | 使用位置 |

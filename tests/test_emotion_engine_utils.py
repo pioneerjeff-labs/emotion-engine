@@ -183,6 +183,43 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertIn("pulse", state["emotion_trajectory"][-1])
         self.assertEqual(state["emotion_log"][-1]["appraisal"], "warmth")
 
+    def test_low_value_neutral_turn_updates_trajectory_without_log_pressure(self):
+        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
+        log_entries_before = len(state["emotion_log"])
+
+        for _ in range(50):
+            state = emotion_engine_utils.record_turn(
+                state,
+                0.0,
+                0.3,
+                0.5,
+                appraisal="neutral",
+                situation="ordinary neutral turn",
+                salience=0.04,
+            )
+
+        self.assertEqual(state["total_turns"], 50)
+        self.assertEqual(len(state["emotion_trajectory"]), 50)
+        self.assertEqual(len(state["emotion_log"]), log_entries_before)
+
+    def test_pre_turn_decay_suppresses_low_value_log_noise(self):
+        state = emotion_engine_utils.default_state()
+        state["emotion"] = {"pleasure": 0.05, "arousal": 0.3, "dominance": 0.5}
+
+        state = emotion_engine_utils.apply_in_session_decay(state)
+
+        self.assertLess(state["emotion"]["pleasure"], 0.05)
+        self.assertEqual(state["emotion_log"], [])
+
+    def test_pre_turn_decay_keeps_significant_movement(self):
+        state = emotion_engine_utils.default_state()
+        state["emotion"] = {"pleasure": 0.3, "arousal": 0.3, "dominance": 0.5}
+
+        state = emotion_engine_utils.apply_in_session_decay(state)
+
+        self.assertEqual(state["emotion_log"][-1]["event_type"], "pre_turn_decay")
+        self.assertGreaterEqual(abs(state["emotion_log"][-1]["delta"]["P"]), 0.01)
+
     def test_patterns_use_pulse_to_distinguish_visible_movement_from_flat_mood(self):
         state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
         state["volatility_profile"] = "expressive"
@@ -382,6 +419,17 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertFalse(policy["trust_eligible"])
         self.assertEqual(policy["suggested"], policy["current"])
 
+    def test_record_policy_always_neutral_responds_only(self):
+        policy = emotion_engine_utils.record_policy(
+            emotion_engine_utils.default_state(),
+            "what time is it",
+            mode="always",
+        )
+
+        self.assertEqual(policy["decision"], "respond_only")
+        self.assertEqual(policy["reason"], "neutral_task")
+        self.assertEqual(policy["salience"], 0.0)
+
     def test_record_policy_habituation_uses_recent_turns_not_internal_logs(self):
         state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
         state = emotion_engine_utils.record_turn(
@@ -462,8 +510,8 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             0.0,
             0.3,
             0.5,
-            appraisal="neutral",
-            situation="routine neutral turn",
+            appraisal="playful",
+            situation="routine playful turn",
             salience=0.04,
         )
         state = emotion_engine_utils.record_turn(
@@ -471,8 +519,8 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             0.0,
             0.3,
             0.5,
-            appraisal="neutral",
-            situation="routine neutral turn",
+            appraisal="playful",
+            situation="routine playful turn",
             salience=0.04,
         )
 
@@ -485,6 +533,94 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(len(turn_logs), 1)
         self.assertEqual(turn_logs[0]["duplicate_count"], 2)
         self.assertEqual(turn_logs[0]["last_turn"], 2)
+
+    def test_compact_log_preserves_core_entries_and_rolls_up_low_value_noise(self):
+        state = emotion_engine_utils.default_state()
+        for idx in range(8):
+            state["emotion_log"].append({
+                "timestamp": f"2026-01-01T00:00:0{idx}+00:00",
+                "event_type": "pre_turn_decay",
+                "trust": 0.1,
+                "situation": "quiet drift toward personality baseline",
+                "delta": {"P": 0.0, "A": 0.0, "D": 0.0},
+                "pulse_after": emotion_engine_utils.zero_affective_pulse("decay"),
+            })
+        for idx in range(8):
+            state["emotion_log"].append({
+                "timestamp": f"2026-01-01T00:01:0{idx}+00:00",
+                "event_type": "turn",
+                "trust": 0.1,
+                "turn": idx + 1,
+                "appraisal": "neutral",
+                "situation": "ordinary neutral turn",
+                "salience": 0.04,
+                "affective_pulse": emotion_engine_utils.zero_affective_pulse("record_turn"),
+            })
+        state = emotion_engine_utils.add_emotion_log(
+            state,
+            "turn",
+            appraisal="repair",
+            situation="user and agent repaired a tone mismatch",
+            open_loop=False,
+            salience=0.2,
+        )
+        state = emotion_engine_utils.add_emotion_log(
+            state,
+            "turn",
+            appraisal="neutral",
+            situation="neutral but still unresolved",
+            open_loop=True,
+            salience=0.04,
+        )
+
+        compacted, report = emotion_engine_utils.compact_emotion_log(state)
+
+        self.assertEqual(report["compacted"]["pre_turn_decay_entries"], 5)
+        self.assertEqual(report["compacted"]["neutral_turn_entries"], 3)
+        self.assertTrue(report["added_rollup"])
+        appraisals = [entry.get("appraisal") for entry in compacted["emotion_log"]]
+        self.assertIn("repair", appraisals)
+        self.assertTrue(any(entry.get("open_loop") for entry in compacted["emotion_log"]))
+        self.assertEqual(compacted["emotion_log"][-1]["event_type"], "log_compaction")
+
+    def test_cli_compact_log_dry_run_and_apply_backup(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            state = emotion_engine_utils.default_state()
+            for idx in range(6):
+                state["emotion_log"].append({
+                    "timestamp": f"2026-01-01T00:00:0{idx}+00:00",
+                    "event_type": "pre_turn_decay",
+                    "trust": 0.1,
+                    "situation": "quiet drift toward personality baseline",
+                    "delta": {"P": 0.0, "A": 0.0, "D": 0.0},
+                    "pulse_after": emotion_engine_utils.zero_affective_pulse("decay"),
+                })
+            emotion_engine_utils.save_state(state_file, state)
+            before = json.loads(state_file.read_text(encoding="utf-8"))
+
+            dry_run = subprocess.run(
+                [sys.executable, str(SCRIPT), "compact_log", str(state_file), "--dry-run"],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            self.assertFalse(json.loads(dry_run.stdout)["applied"])
+            self.assertEqual(json.loads(state_file.read_text(encoding="utf-8")), before)
+
+            applied = subprocess.run(
+                [sys.executable, str(SCRIPT), "compact_log", str(state_file), "--apply"],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            payload = json.loads(applied.stdout)
+            self.assertTrue(payload["applied"])
+            self.assertTrue(Path(payload["backup_path"]).exists())
+            after = json.loads(state_file.read_text(encoding="utf-8"))
+            self.assertEqual(after["emotion_log"][-1]["event_type"], "log_compaction")
 
     def test_low_value_compaction_does_not_absorb_salient_previous_turn(self):
         state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())

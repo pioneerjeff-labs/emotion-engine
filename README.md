@@ -340,6 +340,7 @@ Emotion Engine stores and updates:
 - **Personality baseline**: where the agent naturally drifts back to.
 - **Emotion trajectory**: numeric state during a session.
 - **Emotion log**: compact emotional memories, not full transcripts.
+- **Retention policy**: audit and compact low-value log pressure without turning Emotion Engine into factual memory storage.
 - **Trust history**: numeric ledger for trust changes; reasons belong in `emotion_log`.
 - **Session patterns**: conflict, repair, volatility, suppression, and trust signals.
 
@@ -377,7 +378,12 @@ python3 scripts/emotion_engine_utils.py settle_trust <state_file>
 python3 scripts/emotion_engine_utils.py session_end <state_file>
 python3 scripts/emotion_engine_utils.py update_trust <state_file> <trust_delta>
 python3 scripts/emotion_engine_utils.py recent_log <state_file> 5
+python3 scripts/emotion_engine_utils.py audit_log <state_file>
+python3 scripts/emotion_engine_utils.py compact_log <state_file> --dry-run
+python3 scripts/emotion_engine_utils.py compact_log <state_file> --apply
 ```
+
+`audit_log` and `compact_log` are retention tools for long-running agents, especially `always` mode companions. They keep `emotion_log` focused on compact continuity signals by suppressing or rolling up low-value drift and ordinary neutral turns. They do not decide where factual memory should live; host runtimes own facts, task memory, vector stores, documents, and project-specific routing.
 
 ## What It Is Not
 

@@ -223,6 +223,26 @@ def call_tool(name, arguments=None, default_state_file=None):
         limit = int(arguments.get("limit", 5) or 5)
         return {"state_file": state_file, "events": state.get("emotion_log", [])[-limit:]}
 
+    if name == "emotion_engine_audit_log":
+        state_file, state = load_state_for_tool(arguments, default_state_file)
+        return {"state_file": state_file, "audit": engine.audit_emotion_log(state)}
+
+    if name == "emotion_engine_compact_log":
+        apply = bool(arguments.get("apply", False))
+        if not apply:
+            state_file, state = load_state_for_tool(arguments, default_state_file)
+            _, report = engine.compact_emotion_log(state)
+            report["applied"] = False
+            return {"state_file": state_file, "report": report}
+
+        def mutator(state):
+            state, report = engine.compact_emotion_log(state)
+            report["applied"] = True
+            report["status"] = engine.public_status(state)
+            return state, {"report": report}
+
+        return mutate_state_for_tool(arguments, default_state_file, mutator)
+
     raise JsonRpcError(-32601, f"Unknown tool: {name}")
 
 
@@ -325,6 +345,22 @@ def tool_schema():
                 "properties": {
                     **state_arg,
                     "limit": {"type": "integer", "minimum": 1, "maximum": 50},
+                },
+            },
+        },
+        {
+            "name": "emotion_engine_audit_log",
+            "description": "Inspect emotion_log retention pressure without mutating state.",
+            "inputSchema": {"type": "object", "properties": state_arg},
+        },
+        {
+            "name": "emotion_engine_compact_log",
+            "description": "Preview or apply safe low-value emotion_log compaction. Defaults to dry-run.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    **state_arg,
+                    "apply": {"type": "boolean", "description": "When true, write the compacted log with the normal state backup path."},
                 },
             },
         },
