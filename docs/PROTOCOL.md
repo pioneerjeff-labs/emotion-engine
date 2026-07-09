@@ -1,6 +1,6 @@
 # Emotion Engine State Protocol
 
-Status: draft for `emotion-engine-state/v2`
+Status: stable v1.0 contract for `emotion-engine-state/v2`
 
 Emotion Engine is a compact emotional-continuity state layer for LLM-powered agents. This document describes the state packet shape and integration contract so adapters can read, write, and map Emotion Engine state without reverse-engineering the helper script.
 

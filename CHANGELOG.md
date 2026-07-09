@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.0.0 - 2026-07-09
+
 - Added `audit_log` and `compact_log` retention tools for long-running agents, including dry-run reports and normal `.bak` state backup on apply.
 - Reduced low-value `always` mode log pressure by suppressing routine neutral task records and low-movement `pre_turn_decay` entries from the main emotion log.
 - Added safe log compaction that preserves open loops, high-salience entries, repair, boundary, relationship calibration, concrete feedback, vulnerability, intimacy, trust, and session evidence while rolling up low-value drift/neutral noise.
