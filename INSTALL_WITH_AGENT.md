@@ -1,6 +1,6 @@
 # Install Emotion Engine With A Coding Agent
 
-Use this if you are comfortable asking Codex, Claude Code, Cursor, or another coding agent to make a small local integration for you.
+Use this if you are comfortable asking Codex, Claude Code, Cursor, Pi Agent, or another coding agent to make a small local integration for you.
 
 Emotion Engine should be installed as a local state sidecar. You describe the character or agent purpose; the host app and model decide how visible the emotional movement should be from the current event. You do not need to choose between mood and pulse as product modes.
 
@@ -11,6 +11,7 @@ Install Emotion Engine into this project as a local state sidecar.
 Use the minimal-agent example first.
 For a generic app, keep state in .emotion-engine/emotion-state.json.
 For a Codex or Agent Harness project, use .emotion-engine/codex-state.json.
+For a Pi Agent project, use .emotion-engine/pi-state.json.
 Do not send state to any remote service.
 Show me a prompt preview before changing my app code.
 ```
@@ -21,6 +22,7 @@ Show me a prompt preview before changing my app code.
 2. Create or reuse the right local state file in your project.
    Use `.emotion-engine/emotion-state.json` for a generic app.
    Use `.emotion-engine/codex-state.json` for a Codex or Agent Harness target.
+   Use `.emotion-engine/pi-state.json` for a Pi Agent project.
 3. Run the local state flow before touching your app code.
 4. Show the prompt prelude or preview that your LLM would receive.
 5. If you register the MCP server, prefer `python3 scripts/register_mcp_client.py ...`.
@@ -41,6 +43,12 @@ Codex and Agent Harness project targets use:
 
 ```text
 .emotion-engine/codex-state.json
+```
+
+Pi Agent projects use:
+
+```text
+.emotion-engine/pi-state.json
 ```
 
 If you use both the shell wrapper and an MCP client, point both at the same state file. For Codex/Agent Harness targets, MCP registration should pass:

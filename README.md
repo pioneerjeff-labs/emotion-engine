@@ -21,7 +21,7 @@ It is not a memory stack. It is a portable emotional-continuity state layer that
 
 Emotion Engine is part of PioneerJeff Labs, an open-source lab building reusable infrastructure layers for creative AI applications.
 
-Status: stable v1.0. Current release: [v1.0.0 - Stable continuity and log governance](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v1.0.0).
+Status: stable v1. Current release: [v1.1.0 - Pi Agent integration](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v1.1.0).
 
 ## Start Here
 
@@ -120,7 +120,7 @@ The example loads state, builds a prompt prelude, lets a mock LLM choose the fin
 
 ## Local State Checks
 
-The Python scripts are not the main product demo. They are developer-facing checks for the core state layer: useful for validating lifecycle behavior, debugging integrations, and proving the shared engine still works under OpenClaw, Claude Skill, Hermes Agent, or another host.
+The Python scripts are not the main product demo. They are developer-facing checks for the core state layer: useful for validating lifecycle behavior, debugging integrations, and proving the shared engine still works under OpenClaw, Claude Skill, Hermes Agent, Pi Agent, or another host.
 
 Run a lifecycle check without installing any agent runtime:
 
@@ -170,10 +170,11 @@ LLM task:
 | Claude Skill / Claude Code package | [integrations/claude-skill](integrations/claude-skill) |
 | Hermes Agent skill package | [integrations/hermes](integrations/hermes) |
 | Codex skill package | [integrations/codex](integrations/codex) |
+| Pi Agent skill / Git package | [integrations/pi](integrations/pi) |
 | OpenAI GPT / API host-side integration guide | [docs/OPENAI_GPT.md](docs/OPENAI_GPT.md) |
 
 The repository root is the Emotion Engine project. Platform-specific packages live under `integrations/`.
-The first-party starter integrations are OpenClaw, Claude Skill, Hermes Agent, and Codex. Codex ships as a user-installed skill package. GPT/API usage is documented as a host-side integration pattern because the host application owns persistence and model calls.
+The first-party starter integrations are OpenClaw, Claude Skill, Hermes Agent, Codex, and Pi Agent. Codex ships as a user-installed skill package; Pi ships as an Agent Skill exposed through a repository-level Pi package manifest. GPT/API usage is documented as a host-side integration pattern because the host application owns persistence and model calls.
 
 For Codex or Agent Harness project targets, register MCP clients with an explicit `--state .emotion-engine/codex-state.json`; see [docs/MCP.md](docs/MCP.md).
 
@@ -324,6 +325,40 @@ cd integrations/codex
 ```
 
 This creates `emotion-engine-codex-skill.zip`. The zip is a generated release artifact, so it is not committed to the repository.
+
+### Pi Agent
+
+The Pi-compatible package lives in [integrations/pi](integrations/pi).
+
+Install it directly as a user-level Pi package:
+
+```bash
+pi install git:github.com/pioneerjeff-labs/emotion-engine
+```
+
+Or install it for one trusted project:
+
+```bash
+pi install -l git:github.com/pioneerjeff-labs/emotion-engine
+```
+
+Pi discovers the `emotion-engine` Agent Skill through the repository `package.json`. The wrapper uses `.emotion-engine/pi-state.json` inside a trusted Pi project and falls back to `~/.pi/agent/emotion-engine/emotion-state.json` outside a project.
+
+For a self-contained manual install:
+
+```bash
+cd integrations/pi/emotion-engine
+sh install.sh
+```
+
+To build a Pi skill zip:
+
+```bash
+cd integrations/pi
+./package_pi_skill.sh
+```
+
+This creates `emotion-engine-pi-skill.zip`. The zip is a generated release artifact, so it is not committed to the repository.
 
 ### OpenAI GPT / API
 

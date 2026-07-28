@@ -18,7 +18,7 @@ Emotion Engine 给大模型智能体提供一个小而可检查的连续性层�
 
 Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 关注面向创意 AI 应用的可复用底层基础设施层。
 
-状态：v1.0 稳定版。当前版本：[v1.0.0 - Stable continuity and log governance](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v1.0.0)。
+状态：v1 稳定版。当前版本：[v1.1.0 - Pi Agent integration](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v1.1.0)。
 
 ## 从这里开始
 
@@ -117,7 +117,7 @@ python3 examples/minimal-agent/run_demo.py
 
 ## 本地状态检查
 
-Python 脚本不是主要的产品演示，而是给开发者看的核心状态层检查工具。它适合用来验证生命周期、调试集成、确认同一份共享引擎在 OpenClaw、Claude Skill、Hermes Agent 或其他宿主里仍然能稳定工作。
+Python 脚本不是主要的产品演示，而是给开发者看的核心状态层检查工具。它适合用来验证生命周期、调试集成、确认同一份共享引擎在 OpenClaw、Claude Skill、Hermes Agent、Pi Agent 或其他宿主里仍然能稳定工作。
 
 运行本地生命周期检查：
 
@@ -191,10 +191,11 @@ python3 scripts/emotion_engine_utils.py compact_log emotion-state.json --apply
 | Claude Skill / Claude Code 集成包 | [integrations/claude-skill](integrations/claude-skill) |
 | Hermes Agent 集成包 | [integrations/hermes](integrations/hermes) |
 | Codex Skill 集成包 | [integrations/codex](integrations/codex) |
+| Pi Agent Skill / Git package | [integrations/pi](integrations/pi) |
 | OpenAI GPT / API 宿主侧接入说明 | [docs/OPENAI_GPT.md](docs/OPENAI_GPT.md) |
 
 仓库根目录是 Emotion Engine 项目本体；具体平台适配都放在 `integrations/` 下面。
-目前提供的初版平台集成是 OpenClaw、Claude Skill、Hermes Agent 和 Codex。Codex 是用户级 skill 安装包；GPT/API 用法以宿主应用接入说明为主，因为状态持久化和模型调用由宿主应用负责。
+目前提供的初版平台集成是 OpenClaw、Claude Skill、Hermes Agent、Codex 和 Pi Agent。Codex 是用户级 skill 安装包；Pi 通过仓库根目录的 Pi package manifest 暴露标准 Agent Skill。GPT/API 用法以宿主应用接入说明为主，因为状态持久化和模型调用由宿主应用负责。
 
 如果你给 Codex 或 Agent Harness project target 注册 MCP client，请显式传入 `--state .emotion-engine/codex-state.json`；具体样例见 [docs/MCP.md](docs/MCP.md)。
 
@@ -343,6 +344,40 @@ cd integrations/codex
 ```
 
 这会生成 `emotion-engine-codex-skill.zip`。它是发布产物，不需要提交到仓库。
+
+## Pi Agent 快速安装
+
+Pi 版本在 [integrations/pi](integrations/pi)。
+
+直接安装成用户级 Pi package：
+
+```bash
+pi install git:github.com/pioneerjeff-labs/emotion-engine
+```
+
+只安装到当前可信项目：
+
+```bash
+pi install -l git:github.com/pioneerjeff-labs/emotion-engine
+```
+
+Pi 会通过仓库根目录的 `package.json` 发现 `emotion-engine` Agent Skill。在可信 Pi 项目中，wrapper 使用 `.emotion-engine/pi-state.json`；不在项目中时，默认使用 `~/.pi/agent/emotion-engine/emotion-state.json`。
+
+也可以做自包含的手动安装：
+
+```bash
+cd integrations/pi/emotion-engine
+sh install.sh
+```
+
+构建 Pi skill 压缩包：
+
+```bash
+cd integrations/pi
+./package_pi_skill.sh
+```
+
+这会生成 `emotion-engine-pi-skill.zip`。它是发布产物，不需要提交到仓库。
 
 ## OpenAI GPT / API 接入
 

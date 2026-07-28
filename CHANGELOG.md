@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 1.1.0 - 2026-07-28
+
+- Added a first-party Pi Agent integration with an Agent Skills-compatible `SKILL.md`, local state wrapper, manual installer, self-contained zip builder, and project-local `.emotion-engine/pi-state.json` convention.
+- Added a repository-level Pi package manifest so Pi can install and discover the skill directly from Git with `pi install git:github.com/pioneerjeff-labs/emotion-engine`.
+- Added isolated integration tests for Pi package discovery metadata, wrapper lifecycle, state-path selection, repeat-safe installation, and zip installation.
+
 ## 1.0.0 - 2026-07-09
 
 - Added `audit_log` and `compact_log` retention tools for long-running agents, including dry-run reports and normal `.bak` state backup on apply.
