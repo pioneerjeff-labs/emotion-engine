@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+- Added the identity-bound v3 state contract with explicit v2 migration, capability declarations, and read-only legacy handling.
+- Added native session and event identifiers, lifecycle idempotency, active-session conflict protection, and one settlement per closed session.
+- Replaced milestone-keyword persistence with structured semantic ownership, a hard host approval gate, and atomic `evaluate_and_record_turn` routing.
+- Restricted trust changes to explicit, uniquely identified, unconsumed relationship evidence; praise, task completion, tags, and PAD movement no longer qualify by themselves.
+- Added behavior-integrity audits, dry-run repair planning, additive evidence-based trust reconciliation, and matching CLI/MCP tools.
+- Updated schemas, templates, examples, first-party integrations, and regression coverage for the v3 contract.
+
 ## 1.1.0 - 2026-07-28
 
 - Added a first-party Pi Agent integration with an Agent Skills-compatible `SKILL.md`, local state wrapper, manual installer, self-contained zip builder, and project-local `.emotion-engine/pi-state.json` convention.
