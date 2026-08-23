@@ -28,10 +28,10 @@ The model decides what the interaction means. Emotion Engine remembers the compa
 
 ## State Ownership
 
-For GPT/API integrations, do not rely on the model to persist state. Store the `emotion-engine-state/v2` packet in your application:
+For GPT/API integrations, do not rely on the model to persist state. Store the `emotion-engine-state/v3` packet in your application:
 
 ```text
-user_id + agent_id -> emotion-engine-state/v2 JSON
+user_id + agent_id -> emotion-engine-state/v3 JSON
 ```
 
 Common storage options:
@@ -47,13 +47,13 @@ Read the state before a model turn, and write it back after the turn.
 
 ```text
 1. Load Emotion Engine state for this user + agent.
-2. Run session_start at the start of a meaningful session.
-3. Before each message, run pre_turn_decay.
+2. Verify bound v3 identity, then run `session_start` with native session and event ids.
+3. Before each message, run guarded `pre_turn_decay` with a unique event id.
 4. Convert current state into a short prompt prelude.
 5. Send the prelude plus conversation context to the model.
-6. Ask the model or host policy to choose final appraisal, PAD, and compact memory.
-7. Run record_turn.
-8. At session end, run settle_trust.
+6. Ask the model for a candidate update; the host labels subject/event type and applies a hard veto.
+7. Run the atomic semantic gate. Route task checkpoints to host memory.
+8. Close the matching session; settle trust only from explicit eligible evidence.
 9. Persist the updated state.
 ```
 
@@ -122,11 +122,24 @@ Host-side validation should:
 
 ```python
 state = load_state(user_id, agent_id)
+assert_state_identity(state, character_id=agent_id, relationship_id=f"{agent_id}:{user_id}")
 
 if is_new_session:
-    state = session_start(state)
+    state, _ = session_start(
+        state,
+        native_session_id,
+        unique_start_event_id,
+        character_id=agent_id,
+        relationship_id=f"{agent_id}:{user_id}",
+    )
 
-state = pre_turn_decay(state)
+state = pre_turn_decay(
+    state,
+    session_id=native_session_id,
+    event_id=unique_decay_event_id,
+    character_id=agent_id,
+    relationship_id=f"{agent_id}:{user_id}",
+)
 prelude = build_prompt_prelude(state)
 
 model_result = call_model(
@@ -140,16 +153,25 @@ model_result = call_model(
 
 update = validate_emotion_update(model_result["emotion_update"])
 
-state = record_turn(
+state, result = evaluate_and_record_turn(
     state,
-    update["pad"]["pleasure"],
-    update["pad"]["arousal"],
-    update["pad"]["dominance"],
-    appraisal=update["appraisal"],
-    situation=update["memory"]["situation"],
-    relational_meaning=update["memory"].get("relational_meaning"),
-    follow_up_bias=update["memory"].get("follow_up_bias"),
-    salience=update["memory"].get("salience"),
+    event={
+        "session_id": native_session_id,
+        "event_id": unique_turn_event_id,
+        "message": user_message,
+        "subject": host_subject,
+        "event_type": host_event_type,
+        "host_approved": host_approved,
+        "memory_owner": "host-memory",
+        "character_id": agent_id,
+        "relationship_id": f"{agent_id}:{user_id}",
+    },
+    p=update["pad"]["pleasure"],
+    a=update["pad"]["arousal"],
+    d=update["pad"]["dominance"],
+    memory=update["memory"],
+    character_id=agent_id,
+    relationship_id=f"{agent_id}:{user_id}",
 )
 
 save_state(user_id, agent_id, state)

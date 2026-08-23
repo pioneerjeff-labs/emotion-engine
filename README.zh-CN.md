@@ -85,7 +85,7 @@ Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 
 
 在线演示：[打开 live demo](https://pioneerjeff-labs.github.io/emotion-engine/demo/)
 
-Hugging Face Space：[打开 state playground](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground)，直接查看 prompt prelude 和 `emotion-engine-state/v2` 状态包。
+Hugging Face Space：[打开 state playground](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground)，直接查看 prompt prelude 和状态包。仓库当前的 v3 开发版要求显式绑定角色与关系身份；旧 v2 状态只读，必须显式迁移。
 
 可以直接打开：
 

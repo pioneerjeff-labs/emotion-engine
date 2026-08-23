@@ -408,7 +408,7 @@ def run_simulation(args):
     if args.resume:
         state = engine.load_state(args.state)
     else:
-        state = engine.default_state()
+        state = engine.default_state("simulator", "simulator-demo")
 
     if args.style:
         state = engine.apply_configuration(state, args.style, "simulator-style")
@@ -425,7 +425,11 @@ def run_simulation(args):
     else:
         print_human_header(state, args.lang)
 
-    state = engine.session_start(state)
+    session_id = "simulator-session"
+    state, _ = engine.session_start(
+        state, session_id, "simulator-session-start",
+        character_id="simulator", relationship_id="simulator-demo",
+    )
     if args.json:
         print_json("Session Start", {
             "emotion": state["emotion"],
@@ -438,7 +442,7 @@ def run_simulation(args):
         appraisal = engine.appraise_message(state, message)
         suggested = appraisal["suggested"]
         before = state["emotion"].copy()
-        state = engine.record_turn(
+        state, _ = engine.record_turn(
             state,
             suggested["P"],
             suggested["A"],
@@ -449,6 +453,13 @@ def run_simulation(args):
             impact=log_impact(appraisal, args.lang),
             follow_up_bias=tone_preview(state, args.lang),
             salience=0.45,
+            session_id=session_id,
+            event_id=f"simulator-turn-{idx}",
+            subject="relationship",
+            semantic_event_type=appraisal["appraisal"],
+            host_approved=True,
+            character_id="simulator",
+            relationship_id="simulator-demo",
         )
         if args.json:
             print_json(f"Turn {idx}", {
@@ -471,8 +482,15 @@ def run_simulation(args):
             )
 
     trust_before = state["trust"]
-    state, settlement = engine.settle_trust(state)
-    patterns = settlement.get("patterns", {})
+    state, closed = engine.session_end(
+        state, session_id, "simulator-session-end",
+        character_id="simulator", relationship_id="simulator-demo",
+    )
+    state, settlement = engine.settle_trust(
+        state, session_id, "simulator-trust-settlement",
+        character_id="simulator", relationship_id="simulator-demo",
+    )
+    patterns = closed.get("patterns", {})
     trust_delta = settlement.get("raw_delta", 0.0)
 
     if args.state:

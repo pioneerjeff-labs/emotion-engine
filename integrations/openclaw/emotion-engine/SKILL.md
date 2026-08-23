@@ -23,14 +23,14 @@ Trust (T) is a separate slow-changing agent-to-user relationship parameter from 
 Emotion state lives at `{baseDir}/../../emotion-state.json` relative to this skill folder. If it does not exist, initialize it from `{baseDir}/emotion-state-template.json` or run:
 
 ```bash
-python3 {baseDir}/scripts/emotion_engine_utils.py init <state_file>
+python3 {baseDir}/scripts/emotion_engine_utils.py init <state_file> --character-id <character-id> --relationship-id <relationship-id>
 ```
 
-The state includes current PAD emotion, personality baseline, agent-to-user trust, session counters, the current session's numeric `emotion_trajectory`, compact `emotion_log`, and `trust_history`.
+The v3 state is bound to one character and relationship. Existing v2 packets are read-only until an explicit migration preview is applied; never infer either owner id.
 
 `emotion_trajectory` is for math. `emotion_log` is for continuity. It should record situation-aware emotional memories, not full transcripts. The MVP shape is: what happened, how this character interpreted it, why it matters relationally, and what bias it should create next.
 
-`trust_history` is only a numeric ledger for applied trust changes. Do not put reasons, source references, or confidence scores there; keep the explanation in the relevant `emotion_log` entries, session patterns, or compact `trust_update` log entry.
+`trust_history` is a numeric ledger referencing consumed `trust_evidence` ids. `emotion_log` explains compact emotional continuity; it is neither factual memory nor the trust evidence ledger.
 
 ## Onboarding And Control
 
@@ -63,7 +63,7 @@ Use `status` for users and `status --raw` for debugging. `clear_log` and `reset`
 Run:
 
 ```bash
-python3 {baseDir}/scripts/emotion_engine_utils.py session_start <state_file>
+python3 {baseDir}/scripts/emotion_engine_utils.py session_start <state_file> --session-id <native-session-id> --event-id <unique-start-event-id> --character-id <character-id> --relationship-id <relationship-id>
 ```
 
 This applies time-based PAD decay, applies trust decay after long absence, clears the current trajectory, increments `session_count`, and writes a `session_start` entry to the emotion log. Read the output before responding.
@@ -75,7 +75,7 @@ Before responding, do this sequence:
 1. Apply in-session drift toward baseline:
 
 ```bash
-python3 {baseDir}/scripts/emotion_engine_utils.py pre_turn_decay <state_file>
+python3 {baseDir}/scripts/emotion_engine_utils.py pre_turn_decay <state_file> --session-id <native-session-id> --event-id <unique-decay-event-id> --character-id <character-id> --relationship-id <relationship-id>
 ```
 
 2. Evaluate the user's message. You may use the deterministic appraisal helper as a first-pass guardrail:
@@ -88,10 +88,10 @@ The helper returns a suggested appraisal label, trust-modulated PAD delta, and s
 
 3. Choose the final P, A, D values. The Python helper may suggest a direction, but the final update comes from your contextual judgment. Each dimension should usually shift at most ±0.15 per turn. P stays in -1..1; A and D stay in 0..1.
 
-4. Record the turn with a compact emotional memory:
+4. Label `subject` and semantic event type. Task checkpoints and durable preferences belong to host memory. Record only after explicit host approval:
 
 ```bash
-python3 {baseDir}/scripts/emotion_engine_utils.py record_turn <state_file> <P> <A> <D> --appraisal <label> --situation <what happened>
+python3 {baseDir}/scripts/emotion_engine_utils.py record_turn <state_file> <P> <A> <D> --session-id <native-session-id> --event-id <unique-turn-event-id> --character-id <character-id> --relationship-id <relationship-id> --subject relationship --event-type <semantic-event-type> --host-approved --appraisal <label> --situation <what happened>
 ```
 
 For key events, add only the fields that matter:
@@ -105,7 +105,9 @@ python3 {baseDir}/scripts/emotion_engine_utils.py record_turn <state_file> <P> <
   --impact pleasure rose, dominance stabilized \
   --open-loop false \
   --follow-up be more precise and structured next turn \
-  --salience 0.65
+  --salience 0.65 \
+  --session-id <native-session-id> --event-id <unique-turn-event-id> --character-id <character-id> --relationship-id <relationship-id> \
+  --subject relationship --event-type relationship_calibration --host-approved
 ```
 
 Use compact memories, not transcripts:
@@ -133,10 +135,11 @@ These are guides, not scripts. Blend them with SOUL.md.
 Run:
 
 ```bash
-python3 {baseDir}/scripts/emotion_engine_utils.py settle_trust <state_file>
+python3 {baseDir}/scripts/emotion_engine_utils.py session_end <state_file> --session-id <native-session-id> --event-id <unique-end-event-id> --character-id <character-id> --relationship-id <relationship-id>
+python3 {baseDir}/scripts/emotion_engine_utils.py settle_trust <state_file> --session-id <native-session-id> --event-id <unique-settlement-event-id> --character-id <character-id> --relationship-id <relationship-id>
 ```
 
-This extracts trajectory patterns, logs the session close, checks recent turn-level emotion logs and the current trajectory, chooses a conservative agent-to-user raw trust delta between -0.20 and +0.05, and applies it once for the same trajectory. Repeating it should return `already_settled` with `raw_delta: 0.0`.
+Lifecycle calls are idempotent and settlement never closes a session implicitly. `settle_trust` consumes explicit eligible evidence only; praise, collaboration tags, task completion, and PAD patterns are not evidence. With none, it returns `no_eligible_evidence` without housekeeping writes.
 
 Use `session_end` only to inspect patterns without changing trust. Use the pattern signals and the conversation content for explicit host-side overrides:
 
@@ -152,10 +155,12 @@ Use `session_end` only to inspect patterns without changing trust. Use the patte
 Apply a manual trust delta only when the host has made its own trust judgment:
 
 ```bash
-python3 {baseDir}/scripts/emotion_engine_utils.py update_trust <state_file> <trust_delta>
+python3 {baseDir}/scripts/emotion_engine_utils.py update_trust <state_file> <trust_delta> \
+  --host-approved --reason <explicit-host-judgment> \
+  --character-id <character-id> --relationship-id <relationship-id>
 ```
 
-The script applies diminishing returns for positive trust changes, high-trust buffering for moderate negatives, and keeps a `trust_anchor` so long relationships do not decay below a historical floor too easily. The numeric effect goes to `trust_history`; the reason should remain in `emotion_log`.
+The script applies diminishing returns for positive trust changes and keeps a `trust_anchor`. Automatic settlement reasons live in `trust_evidence`; manual overrides must remain explicitly host-owned.
 
 ## Emotion Log
 
@@ -205,7 +210,11 @@ Useful commands:
 
 ```bash
 python3 {baseDir}/scripts/emotion_engine_utils.py recent_log <state_file> 5
-python3 {baseDir}/scripts/emotion_engine_utils.py log_event <state_file> boundary --situation user pushed past a stated limit --open-loop true --salience 0.8
+python3 {baseDir}/scripts/emotion_engine_utils.py log_event <state_file> boundary \
+  --session-id <native-session-id> --event-id <unique-event-id> \
+  --character-id <character-id> --relationship-id <relationship-id> \
+  --subject relationship --event-type boundary --host-approved \
+  --situation user pushed past a stated limit --open-loop true --salience 0.8
 python3 {baseDir}/scripts/emotion_engine_utils.py validate <state_file>
 ```
 

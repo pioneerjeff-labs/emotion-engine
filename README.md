@@ -21,7 +21,7 @@ It is not a memory stack. It is a portable emotional-continuity state layer that
 
 Emotion Engine is part of PioneerJeff Labs, an open-source lab building reusable infrastructure layers for creative AI applications.
 
-Status: stable v1. Current release: [v1.1.0 - Pi Agent integration](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v1.1.0).
+Status: v3 / `2.0.0-dev` development branch. The latest tagged stable release remains [v1.1.0](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v1.1.0) and uses the v2 state contract.
 
 ## Start Here
 
@@ -88,7 +88,7 @@ The demo is based on anonymized and adapted traces from prior LLM interaction ex
 
 Live demo: [Try the live demo](https://pioneerjeff-labs.github.io/emotion-engine/demo/)
 
-Hugging Face Space: [Try the state playground](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground) to inspect the prompt prelude and `emotion-engine-state/v2` packet directly.
+Hugging Face Space: [Try the state playground](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground) to inspect the prompt prelude and `emotion-engine-state/v3` packet directly.
 
 Open it directly:
 
@@ -184,7 +184,7 @@ For the smallest concrete loop before choosing a platform package, see [examples
 
 The stable state contract lives in [Emotion Engine State Protocol](docs/PROTOCOL.md), with a machine-readable schema at [spec/emotion-state.schema.json](spec/emotion-state.schema.json).
 
-For memory systems such as Celiums Memory, Emotion Engine should be used as a thin adapter target: map host PAD / `limbicState` into `state.emotion`, map compact journal or `turn_after` events into `emotion_log`, then return a compact snapshot or prompt prelude for the host to store or inject.
+For memory systems such as Celiums Memory, Emotion Engine should be used as a thin adapter target: map host PAD / `limbicState` into `state.emotion`, map compact journal or `turn` events into `emotion_log`, then return a compact snapshot or prompt prelude for the host to store or inject.
 
 Emotion Engine does not replace a memory stack, retrieval, ethics/policy, turn context, or clinical emotion inference. Host systems keep ownership of grounded memory and safety decisions.
 
@@ -372,11 +372,13 @@ Emotion Engine stores and updates:
 - **Affective pulse**: short-lived visible per-turn movement, integrated with mood in the default state package.
 - **Volatility profile**: internal or advanced movement envelope for different agent types.
 - **Trust**: a slow-moving agent-to-user relationship coefficient with its own decay policy. It is not the user's trust in the agent.
+- **State identity**: each v3 packet is bound to one character and one relationship before emotional mutation.
 - **Personality baseline**: where the agent naturally drifts back to.
 - **Emotion trajectory**: numeric state during a session.
 - **Emotion log**: compact emotional memories, not full transcripts.
 - **Retention policy**: audit and compact low-value log pressure without turning Emotion Engine into factual memory storage.
-- **Trust history**: numeric ledger for trust changes; reasons belong in `emotion_log`.
+- **Trust evidence**: explicit host-approved evidence consumed at most once by settlement.
+- **Trust history**: numeric ledger for trust changes with evidence references.
 - **Session patterns**: conflict, repair, volatility, suppression, and trust signals.
 
 Read more in [Concepts](docs/CONCEPTS.md).
@@ -385,19 +387,21 @@ Read more in [Concepts](docs/CONCEPTS.md).
 
 The typical integration loop is:
 
-1. Load the current state.
-2. Apply session or turn decay.
-3. Let the LLM interpret the user message and choose the final emotional update.
-4. Record the turn with compact memory.
-5. Use the updated state as guidance for future replies.
-6. At session end, settle agent-to-user trust from session evidence.
+1. Load state, verify v3 capabilities, and verify the bound character/relationship identity.
+2. Open the native session idempotently with unique session and event ids.
+3. Classify `subject` and semantic `event_type`; task checkpoints route to host memory.
+4. Let the host apply its hard approval gate, then atomically record any approved emotional update.
+5. Close the matching session.
+6. Settle trust only when explicit eligible evidence exists.
 
 See [Integration Guide](docs/INTEGRATION.md) for the full sequence.
 
 ## CLI
 
 ```bash
-python3 scripts/emotion_engine_utils.py init <state_file>
+python3 scripts/emotion_engine_utils.py init <state_file> --character-id <id> --relationship-id <id>
+python3 scripts/emotion_engine_utils.py migrate_state <state_file> --character-id <id> --relationship-id <id> --dry-run
+python3 scripts/emotion_engine_utils.py bind_identity <state_file> --character-id <id> --relationship-id <id>
 python3 scripts/emotion_engine_utils.py validate <state_file>
 python3 scripts/emotion_engine_utils.py configure <state_file> --style <description>
 python3 scripts/emotion_engine_utils.py configure <state_file> --soul-file <SOUL.md>
@@ -405,15 +409,17 @@ python3 scripts/emotion_engine_utils.py tune <state_file> <natural-language adju
 python3 scripts/emotion_engine_utils.py status <state_file>
 python3 scripts/emotion_engine_utils.py pause <state_file>
 python3 scripts/emotion_engine_utils.py resume <state_file>
-python3 scripts/emotion_engine_utils.py session_start <state_file>
-python3 scripts/emotion_engine_utils.py pre_turn_decay <state_file>
+python3 scripts/emotion_engine_utils.py session_start <state_file> --session-id <id> --event-id <id> --character-id <character-id> --relationship-id <relationship-id>
+python3 scripts/emotion_engine_utils.py pre_turn_decay <state_file> --session-id <id> --event-id <id> --character-id <character-id> --relationship-id <relationship-id>
 python3 scripts/emotion_engine_utils.py appraise <state_file> <message...>
-python3 scripts/emotion_engine_utils.py record_turn <state_file> <P> <A> <D> --appraisal <label> --situation <what happened>
-python3 scripts/emotion_engine_utils.py settle_trust <state_file>
-python3 scripts/emotion_engine_utils.py session_end <state_file>
-python3 scripts/emotion_engine_utils.py update_trust <state_file> <trust_delta>
+python3 scripts/emotion_engine_utils.py record_turn <state_file> <P> <A> <D> --session-id <id> --event-id <id> --character-id <character-id> --relationship-id <relationship-id> --host-approved --subject relationship --event-type <type>
+python3 scripts/emotion_engine_utils.py session_end <state_file> --session-id <id> --event-id <id> --character-id <character-id> --relationship-id <relationship-id>
+python3 scripts/emotion_engine_utils.py settle_trust <state_file> --session-id <id> --event-id <id> --character-id <character-id> --relationship-id <relationship-id>
+python3 scripts/emotion_engine_utils.py update_trust <state_file> <trust_delta> --host-approved --reason <reason> --character-id <character-id> --relationship-id <relationship-id>
 python3 scripts/emotion_engine_utils.py recent_log <state_file> 5
 python3 scripts/emotion_engine_utils.py audit_log <state_file>
+python3 scripts/emotion_engine_utils.py audit_state <state_file>
+python3 scripts/emotion_engine_utils.py repair_plan <state_file>
 python3 scripts/emotion_engine_utils.py compact_log <state_file> --dry-run
 python3 scripts/emotion_engine_utils.py compact_log <state_file> --apply
 ```

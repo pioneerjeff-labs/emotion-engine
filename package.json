@@ -1,6 +1,6 @@
 {
   "name": "emotion-engine-pi",
-  "version": "1.1.0",
+  "version": "2.0.0-dev",
   "description": "Emotion Engine emotional-continuity skill package for Pi Agent.",
   "license": "MIT",
   "keywords": [

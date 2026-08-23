@@ -57,7 +57,7 @@ class MinimalAgentExampleTest(unittest.TestCase):
             self.assertIn("- Recent compact memories: none yet", output)
 
             state = json.loads(state_file.read_text(encoding="utf-8"))
-            self.assertEqual(state["_schema"], "emotion-engine-state/v2")
+            self.assertEqual(state["_schema"], "emotion-engine-state/v3")
             self.assertEqual(state["total_turns"], 2)
             self.assertGreaterEqual(len(state["emotion_log"]), 2)
             self.assertEqual(state["emotion_trajectory"][-1]["appraisal"], "boundary_pressure")

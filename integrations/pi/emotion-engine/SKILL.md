@@ -21,14 +21,20 @@ Pi loads this file with its absolute path. Treat the directory containing this `
 <skill-directory>/scripts/pi_emotion.sh status
 <skill-directory>/scripts/pi_emotion.sh audit_log
 <skill-directory>/scripts/pi_emotion.sh compact_log --dry-run
-<skill-directory>/scripts/pi_emotion.sh record_policy --mode light --context milestone "that migration was handled well"
+<skill-directory>/scripts/pi_emotion.sh record_policy --mode light --subject task --event-type work_checkpoint --memory-owner project "that migration was handled well"
 <skill-directory>/scripts/pi_emotion.sh configure --style "warm but not over-compliant, with clear boundaries"
 <skill-directory>/scripts/pi_emotion.sh tune "make it calmer"
 ```
 
 Do not assume the current working directory is the skill directory. Resolve the wrapper from the loaded `SKILL.md` path.
 
-The wrapper automatically initializes a state file if missing. State path priority:
+The wrapper initializes an unbound v3 packet if missing. Bind it once before emotional mutation:
+
+```bash
+<skill-directory>/scripts/pi_emotion.sh bind_identity --character-id <character-id> --relationship-id <relationship-id>
+```
+
+Treat v2 as read-only; preview `migrate_state` with explicit owner ids before `--apply`. State path priority:
 
 1. `PI_EMOTION_STATE` environment variable
 2. `PI_PROJECT_DIR/.emotion-engine/pi-state.json`
@@ -68,19 +74,19 @@ Only run `clear_log` or `reset` after the user explicitly asks. They erase local
 
 ## Runtime Modes And Record Policy
 
-Emotion Engine state is a modulation layer, not an identity or factual-memory layer. Do not edit `AGENTS.md`, durable memory, or project documentation just because PAD changes. Use compact state only as temporary turn context.
+Emotion Engine is a modulation layer with an identity binding guard, not a factual-memory layer or persona definition. Do not edit durable memory just because PAD changes.
 
 Use `record_policy` before deciding whether to persist a turn:
 
 ```bash
-<skill-directory>/scripts/pi_emotion.sh record_policy --mode light --context milestone "the user approved the completed migration"
+<skill-directory>/scripts/pi_emotion.sh record_policy --mode light --subject task --event-type work_checkpoint --memory-owner project "the user approved the completed migration"
 ```
 
-The command is deterministic and side-effect free. It returns a JSON decision such as `record_turn` or `respond_only`, plus `reason`, `appraisal`, `salience`, `trust_eligible`, and structured `reply_bias`. It does not call an LLM and does not write state.
+The command is deterministic and side-effect free. It returns `respond_only`, `route_host_memory`, `state_only`, or `record_emotion`. Host approval is a hard gate; keywords cannot override structured ownership.
 
 Mode contract:
 
-- `light`: event-triggered. Generic praise, small talk, and ordinary task progress should usually be `respond_only`; concrete feedback, milestones, repair, stable preferences, boundary pressure, or explicit emotional-continuity discussion may be recorded.
+- `light`: event-triggered. Work progress, concrete work feedback, and stable preferences route to host memory. Only host-approved relationship/self events may affect Emotion Engine.
 - `always`: per-meaningful-turn tracking. Compact turn records are allowed more often, but habituation, salience, low-value duplicate compaction, and trust-settlement rules still apply.
 - `paused`: preserve local state but do not record lifecycle updates or modulate replies.
 
@@ -91,13 +97,13 @@ Mode contract:
 At the start of a new meaningful conversation or session:
 
 ```bash
-<skill-directory>/scripts/pi_emotion.sh session_start
+<skill-directory>/scripts/pi_emotion.sh session_start --session-id <native-session-id> --event-id <unique-start-event-id> --character-id <character-id> --relationship-id <relationship-id>
 ```
 
 Before responding to each user message:
 
 ```bash
-<skill-directory>/scripts/pi_emotion.sh pre_turn_decay
+<skill-directory>/scripts/pi_emotion.sh pre_turn_decay --session-id <native-session-id> --event-id <unique-decay-event-id> --character-id <character-id> --relationship-id <relationship-id>
 <skill-directory>/scripts/pi_emotion.sh appraise "<user message>"
 ```
 
@@ -106,7 +112,7 @@ The appraisal helper is advisory. Pi must use full conversation context, project
 After choosing final PAD values, record the turn:
 
 ```bash
-<skill-directory>/scripts/pi_emotion.sh record_turn <P> <A> <D> --appraisal <label> --situation <short emotional memory>
+<skill-directory>/scripts/pi_emotion.sh record_turn <P> <A> <D> --session-id <native-session-id> --event-id <unique-turn-event-id> --character-id <character-id> --relationship-id <relationship-id> --subject relationship --event-type <semantic-event-type> --host-approved --appraisal <label> --situation <short emotional memory>
 ```
 
 For important events, add only the memory fields that help future behavior:
@@ -120,16 +126,19 @@ For important events, add only the memory fields that help future behavior:
   --impact pleasure rose, dominance stabilized \
   --open-loop false \
   --follow-up be more precise and structured next turn \
-  --salience 0.65
+  --salience 0.65 \
+  --session-id <native-session-id> --event-id <unique-turn-event-id> --character-id <character-id> --relationship-id <relationship-id> \
+  --subject relationship --event-type relationship_calibration --host-approved
 ```
 
-At session or milestone close:
+At session close:
 
 ```bash
-<skill-directory>/scripts/pi_emotion.sh settle_trust
+<skill-directory>/scripts/pi_emotion.sh session_end --session-id <native-session-id> --event-id <unique-end-event-id> --character-id <character-id> --relationship-id <relationship-id>
+<skill-directory>/scripts/pi_emotion.sh settle_trust --session-id <native-session-id> --event-id <unique-settlement-event-id> --character-id <character-id> --relationship-id <relationship-id>
 ```
 
-`settle_trust` extracts session patterns, checks recent turn-level emotion logs and the current trajectory, chooses a conservative raw delta in `-0.20` to `+0.05`, and applies it once for the same trajectory. Repeating it should return `already_settled` with `raw_delta: 0.0`. Use `session_end` only to inspect patterns without changing trust, and `update_trust <trust_delta>` only for an explicit host-side override.
+Lifecycle calls are idempotent. Settlement requires a closed session and explicit unconsumed evidence; praise, task completion, appraisal tags, and PAD shape are not evidence. Without evidence it returns `no_eligible_evidence` without housekeeping writes.
 
 ## How State Should Shape Replies
 
@@ -148,7 +157,7 @@ Blend this with the user's instructions, repository context, and any SOUL.md cha
 
 `emotion_log` should store situation-aware emotional memories, not transcripts.
 
-`trust_history` should stay a numeric ledger for applied trust changes. Keep reasons and provenance in `emotion_log`, including turn entries, session patterns, compact `trust_update` entries, or optional `source_refs`.
+`trust_history` stays numeric and references consumed `trust_evidence` ids. `emotion_log` is compact emotional continuity, not factual or trust-evidence storage.
 
 Good memory:
 
@@ -171,6 +180,8 @@ For long-running agents, use `audit_log` to inspect retention pressure and `comp
 - Do not expose raw PAD values in normal user-facing replies.
 - Do not treat the deterministic appraisal helper as the final emotional judge.
 - Do not store full private transcripts in `emotion_log`; store compact emotional summaries.
+- Do not record work checkpoints or durable host preferences as emotional memory.
+- Do not mutate v2 or identity-unbound state.
 - Do not use trust as obedience, sweetness, user scoring, safety permission, user-to-agent trust, or attachment pressure.
 - Do not run `reset`, `clear_log`, or other destructive commands unless the user explicitly asks.
 

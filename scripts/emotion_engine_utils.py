@@ -4,19 +4,25 @@ emotion_engine_utils.py — State, decay, appraisal, and pattern tools
 for Emotion Engine.
 
 Usage:
-  python3 emotion_engine_utils.py init <state_file>
+  python3 emotion_engine_utils.py init <state_file> [--character-id <id> --relationship-id <id>]
+  python3 emotion_engine_utils.py migrate_state <state_file> --character-id <id> --relationship-id <id> [--apply]
+  python3 emotion_engine_utils.py bind_identity <state_file> --character-id <id> --relationship-id <id>
   python3 emotion_engine_utils.py validate <state_file>
   python3 emotion_engine_utils.py decay <state_file>
   python3 emotion_engine_utils.py pre_turn_decay <state_file>
   python3 emotion_engine_utils.py appraise <state_file> <message...>
   python3 emotion_engine_utils.py record_policy <state_file> [--mode light|always|paused] [--context <label>] <message...>
   python3 emotion_engine_utils.py patterns <state_file>
-  python3 emotion_engine_utils.py settle_trust <state_file>
+  python3 emotion_engine_utils.py settle_trust <state_file> --session-id <id> --event-id <id> --character-id <id> --relationship-id <id>
   python3 emotion_engine_utils.py update_trust <state_file> <trust_delta>
-  python3 emotion_engine_utils.py record_turn <state_file> <P> <A> <D> [memory options]
+  python3 emotion_engine_utils.py record_turn <state_file> <P> <A> <D> --session-id <id> --event-id <id> --character-id <id> --relationship-id <id> --host-approved [memory options]
+  python3 emotion_engine_utils.py evaluate_turn <state_file> <P> <A> <D> --event-json <json>
   python3 emotion_engine_utils.py log_event <state_file> <event_type> [memory options]
   python3 emotion_engine_utils.py recent_log <state_file> [limit]
   python3 emotion_engine_utils.py audit_log <state_file>
+  python3 emotion_engine_utils.py audit_state <state_file>
+  python3 emotion_engine_utils.py repair_plan <state_file>
+  python3 emotion_engine_utils.py reconcile_trust <state_file> --baseline-trust <value> [--apply]
   python3 emotion_engine_utils.py compact_log <state_file> [--dry-run|--apply]
   python3 emotion_engine_utils.py configure <state_file> --style <description>
   python3 emotion_engine_utils.py configure <state_file> --soul-file <SOUL.md>
@@ -26,8 +32,8 @@ Usage:
   python3 emotion_engine_utils.py resume <state_file>
   python3 emotion_engine_utils.py clear_log <state_file>
   python3 emotion_engine_utils.py reset <state_file> [--factory]
-  python3 emotion_engine_utils.py session_start <state_file>
-  python3 emotion_engine_utils.py session_end <state_file>
+  python3 emotion_engine_utils.py session_start <state_file> --session-id <id> --event-id <id> --character-id <id> --relationship-id <id>
+  python3 emotion_engine_utils.py session_end <state_file> --session-id <id> --event-id <id> --character-id <id> --relationship-id <id>
 """
 
 import json
@@ -36,6 +42,7 @@ import os
 import sys
 import hashlib
 import tempfile
+import uuid
 import warnings
 from contextlib import contextmanager
 from copy import deepcopy
@@ -83,9 +90,29 @@ VOLATILITY_PROFILES = {
     },
 }
 
+STATE_SCHEMA = "emotion-engine-state/v3"
+LEGACY_STATE_SCHEMA = "emotion-engine-state/v2"
+STATE_CAPABILITIES = [
+    "state_identity/v1",
+    "structured_record_policy/v1",
+    "session_idempotency/v1",
+    "trust_evidence/v1",
+    "behavior_audit/v1",
+    "repair_plan/v1",
+]
+
+
 DEFAULT_STATE = {
-    "_schema": "emotion-engine-state/v2",
+    "_schema": STATE_SCHEMA,
+    "identity": {
+        "state_id": None,
+        "character_id": None,
+        "relationship_id": None,
+        "status": "unbound",
+    },
+    "capabilities": list(STATE_CAPABILITIES),
     "enabled": True,
+    "runtime_mode": "light",
     "volatility_profile": "steady",
     "emotion": {"pleasure": 0.0, "arousal": 0.3, "dominance": 0.5},
     "affective_pulse": deepcopy(DEFAULT_AFFECTIVE_PULSE),
@@ -104,7 +131,18 @@ DEFAULT_STATE = {
     "emotion_trajectory": [],
     "emotion_log": [],
     "trust_history": [],
+    "trust_evidence": [],
     "trust_settlements": [],
+    "session": {
+        "active_session_id": None,
+        "last_session_id": None,
+        "status": "closed",
+        "opened_at": None,
+        "closed_at": None,
+        "settled_at": None,
+    },
+    "session_ledger": [],
+    "processed_event_ids": [],
     "log_limit": 200,
 }
 
@@ -249,8 +287,21 @@ def now_iso():
     return datetime.now(timezone.utc).isoformat()
 
 
-def default_state():
-    return deepcopy(DEFAULT_STATE)
+def default_state(character_id=None, relationship_id=None, state_id=None):
+    """Create a v3 state packet.
+
+    A new packet always receives a unique state_id. Emotional mutations remain
+    blocked until both owner identifiers are explicitly supplied or bound.
+    """
+    state = deepcopy(DEFAULT_STATE)
+    state["identity"]["state_id"] = str(state_id or uuid.uuid4())
+    if character_id is not None:
+        state["identity"]["character_id"] = normalize_identifier(character_id, "character_id")
+    if relationship_id is not None:
+        state["identity"]["relationship_id"] = normalize_identifier(relationship_id, "relationship_id")
+    if state["identity"]["character_id"] and state["identity"]["relationship_id"]:
+        state["identity"]["status"] = "bound"
+    return state
 
 
 def state_lock_path(path):
@@ -361,7 +412,7 @@ def backup_current_state(path):
     if not os.path.exists(path):
         return
     try:
-        existing = load_state_from_path(path)
+        existing = read_json_file(path)
     except (json.JSONDecodeError, OSError, TypeError, ValueError):
         return
     write_json_file_atomic(state_backup_path(path), existing)
@@ -488,13 +539,66 @@ def normalize_affective_pulse(values):
     }
 
 
+def normalize_identifier(value, field_name="identifier"):
+    if value is None:
+        return None
+    normalized = str(value).strip()
+    if not normalized:
+        return None
+    if len(normalized) > 160:
+        raise ValueError(f"{field_name} must be 160 characters or fewer")
+    return normalized
+
+
+def normalize_identity(value):
+    identity = deepcopy(DEFAULT_STATE["identity"])
+    if isinstance(value, dict):
+        identity.update(value)
+    identity["state_id"] = normalize_identifier(identity.get("state_id"), "state_id")
+    identity["character_id"] = normalize_identifier(identity.get("character_id"), "character_id")
+    identity["relationship_id"] = normalize_identifier(identity.get("relationship_id"), "relationship_id")
+    identity["status"] = (
+        "bound"
+        if identity["state_id"] and identity["character_id"] and identity["relationship_id"]
+        else "unbound"
+    )
+    return identity
+
+
+def normalize_session(value):
+    session = deepcopy(DEFAULT_STATE["session"])
+    if isinstance(value, dict):
+        session.update(value)
+    session["active_session_id"] = normalize_identifier(
+        session.get("active_session_id"), "active_session_id"
+    )
+    session["last_session_id"] = normalize_identifier(
+        session.get("last_session_id"), "last_session_id"
+    )
+    status = str(session.get("status") or "closed").strip().lower()
+    session["status"] = status if status in {"active", "closing", "closed"} else "closed"
+    for key in ["opened_at", "closed_at", "settled_at"]:
+        if session.get(key) is not None:
+            session[key] = str(session[key])
+    return session
+
+
 def ensure_state_shape(state):
-    merged = default_state()
+    raw_schema = state.get("_schema") if isinstance(state, dict) else None
+    schema = raw_schema or LEGACY_STATE_SCHEMA
+    if schema not in {LEGACY_STATE_SCHEMA, STATE_SCHEMA}:
+        raise ValueError(f"Unsupported Emotion Engine state schema: {schema}")
+
+    merged = deepcopy(DEFAULT_STATE)
     if isinstance(state, dict):
         merged.update(state)
 
-    merged["_schema"] = "emotion-engine-state/v2"
+    merged["_schema"] = schema
+    merged["identity"] = normalize_identity(merged.get("identity"))
+    merged["capabilities"] = list(STATE_CAPABILITIES) if schema == STATE_SCHEMA else []
     merged["enabled"] = bool(merged.get("enabled", True))
+    runtime_mode = str(merged.get("runtime_mode") or "light").strip().lower()
+    merged["runtime_mode"] = runtime_mode if runtime_mode in {"light", "always", "paused"} else "light"
     merged["volatility_profile"] = normalize_volatility_profile(merged.get("volatility_profile"))
     merged["emotion"] = normalize_emotion(merged.get("emotion"))
     merged["affective_pulse"] = normalize_affective_pulse(merged.get("affective_pulse"))
@@ -514,15 +618,137 @@ def ensure_state_shape(state):
         1.0,
     ), 4)
 
-    for key in ["emotion_trajectory", "emotion_log", "trust_history", "trust_settlements"]:
+    for key in [
+        "emotion_trajectory",
+        "emotion_log",
+        "trust_history",
+        "trust_evidence",
+        "trust_settlements",
+        "session_ledger",
+        "processed_event_ids",
+    ]:
         if not isinstance(merged.get(key), list):
             merged[key] = []
+
+    merged["session"] = normalize_session(merged.get("session"))
 
     for key in ["session_count", "total_turns"]:
         merged[key] = int(merged.get(key, 0) or 0)
 
     merged["log_limit"] = max(25, int(merged.get("log_limit", 200) or 200))
     return merged
+
+
+def state_is_v3(state):
+    return isinstance(state, dict) and state.get("_schema") == STATE_SCHEMA
+
+
+def require_v3_state(state, require_bound=True):
+    state = ensure_state_shape(state)
+    if state.get("_schema") != STATE_SCHEMA:
+        raise ValueError(
+            "state migration required: v2 packets are read-only; run migrate_state "
+            "with explicit character_id and relationship_id"
+        )
+    if require_bound and state["identity"].get("status") != "bound":
+        raise ValueError(
+            "state identity is unbound: bind explicit character_id and relationship_id "
+            "before recording emotional state"
+        )
+    return state
+
+
+def assert_state_identity(state, character_id=None, relationship_id=None):
+    state = require_v3_state(state)
+    expected = {
+        "character_id": normalize_identifier(character_id, "character_id"),
+        "relationship_id": normalize_identifier(relationship_id, "relationship_id"),
+    }
+    mismatches = {
+        key: {"expected": value, "actual": state["identity"].get(key)}
+        for key, value in expected.items()
+        if value is not None and value != state["identity"].get(key)
+    }
+    if mismatches:
+        raise ValueError(f"state identity mismatch: {json.dumps(mismatches, ensure_ascii=False)}")
+    return state
+
+
+def require_expected_state_identity(state, character_id, relationship_id):
+    if not normalize_identifier(character_id, "character_id") or not normalize_identifier(
+        relationship_id, "relationship_id"
+    ):
+        raise ValueError("mutating events require expected character_id and relationship_id")
+    return assert_state_identity(state, character_id, relationship_id)
+
+
+def bind_state_identity(state, character_id, relationship_id):
+    """Bind an unbound v3 packet once; rebinding is rejected."""
+    state = require_v3_state(state, require_bound=False)
+    character_id = normalize_identifier(character_id, "character_id")
+    relationship_id = normalize_identifier(relationship_id, "relationship_id")
+    if not character_id or not relationship_id:
+        raise ValueError("binding requires explicit character_id and relationship_id")
+    identity = state["identity"]
+    if identity.get("status") == "bound":
+        assert_state_identity(state, character_id, relationship_id)
+        return state, {"status": "already_bound", "identity": deepcopy(identity)}
+    identity.update({
+        "character_id": character_id,
+        "relationship_id": relationship_id,
+        "status": "bound",
+    })
+    return state, {"status": "bound", "identity": deepcopy(identity)}
+
+
+def migrate_state_v2(state, character_id, relationship_id, state_id=None):
+    """Build a v3 packet from v2 without guessing ownership."""
+    source = ensure_state_shape(state)
+    if source.get("_schema") == STATE_SCHEMA:
+        assert_state_identity(source, character_id, relationship_id)
+        return source, {"status": "already_v3", "schema": STATE_SCHEMA}
+    character_id = normalize_identifier(character_id, "character_id")
+    relationship_id = normalize_identifier(relationship_id, "relationship_id")
+    if not character_id or not relationship_id:
+        raise ValueError("migration requires explicit character_id and relationship_id")
+
+    migrated = default_state(character_id, relationship_id, state_id=state_id)
+    for key in DEFAULT_STATE:
+        if key in {
+            "_schema", "identity", "capabilities", "session", "session_ledger",
+            "processed_event_ids", "emotion_trajectory", "trust_evidence", "trust_settlements",
+        }:
+            continue
+        if key in source:
+            migrated[key] = deepcopy(source[key])
+    for entry in migrated.get("emotion_log", []):
+        if isinstance(entry, dict):
+            entry["legacy_v2_entry"] = True
+    migrated["legacy_v2"] = {
+        "migrated_at": now_iso(),
+        "emotion_trajectory": deepcopy(source.get("emotion_trajectory", [])),
+        "trust_settlements": deepcopy(source.get("trust_settlements", [])),
+        "note": "legacy lifecycle records are preserved for audit but are not active v3 evidence",
+    }
+    migrated["_schema"] = STATE_SCHEMA
+    migrated["session"] = deepcopy(DEFAULT_STATE["session"])
+    migrated["session_ledger"] = []
+    migrated["processed_event_ids"] = []
+    migrated = add_emotion_log(
+        migrated,
+        "migration",
+        situation="explicit v2 to v3 state migration",
+        tags=["migration", "identity_bound"],
+        extra={"from_schema": LEGACY_STATE_SCHEMA, "to_schema": STATE_SCHEMA},
+    )
+    return migrated, {
+        "status": "migration_ready",
+        "from_schema": LEGACY_STATE_SCHEMA,
+        "to_schema": STATE_SCHEMA,
+        "identity": deepcopy(migrated["identity"]),
+        "archived_legacy_trajectory_entries": len(source.get("emotion_trajectory", [])),
+        "archived_legacy_settlements": len(source.get("trust_settlements", [])),
+    }
 
 
 def emotion_to_pad(emotion):
@@ -873,6 +1099,11 @@ def public_status(state):
         "trust_progress": progress["progress"],
         "trust_progress_phrase": progress["phrase"],
         "session_count": state["session_count"],
+        "schema": state.get("_schema"),
+        "identity_status": state.get("identity", {}).get("status"),
+        "migration_required": state.get("_schema") != STATE_SCHEMA,
+        "capabilities": list(state.get("capabilities", [])),
+        "session_status": state.get("session", {}).get("status"),
         "log_entries": len(state.get("emotion_log", [])),
         "hint": "Use tune for small changes, pause/resume for control, and status --raw for debug values.",
     }
@@ -1468,6 +1699,22 @@ def appraise_message(state, message):
 # ── Record Policy ────────────────────────────────────────────────────
 
 POLICY_MODES = {"light", "always", "paused"}
+POLICY_SUBJECTS = {"task", "relationship", "self", "mixed"}
+POLICY_EVENT_TYPES = {
+    "work_checkpoint",
+    "concrete_feedback",
+    "repair",
+    "boundary",
+    "stable_preference",
+    "emotional_milestone",
+    "explicit_trust",
+    "relationship_calibration",
+    "intimacy",
+    "playful",
+    "vulnerability",
+    "hostility",
+    "neutral",
+}
 POLICY_CONTEXT_ALIASES = {
     "milestone": {"milestone", "completed", "completion", "ship", "shipped", "verified", "done"},
     "concrete_feedback": {"concrete", "specific", "feedback", "behavior", "implementation"},
@@ -1486,13 +1733,17 @@ STABLE_PREFERENCE_KEYWORDS = [
     "以后", "保持", "默认", "都这样", "一直这样", "下次", "remember", "from now on",
     "keep doing", "default to",
 ]
-MILESTONE_KEYWORDS = [
-    "done", "shipped", "verified", "passed", "complete", "完成", "搞定", "通过", "验证", "落地",
-]
-
-
 def parse_record_policy_args(args):
-    options = {"mode": None, "contexts": [], "message": ""}
+    options = {
+        "mode": None,
+        "contexts": [],
+        "subject": None,
+        "event_type": None,
+        "host_approved": False,
+        "memory_owner": None,
+        "source": "model_inferred",
+        "message": "",
+    }
     message_parts = []
     i = 0
     while i < len(args):
@@ -1504,6 +1755,13 @@ def parse_record_policy_args(args):
             raw = args[i + 1]
             options["contexts"].extend(part.strip() for part in raw.split(",") if part.strip())
             i += 2
+        elif token in {"--subject", "--event-type", "--memory-owner", "--source"} and i + 1 < len(args):
+            key = token[2:].replace("-", "_")
+            options[key] = args[i + 1]
+            i += 2
+        elif token == "--host-approved":
+            options["host_approved"] = True
+            i += 1
         else:
             message_parts.append(token)
             i += 1
@@ -1539,6 +1797,10 @@ def recent_turn_appraisal_count(state, appraisal, window=8):
 
 def policy_reply_bias(reason, appraisal, decision):
     base = ["do not mention PAD/trust unless asked"]
+    if decision == "route_host_memory":
+        return ["stay task-focused", "route durable facts to host memory", *base]
+    if decision == "state_only":
+        return ["allow short-lived tone movement", "do not create durable emotional memory", *base]
     if decision == "respond_only":
         if reason == "neutral_task":
             return ["stay task-focused", *base]
@@ -1589,7 +1851,17 @@ def policy_salience(reason, appraisal, mode, habituation_count):
     return round(clamp(base, 0.0, 1.0), 2)
 
 
-def record_policy(state, message, mode=None, contexts=None):
+def record_policy(
+    state,
+    message,
+    mode=None,
+    contexts=None,
+    subject=None,
+    event_type=None,
+    host_approved=False,
+    memory_owner=None,
+    source="model_inferred",
+):
     """Decide whether a turn should be persisted under light/always/paused mode.
 
     The policy is deterministic and side-effect free. It does not write state,
@@ -1605,6 +1877,12 @@ def record_policy(state, message, mode=None, contexts=None):
     appraisal = appraise_message(state, message)
     label = appraisal["appraisal"]
     text = message.lower()
+    normalized_subject = str(subject or "mixed").strip().lower().replace("-", "_")
+    if normalized_subject not in POLICY_SUBJECTS:
+        normalized_subject = "mixed"
+    normalized_event_type = str(event_type or "").strip().lower().replace("-", "_")
+    if normalized_event_type not in POLICY_EVENT_TYPES:
+        normalized_event_type = ""
 
     if requested_mode == "paused" or not state.get("enabled", True):
         return {
@@ -1614,8 +1892,13 @@ def record_policy(state, message, mode=None, contexts=None):
             "appraisal": label,
             "salience": 0.0,
             "trust_eligible": False,
+            "trust_candidate": False,
             "reply_bias": policy_reply_bias("paused", label, "respond_only"),
             "context": normalized_contexts,
+            "subject": normalized_subject,
+            "event_type": normalized_event_type or "neutral",
+            "host_approved": bool(host_approved),
+            "source": source,
             "current": appraisal["current"],
             "suggested": appraisal["current"],
             "actual_delta": {"P": 0.0, "A": 0.0, "D": 0.0},
@@ -1630,66 +1913,64 @@ def record_policy(state, message, mode=None, contexts=None):
         "stable_preference" in normalized_contexts
         or message_has_any(message, STABLE_PREFERENCE_KEYWORDS)
     )
-    milestone = (
-        "milestone" in normalized_contexts
-        or message_has_any(message, MILESTONE_KEYWORDS)
-    )
     explicit_trust = any(keyword in text for keyword in TRUST_SETTLEMENT_KEYWORDS)
     warmth_habituation = recent_turn_appraisal_count(state, "warmth")
-    relationship_context = any(
-        context in normalized_contexts
-        for context in {"relationship_calibration", "intimacy", "playful"}
-    )
+    inferred_event_type = normalized_event_type
+    if not inferred_event_type:
+        context_map = {
+            "milestone": "work_checkpoint",
+            "concrete_feedback": "concrete_feedback",
+            "stable_preference": "stable_preference",
+            "repair": "repair",
+            "boundary_pressure": "boundary",
+            "relationship_calibration": "relationship_calibration",
+            "intimacy": "intimacy",
+            "playful": "playful",
+        }
+        inferred_event_type = next(
+            (mapped for key, mapped in context_map.items() if key in normalized_contexts),
+            "",
+        )
+    if not inferred_event_type:
+        if stable_preference:
+            inferred_event_type = "stable_preference"
+        elif concrete:
+            inferred_event_type = "concrete_feedback"
+        elif explicit_trust:
+            inferred_event_type = "explicit_trust"
+        elif label == "boundary_pressure":
+            inferred_event_type = "boundary"
+        elif label in POLICY_EVENT_TYPES:
+            inferred_event_type = label
+        else:
+            inferred_event_type = "neutral"
+
+    task_owned = normalized_subject == "task" or inferred_event_type == "work_checkpoint"
+    relationship_event = inferred_event_type in {
+        "repair", "boundary", "emotional_milestone", "explicit_trust",
+        "relationship_calibration", "intimacy", "playful", "vulnerability", "hostility",
+    }
+    trust_candidate = inferred_event_type in {"repair", "boundary", "explicit_trust", "hostility"}
 
     decision = "respond_only"
-    reason = "neutral_task"
-    trust_eligible = False
-
-    if label in {"hostility", "boundary_pressure", "repair", "vulnerability"}:
-        decision = "record_turn"
-        reason = label
-        trust_eligible = label in {"hostility", "boundary_pressure", "repair"}
-    elif label in {"relationship_calibration", "intimacy", "playful"} or relationship_context:
-        decision = "record_turn"
-        reason = label if label in {"relationship_calibration", "intimacy", "playful"} else "relationship_calibration"
-        trust_eligible = False
-    elif stable_preference:
-        decision = "record_turn"
-        reason = "stable_preference"
-        trust_eligible = False
-    elif explicit_trust:
-        decision = "record_turn"
-        reason = "explicit_trust"
-        trust_eligible = True
-    elif milestone and label == "warmth":
-        decision = "record_turn"
-        reason = "milestone_warmth"
-        trust_eligible = False
-    elif concrete:
-        decision = "record_turn"
-        reason = "concrete_feedback"
-        trust_eligible = False
-    elif milestone and label in {"collaboration", "neutral"}:
-        decision = "record_turn"
-        reason = "milestone_collaboration"
-        trust_eligible = False
+    reason = "host_approval_required" if relationship_event else "neutral_task"
+    if task_owned:
+        decision = "route_host_memory" if memory_owner else "respond_only"
+        reason = "work_checkpoint"
+    elif inferred_event_type in {"stable_preference", "concrete_feedback"}:
+        decision = "route_host_memory" if memory_owner else "respond_only"
+        reason = inferred_event_type
+    elif normalized_subject == "self" and bool(host_approved):
+        decision = "state_only"
+        reason = inferred_event_type
+    elif relationship_event and normalized_subject in {"relationship", "mixed"} and bool(host_approved):
+        decision = "record_emotion"
+        reason = inferred_event_type
     elif label == "warmth":
-        if requested_mode == "always" and not warmth_habituation:
-            decision = "record_turn"
-            reason = "generic_praise"
-        else:
-            decision = "respond_only"
-            reason = "generic_praise_habituated" if warmth_habituation else "generic_praise"
-    elif requested_mode == "always" and label != "neutral":
-        decision = "record_turn"
-        reason = label
-        trust_eligible = label in {"collaboration", "repair", "boundary_pressure", "hostility"}
-    elif requested_mode == "always":
-        decision = "respond_only"
-        reason = "neutral_task"
+        reason = "generic_praise_habituated" if warmth_habituation else "generic_praise"
 
     salience = policy_salience(reason, label, requested_mode, warmth_habituation)
-    if decision == "respond_only":
+    if decision in {"respond_only", "route_host_memory"}:
         salience = 0.0
 
     return {
@@ -1698,14 +1979,21 @@ def record_policy(state, message, mode=None, contexts=None):
         "reason": reason,
         "appraisal": label,
         "salience": salience,
-        "trust_eligible": bool(trust_eligible),
+        "trust_eligible": False,
+        "trust_candidate": bool(trust_candidate),
+        "evidence_required": bool(trust_candidate),
         "reply_bias": policy_reply_bias(reason, label, decision),
         "context": normalized_contexts,
+        "subject": normalized_subject,
+        "event_type": inferred_event_type,
+        "host_approved": bool(host_approved),
+        "memory_owner": memory_owner,
+        "source": source,
         "habituation": {"recent_warmth_turns": warmth_habituation},
         "current": appraisal["current"],
-        "suggested": appraisal["suggested"] if decision == "record_turn" else appraisal["current"],
-        "actual_delta": appraisal["actual_delta"] if decision == "record_turn" else {"P": 0.0, "A": 0.0, "D": 0.0},
-        "affective_pulse": appraisal["affective_pulse"] if decision == "record_turn" else zero_affective_pulse("record_policy"),
+        "suggested": appraisal["suggested"] if decision in {"state_only", "record_emotion"} else appraisal["current"],
+        "actual_delta": appraisal["actual_delta"] if decision in {"state_only", "record_emotion"} else {"P": 0.0, "A": 0.0, "D": 0.0},
+        "affective_pulse": appraisal["affective_pulse"] if decision in {"state_only", "record_emotion"} else zero_affective_pulse("record_policy"),
     }
 
 
@@ -1797,14 +2085,6 @@ def extract_patterns(state):
 
 # ── Trust Update ─────────────────────────────────────────────────────
 
-TRUST_SETTLEMENT_TEXT_FIELDS = [
-    "situation",
-    "character_lens",
-    "relational_meaning",
-    "impact",
-    "follow_up_bias",
-]
-
 TRUST_SETTLEMENT_KEYWORDS = [
     "trust your judgment",
     "trust your judgement",
@@ -1823,135 +2103,103 @@ TRUST_SETTLEMENT_KEYWORDS = [
 ]
 
 
-def current_session_turn_logs(state):
-    trajectory_turns = {
-        int(entry.get("turn"))
-        for entry in state.get("emotion_trajectory", [])
-        if entry.get("turn") is not None
-    }
-    if not trajectory_turns:
-        return []
-    turn_logs = []
-    for entry in state.get("emotion_log", [])[-50:]:
-        if entry.get("event_type") == "turn" and entry.get("turn") in trajectory_turns:
-            turn_logs.append(entry)
-    return turn_logs
-
-
-def settlement_trajectory_signature(state):
+def settlement_trajectory_signature(state, session_id=None, evidence_ids=None):
+    """Return a stable settlement id derived from durable evidence identity."""
     state = ensure_state_shape(state)
-    trajectory = state.get("emotion_trajectory", [])
     payload = {
-        "session_count": state.get("session_count", 0),
-        "trajectory": [
-            {
-                "turn": entry.get("turn"),
-                "P": entry.get("P"),
-                "A": entry.get("A"),
-                "D": entry.get("D"),
-                "timestamp": entry.get("timestamp"),
-                "appraisal": entry.get("appraisal"),
-            }
-            for entry in trajectory
-        ],
+        "state_id": state.get("identity", {}).get("state_id"),
+        "session_id": session_id or state.get("session", {}).get("last_session_id"),
+        "evidence_ids": sorted(str(value) for value in (evidence_ids or [])),
     }
     encoded = json.dumps(payload, sort_keys=True, ensure_ascii=False, separators=(",", ":"))
     return hashlib.sha256(encoded.encode("utf-8")).hexdigest()[:16]
 
 
-def settlement_already_applied(state, settlement_id):
-    for entry in state.get("trust_settlements", []):
-        if entry.get("settlement_id") == settlement_id:
-            return True
-    return any(
-        entry.get("event_type") == "trust_settlement"
-        and entry.get("settlement_id") == settlement_id
-        for entry in state.get("emotion_log", [])[-50:]
-    )
+TRUST_EVIDENCE_RULES = {
+    "explicit_trust": {"direction": 1, "default_weight": 0.03, "max_weight": 0.05},
+    "conflict_repair": {"direction": 1, "default_weight": 0.04, "max_weight": 0.05},
+    "boundary_pressure": {"direction": -1, "default_weight": 0.03, "max_weight": 0.2},
+    "hostility": {"direction": -1, "default_weight": 0.06, "max_weight": 0.2},
+}
 
 
-def turn_log_text(turn_logs):
-    parts = []
-    for entry in turn_logs:
-        for field in TRUST_SETTLEMENT_TEXT_FIELDS:
-            if entry.get(field):
-                parts.append(str(entry[field]).lower())
-    return " ".join(parts)
+def session_record(state, session_id):
+    for entry in reversed(state.get("session_ledger", [])):
+        if entry.get("session_id") == session_id:
+            return entry
+    return None
 
 
-def assess_trust_settlement(state, patterns=None):
+def event_already_processed(state, event_id):
+    return bool(event_id) and str(event_id) in state.get("processed_event_ids", [])
+
+
+def mark_event_processed(state, event_id):
+    event_id = normalize_identifier(event_id, "event_id")
+    if not event_id:
+        raise ValueError("event_id is required for idempotent mutations")
+    if not event_already_processed(state, event_id):
+        state.setdefault("processed_event_ids", []).append(event_id)
+    return state
+
+
+def normalize_trust_evidence(evidence, session_id, event_id):
+    if not isinstance(evidence, dict):
+        raise ValueError("trust evidence must be an object")
+    evidence_id = normalize_identifier(evidence.get("evidence_id"), "evidence_id")
+    evidence_type = str(evidence.get("evidence_type") or "").strip().lower()
+    if not evidence_id or evidence_type not in TRUST_EVIDENCE_RULES:
+        raise ValueError("trust evidence requires a unique evidence_id and supported evidence_type")
+    rule = TRUST_EVIDENCE_RULES[evidence_type]
+    weight = abs(float(evidence.get("weight", rule["default_weight"])))
+    weight = round(clamp(weight, 0.0, rule["max_weight"]), 4)
+    return {
+        "evidence_id": evidence_id,
+        "session_id": session_id,
+        "event_id": event_id,
+        "evidence_type": evidence_type,
+        "direction": rule["direction"],
+        "weight": weight,
+        "eligible": bool(evidence.get("eligible") is True),
+        "source": truncate_text(evidence.get("source") or "host_approved", 80),
+        "created_at": now_iso(),
+        "consumed_by_settlement_id": None,
+    }
+
+
+def assess_trust_settlement(state, session_id=None, patterns=None):
+    """Assess trust exclusively from explicit, unconsumed evidence."""
     state = ensure_state_shape(state)
-    patterns = patterns or extract_patterns(state)
-    turn_logs = current_session_turn_logs(state)
-    appraisals = [
-        entry.get("appraisal")
-        for entry in turn_logs
-        if entry.get("appraisal")
+    session_id = session_id or state.get("session", {}).get("last_session_id")
+    evidence = [
+        item for item in state.get("trust_evidence", [])
+        if item.get("session_id") == session_id
+        and item.get("eligible") is True
+        and not item.get("consumed_by_settlement_id")
     ]
-    tags = [
-        tag
-        for entry in turn_logs
-        for tag in entry.get("tags", [])
-    ]
-    text = turn_log_text(turn_logs)
-
-    turn_count = int(patterns.get("turn_count", len(state.get("emotion_trajectory", []))) or 0)
-    collaboration_count = tags.count("collaboration") + appraisals.count("collaboration")
-    warmth_count = tags.count("warmth") + appraisals.count("warmth")
-    repair_count = tags.count("repair") + appraisals.count("repair")
-    boundary_count = tags.count("boundary") + appraisals.count("boundary_pressure")
-    hostility_count = tags.count("negative") + appraisals.count("hostility")
-    explicit_trust = any(keyword in text for keyword in TRUST_SETTLEMENT_KEYWORDS)
-
-    if not patterns.get("sufficient_data") or turn_count < 2:
-        return 0.0, "insufficient_data", "insufficient turn-level evidence for trust settlement"
-
-    if hostility_count and not repair_count:
-        return -0.06, "unrepaired_hostility", "recent hostility was not repaired"
-
-    if boundary_count >= 2:
-        return -0.04, "repeated_boundary_pressure", "repeated boundary pressure blocks positive trust gain"
-
-    if patterns.get("dominance_suppressed") and boundary_count:
-        return -0.03, "boundary_pressure_with_suppression", "boundary pressure coincided with suppressed dominance"
-
-    if patterns.get("sustained_negative") and not patterns.get("had_repair"):
-        return -0.05, "sustained_negative_unrepaired", "session stayed negative without repair"
-
-    if boundary_count:
-        return -0.02, "boundary_pressure_blocks_gain", "boundary pressure blocks positive trust gain"
-
-    if patterns.get("v_shape") and patterns.get("had_repair"):
-        return 0.05, "conflict_repair", "genuine conflict repair improved the session trajectory"
-
-    if patterns.get("had_conflict") and patterns.get("had_repair"):
-        return 0.04, "conflict_repair", "conflict was followed by meaningful repair"
-
-    if collaboration_count >= 2 and explicit_trust:
-        if patterns.get("end_vs_start_pleasure", 0.0) > 0.05:
-            return 0.04, "collaboration_with_direct_trust", "multiple cooperative turns included explicit trust in direct judgment"
-        return 0.03, "collaboration_with_direct_trust", "multiple cooperative turns included explicit trust in direct judgment"
-
-    if (
-        collaboration_count >= 2
-        and turn_count >= 3
-        and patterns.get("avg_pleasure_delta", 0.0) > 0
-        and patterns.get("end_vs_start_pleasure", 0.0) > 0
-    ):
-        return 0.02, "sustained_collaboration", "sustained collaborative interaction showed a positive pleasure trend"
-
-    if warmth_count and collaboration_count == 0:
-        return 0.0, "praise_only", "single warmth or praise is not enough for trust growth"
-
-    return 0.0, "no_clear_trust_signal", "no clear session-level trust signal"
+    raw_delta = round(clamp(
+        sum(float(item.get("direction", 0)) * float(item.get("weight", 0.0)) for item in evidence),
+        -0.2,
+        0.05,
+    ), 4)
+    if not evidence:
+        return 0.0, "no_eligible_evidence", "no explicit unconsumed trust evidence", []
+    if raw_delta > 0:
+        reason_code = "explicit_positive_evidence"
+    elif raw_delta < 0:
+        reason_code = "explicit_negative_evidence"
+    else:
+        reason_code = "balanced_evidence"
+    return raw_delta, reason_code, "trust derived from explicit host-approved evidence", evidence
 
 
-def settlement_record(settlement_id, state, raw_delta, status):
+def settlement_record(settlement_id, state, raw_delta, status, session_id=None):
+    ledger = session_record(state, session_id) if session_id else None
     return {
         "timestamp": now_iso(),
         "settlement_id": settlement_id,
         "session_count": int(state.get("session_count", 0)),
-        "turn_count": len(state.get("emotion_trajectory", [])),
+        "turn_count": int(ledger.get("turn_count", 0)) if ledger else len(state.get("emotion_trajectory", [])),
         "trust_before": round(float(state.get("trust", 0.1)), 4),
         "trust_after": round(float(state.get("trust", 0.1)), 4),
         "raw_delta": round(float(raw_delta), 4),
@@ -1959,82 +2207,97 @@ def settlement_record(settlement_id, state, raw_delta, status):
     }
 
 
-def has_current_session_end_log(state, patterns):
-    return any(
-        entry.get("event_type") == "session_end"
-        and entry.get("patterns") == patterns
-        for entry in state.get("emotion_log", [])[-10:]
+def settle_trust(
+    state,
+    session_id=None,
+    event_id=None,
+    character_id=None,
+    relationship_id=None,
+):
+    """Settle a closed session exactly once using explicit evidence only."""
+    state = require_expected_state_identity(state, character_id, relationship_id)
+    session_id = normalize_identifier(
+        session_id or state.get("session", {}).get("last_session_id"), "session_id"
     )
-
-
-def settle_trust(state):
-    """Conservatively settle session trust once for the current trajectory."""
-    state = ensure_state_shape(state)
-    settlement_id = settlement_trajectory_signature(state)
-    patterns = extract_patterns(state)
-
     if not state.get("enabled", True):
+        return state, {"status": "paused", "session_id": session_id, "raw_delta": 0.0}
+    if not session_id:
+        return state, {"status": "no_closed_session", "raw_delta": 0.0}
+    record = session_record(state, session_id)
+    if not record or record.get("status") not in {"closed", "settled"}:
+        return state, {"status": "session_not_closed", "session_id": session_id, "raw_delta": 0.0}
+    active_session_id = state.get("session", {}).get("active_session_id")
+    if state.get("session", {}).get("status") == "active":
         return state, {
-            "status": "paused",
-            "settlement_id": settlement_id,
+            "status": "active_session_conflict",
+            "session_id": session_id,
+            "active_session_id": active_session_id,
             "raw_delta": 0.0,
-            "patterns": patterns,
         }
-
-    if settlement_already_applied(state, settlement_id):
+    if record.get("settlement_id"):
         return state, {
             "status": "already_settled",
-            "settlement_id": settlement_id,
+            "session_id": session_id,
+            "settlement_id": record["settlement_id"],
             "raw_delta": 0.0,
-            "patterns": patterns,
+        }
+    if event_id and event_already_processed(state, event_id):
+        return state, {"status": "duplicate_event", "session_id": session_id, "raw_delta": 0.0}
+    raw_delta, reason_code, reason, evidence = assess_trust_settlement(state, session_id)
+    if not evidence:
+        return state, {
+            "status": "no_eligible_evidence",
+            "session_id": session_id,
+            "raw_delta": 0.0,
+            "reason_code": reason_code,
         }
 
-    if not has_current_session_end_log(state, patterns):
-        state, patterns = session_end(state)
-    raw_delta, reason_code, reason = assess_trust_settlement(state, patterns)
-    raw_delta = round(clamp(raw_delta, -0.2, 0.05), 4)
+    evidence_ids = [item["evidence_id"] for item in evidence]
+    settlement_id = settlement_trajectory_signature(state, session_id, evidence_ids)
     trust_before = round(float(state.get("trust", 0.1)), 4)
-
-    if raw_delta != 0.0:
-        state = apply_trust_delta(state, raw_delta)
-
+    if raw_delta:
+        state = apply_trust_delta(
+            state,
+            raw_delta,
+            settlement_id=settlement_id,
+            evidence_ids=evidence_ids,
+            session_id=session_id,
+        )
     trust_after = round(float(state.get("trust", 0.1)), 4)
-    state = add_emotion_log(
-        state,
-        "trust_settlement",
-        situation="host-side trust settlement completed",
-        relational_meaning=reason,
-        impact=f"raw trust delta {raw_delta:+.4f}",
-        tags=["trust", "trust_settlement", reason_code],
-        extra={
-            "settlement_id": settlement_id,
-            "reason_code": reason_code,
-            "raw_delta": raw_delta,
-            "trust_before": trust_before,
-            "trust_after": trust_after,
-            "patterns": patterns,
-        },
-    )
-
-    record = settlement_record(settlement_id, state, raw_delta, "settled")
-    record["trust_before"] = trust_before
-    record["trust_after"] = trust_after
-    append_limited(state, "trust_settlements", record, 50)
-
+    for item in state.get("trust_evidence", []):
+        if item.get("evidence_id") in evidence_ids:
+            item["consumed_by_settlement_id"] = settlement_id
+    record["status"] = "settled"
+    record["settled_at"] = now_iso()
+    record["settlement_id"] = settlement_id
+    if state["session"].get("last_session_id") == session_id:
+        state["session"]["settled_at"] = record["settled_at"]
+    settlement = settlement_record(settlement_id, state, raw_delta, "settled", session_id=session_id)
+    settlement.update({
+        "session_id": session_id,
+        "trust_before": trust_before,
+        "trust_after": trust_after,
+        "reason_code": reason_code,
+        "evidence_ids": evidence_ids,
+    })
+    state.setdefault("trust_settlements", []).append(settlement)
+    if event_id:
+        mark_event_processed(state, event_id)
     return state, {
         "status": "settled",
+        "session_id": session_id,
         "settlement_id": settlement_id,
         "raw_delta": raw_delta,
         "trust_before": trust_before,
         "trust_after": trust_after,
         "reason_code": reason_code,
         "reason": reason,
-        "patterns": patterns,
+        "evidence_ids": evidence_ids,
     }
 
-def apply_trust_delta(state, raw_delta):
+def apply_trust_delta(state, raw_delta, settlement_id=None, evidence_ids=None, session_id=None):
     """Apply trust change with diminishing returns for positive deltas."""
-    state = ensure_state_shape(state)
+    state = require_v3_state(state)
     if not state.get("enabled", True):
         return state
     trust = state.get("trust", 0.1)
@@ -2058,6 +2321,9 @@ def apply_trust_delta(state, raw_delta):
         "new": round(new_trust, 4),
         "raw_delta": round(raw_delta, 4),
         "effective_delta": round(effective_delta, 4),
+        "session_id": session_id,
+        "settlement_id": settlement_id,
+        "evidence_ids": list(evidence_ids or []),
     }
     append_limited(state, "trust_history", entry, 50)
 
@@ -2066,18 +2332,48 @@ def apply_trust_delta(state, raw_delta):
         "trust_update",
         cue="relationship trust recalibrated from session evidence",
         tags=["trust"],
-        extra={"trust_before": round(trust, 4), "trust_after": round(new_trust, 4)},
+        extra={
+            "trust_before": round(trust, 4),
+            "trust_after": round(new_trust, 4),
+            "session_id": session_id,
+            "settlement_id": settlement_id,
+            "evidence_ids": list(evidence_ids or []),
+        },
     )
     return state
 
 
 # ── Session Lifecycle ────────────────────────────────────────────────
 
-def session_start(state):
-    """Apply decay, clear trajectory, bump count, and log the session start."""
-    state = ensure_state_shape(state)
+def session_start(
+    state,
+    session_id=None,
+    event_id=None,
+    occurred_at=None,
+    character_id=None,
+    relationship_id=None,
+):
+    """Open one explicitly identified session; replays are no-ops."""
+    state = require_expected_state_identity(state, character_id, relationship_id)
+    session_id = normalize_identifier(session_id, "session_id")
+    event_id = normalize_identifier(event_id, "event_id")
+    if not session_id or not event_id:
+        raise ValueError("session_start requires session_id and event_id")
+    existing = session_record(state, session_id)
+    if existing:
+        status = "already_active" if existing and existing.get("status") == "active" else "already_closed"
+        return state, {"status": status, "session_id": session_id}
+    if event_already_processed(state, event_id):
+        return state, {"status": "duplicate_event", "session_id": session_id, "event_id": event_id}
+    active = state.get("session", {}).get("active_session_id")
+    if state.get("session", {}).get("status") == "active" and active != session_id:
+        return state, {
+            "status": "active_session_conflict",
+            "session_id": session_id,
+            "active_session_id": active,
+        }
     if not state.get("enabled", True):
-        return state
+        return state, {"status": "paused", "session_id": session_id}
     before = state["emotion"].copy()
     pulse_before = state["affective_pulse"].copy()
     trust_before = state["trust"]
@@ -2086,7 +2382,25 @@ def session_start(state):
     after = state["emotion"].copy()
     state["emotion_trajectory"] = []
     state["session_count"] = state.get("session_count", 0) + 1
-    state["last_interaction_iso"] = now_iso()
+    timestamp = occurred_at or now_iso()
+    state["last_interaction_iso"] = timestamp
+    state["session"] = {
+        "active_session_id": session_id,
+        "last_session_id": session_id,
+        "status": "active",
+        "opened_at": timestamp,
+        "closed_at": None,
+        "settled_at": None,
+    }
+    state.setdefault("session_ledger", []).append({
+        "session_id": session_id,
+        "status": "active",
+        "opened_at": timestamp,
+        "closed_at": None,
+        "settled_at": None,
+        "turn_count": 0,
+        "settlement_id": None,
+    })
     state = add_emotion_log(
         state,
         "session_start",
@@ -2096,6 +2410,8 @@ def session_start(state):
         delta=emotion_delta(before, after),
         tags=["session"],
         extra={
+            "session_id": session_id,
+            "event_id": event_id,
             "trust_before": round(trust_before, 4),
             "trust_after": state["trust"],
             "pulse_before": pulse_before,
@@ -2103,7 +2419,8 @@ def session_start(state):
             "volatility_profile": state["volatility_profile"],
         },
     )
-    return state
+    mark_event_processed(state, event_id)
+    return state, {"status": "started", "session_id": session_id, "session_count": state["session_count"]}
 
 
 def record_turn(
@@ -2120,11 +2437,85 @@ def record_turn(
     open_loop=None,
     follow_up_bias=None,
     salience=None,
+    session_id=None,
+    event_id=None,
+    subject="relationship",
+    semantic_event_type=None,
+    trust_evidence=None,
+    persist_log=True,
+    host_approved=False,
+    character_id=None,
+    relationship_id=None,
 ):
     """Record a single turn's emotion values to the trajectory and log."""
-    state = ensure_state_shape(state)
+    state = require_expected_state_identity(state, character_id, relationship_id)
+    session_id = normalize_identifier(session_id, "session_id")
+    event_id = normalize_identifier(event_id, "event_id")
+    if not session_id or not event_id:
+        raise ValueError("record_turn requires session_id and event_id")
+    if host_approved is not True:
+        return state, {
+            "status": "host_veto",
+            "session_id": session_id,
+            "event_id": event_id,
+        }
+    normalized_subject = str(subject or "mixed").strip().lower().replace("-", "_")
+    normalized_semantic_type = str(
+        semantic_event_type or appraisal or "neutral"
+    ).strip().lower().replace("-", "_")
+    if normalized_subject == "task" or normalized_semantic_type == "work_checkpoint":
+        return state, {
+            "status": "semantic_veto",
+            "decision": "route_host_memory",
+            "reason": "work_checkpoint",
+            "session_id": session_id,
+            "event_id": event_id,
+        }
+    if normalized_semantic_type in {"stable_preference", "concrete_feedback"}:
+        return state, {
+            "status": "semantic_veto",
+            "decision": "route_host_memory",
+            "reason": normalized_semantic_type,
+            "session_id": session_id,
+            "event_id": event_id,
+        }
+    if event_already_processed(state, event_id):
+        return state, {"status": "duplicate_event", "session_id": session_id, "event_id": event_id}
+    if state.get("session", {}).get("status") != "active" or state["session"].get("active_session_id") != session_id:
+        return state, {
+            "status": "no_active_session",
+            "session_id": session_id,
+            "active_session_id": state.get("session", {}).get("active_session_id"),
+        }
     if not state.get("enabled", True):
-        return state
+        return state, {"status": "paused", "session_id": session_id}
+    raw_evidence_items = (
+        trust_evidence
+        if isinstance(trust_evidence, list)
+        else ([trust_evidence] if trust_evidence else [])
+    )
+    if raw_evidence_items and normalized_subject not in {"relationship", "mixed"}:
+        return state, {
+            "status": "evidence_scope_rejected",
+            "session_id": session_id,
+            "event_id": event_id,
+            "subject": normalized_subject,
+        }
+    normalized_evidence_items = []
+    known_ids = {item.get("evidence_id") for item in state.get("trust_evidence", [])}
+    batch_ids = set()
+    for raw_evidence in raw_evidence_items:
+        evidence = normalize_trust_evidence(raw_evidence, session_id, event_id)
+        evidence_id = evidence["evidence_id"]
+        if evidence_id in known_ids or evidence_id in batch_ids:
+            return state, {
+                "status": "duplicate_evidence",
+                "session_id": session_id,
+                "event_id": event_id,
+                "evidence_id": evidence_id,
+            }
+        batch_ids.add(evidence_id)
+        normalized_evidence_items.append(evidence)
     before = state["emotion"].copy()
     after = pad_to_emotion(p, a, d)
     delta = emotion_delta(before, after)
@@ -2145,6 +2536,10 @@ def record_turn(
         "D": after["dominance"],
         "timestamp": now_iso(),
         "pulse": pulse,
+        "session_id": session_id,
+        "event_id": event_id,
+        "subject": normalized_subject,
+        "semantic_event_type": normalized_semantic_type,
     }
     if appraisal:
         entry["appraisal"] = appraisal
@@ -2158,37 +2553,75 @@ def record_turn(
     state["last_interaction_iso"] = now_iso()
 
     tags = [appraisal] if appraisal else None
-    state = add_emotion_log(
-        state,
-        "turn",
-        situation=situation or "turn emotional update",
-        character_lens=character_lens,
-        relational_meaning=relational_meaning,
-        impact=impact,
-        open_loop=open_loop,
-        follow_up_bias=follow_up_bias,
-        salience=salience,
-        before=before,
-        after=after,
-        delta=delta,
-        appraisal=appraisal,
-        tags=tags,
-        turn=turn,
-        extra={
-            "affective_pulse": pulse,
-            "volatility_profile": state["volatility_profile"],
-        },
-    )
-    return state
+    if persist_log:
+        state = add_emotion_log(
+            state,
+            "turn",
+            situation=situation or "turn emotional update",
+            character_lens=character_lens,
+            relational_meaning=relational_meaning,
+            impact=impact,
+            open_loop=open_loop,
+            follow_up_bias=follow_up_bias,
+            salience=salience,
+            before=before,
+            after=after,
+            delta=delta,
+            appraisal=appraisal,
+            tags=tags,
+            turn=turn,
+            extra={
+                "session_id": session_id,
+                "event_id": event_id,
+                "subject": normalized_subject,
+                "semantic_event_type": normalized_semantic_type,
+                "affective_pulse": pulse,
+                "volatility_profile": state["volatility_profile"],
+            },
+        )
+    recorded_evidence_ids = []
+    for evidence in normalized_evidence_items:
+        state.setdefault("trust_evidence", []).append(evidence)
+        recorded_evidence_ids.append(evidence["evidence_id"])
+    ledger_entry = session_record(state, session_id)
+    if ledger_entry:
+        ledger_entry["turn_count"] = int(ledger_entry.get("turn_count", 0)) + 1
+    mark_event_processed(state, event_id)
+    return state, {
+        "status": "recorded" if persist_log else "state_only",
+        "session_id": session_id,
+        "event_id": event_id,
+        "turn": turn,
+        "evidence_ids": recorded_evidence_ids,
+    }
 
 
-def session_end(state):
+def session_end(
+    state,
+    session_id=None,
+    event_id=None,
+    occurred_at=None,
+    character_id=None,
+    relationship_id=None,
+):
     """Extract patterns and log the session close for trust evaluation."""
-    state = ensure_state_shape(state)
+    state = require_expected_state_identity(state, character_id, relationship_id)
+    session_id = normalize_identifier(session_id, "session_id")
+    event_id = normalize_identifier(event_id, "event_id")
+    if not session_id or not event_id:
+        raise ValueError("session_end requires session_id and event_id")
+    record = session_record(state, session_id)
+    if record and record.get("status") in {"closed", "settled"}:
+        return state, {"status": "already_closed", "session_id": session_id}
+    if event_already_processed(state, event_id):
+        return state, {"status": "duplicate_event", "session_id": session_id, "event_id": event_id}
+    if state.get("session", {}).get("status") != "active" or state["session"].get("active_session_id") != session_id:
+        return state, {"status": "no_active_session", "session_id": session_id}
     if not state.get("enabled", True):
-        return state, {"paused": True, "sufficient_data": False, "turn_count": len(state.get("emotion_trajectory", []))}
+        return state, {"status": "paused", "session_id": session_id}
     patterns = extract_patterns(state)
-    state["last_interaction_iso"] = now_iso()
+    timestamp = occurred_at or now_iso()
+    state["last_interaction_iso"] = timestamp
 
     tags = ["session_end"]
     for pattern_key in [
@@ -2207,9 +2640,315 @@ def session_end(state):
         "session_end",
         cue="session patterns extracted for trust evaluation",
         tags=tags,
-        extra={"patterns": patterns},
+        extra={"session_id": session_id, "event_id": event_id, "patterns": patterns},
     )
-    return state, patterns
+    record["status"] = "closed"
+    record["closed_at"] = timestamp
+    state["session"].update({
+        "active_session_id": None,
+        "last_session_id": session_id,
+        "status": "closed",
+        "closed_at": timestamp,
+    })
+    mark_event_processed(state, event_id)
+    return state, {"status": "closed", "session_id": session_id, "patterns": patterns}
+
+
+def evaluate_and_record_turn(
+    state,
+    event,
+    p=None,
+    a=None,
+    d=None,
+    memory=None,
+    mode=None,
+    character_id=None,
+    relationship_id=None,
+):
+    """Atomically evaluate semantic ownership and, when allowed, record a turn."""
+    character_id = character_id or (event.get("character_id") if isinstance(event, dict) else None)
+    relationship_id = relationship_id or (event.get("relationship_id") if isinstance(event, dict) else None)
+    state = require_expected_state_identity(state, character_id, relationship_id)
+    if not isinstance(event, dict):
+        raise ValueError("event must be a structured object")
+    session_id = normalize_identifier(event.get("session_id"), "session_id")
+    event_id = normalize_identifier(event.get("event_id"), "event_id")
+    if not session_id or not event_id:
+        raise ValueError("event requires session_id and event_id")
+    if event_already_processed(state, event_id):
+        return state, {
+            "status": "duplicate_event",
+            "decision": "respond_only",
+            "session_id": session_id,
+            "event_id": event_id,
+        }
+
+    policy = record_policy(
+        state,
+        event.get("message") or "",
+        mode=mode,
+        contexts=event.get("contexts"),
+        subject=event.get("subject"),
+        event_type=event.get("event_type"),
+        host_approved=event.get("host_approved") is True,
+        memory_owner=event.get("memory_owner"),
+        source=event.get("source") or "model_inferred",
+    )
+    decision = policy["decision"]
+    if decision in {"respond_only", "route_host_memory"}:
+        return state, {
+            "status": "not_recorded",
+            "decision": decision,
+            "session_id": session_id,
+            "event_id": event_id,
+            "policy": policy,
+        }
+
+    suggested = policy["suggested"]
+    memory = dict(memory or {})
+    selected_appraisal = memory.pop("appraisal", None) or policy["appraisal"]
+    selected_salience = memory.pop("salience", None)
+    if selected_salience is None:
+        selected_salience = policy["salience"]
+    selected_situation = memory.pop("situation", None) or event.get("message")
+    state, result = record_turn(
+        state,
+        suggested["P"] if p is None else p,
+        suggested["A"] if a is None else a,
+        suggested["D"] if d is None else d,
+        session_id=session_id,
+        event_id=event_id,
+        subject=policy["subject"],
+        semantic_event_type=policy["event_type"],
+        trust_evidence=event.get("trust_evidence"),
+        persist_log=decision == "record_emotion",
+        host_approved=True,
+        character_id=character_id,
+        relationship_id=relationship_id,
+        appraisal=selected_appraisal,
+        salience=selected_salience,
+        situation=selected_situation,
+        **memory,
+    )
+    result["decision"] = decision
+    result["policy"] = policy
+    return state, result
+
+
+_legacy_audit_emotion_log = audit_emotion_log
+
+
+def audit_state_integrity(state):
+    """Check hard state invariants separately from heuristic semantic warnings."""
+    state = ensure_state_shape(state)
+    hard_errors = []
+    semantic_warnings = []
+
+    if state.get("_schema") != STATE_SCHEMA:
+        hard_errors.append({"code": "legacy_schema_read_only", "schema": state.get("_schema")})
+    elif state.get("identity", {}).get("status") != "bound":
+        hard_errors.append({"code": "identity_unbound"})
+
+    session_ids = [entry.get("session_id") for entry in state.get("session_ledger", [])]
+    duplicate_session_ids = sorted({value for value in session_ids if value and session_ids.count(value) > 1})
+    if duplicate_session_ids:
+        hard_errors.append({"code": "duplicate_session_ids", "ids": duplicate_session_ids})
+
+    processed_ids = [str(value) for value in state.get("processed_event_ids", []) if value]
+    duplicate_event_ids = sorted({value for value in processed_ids if processed_ids.count(value) > 1})
+    if duplicate_event_ids:
+        hard_errors.append({"code": "duplicate_processed_event_ids", "ids": duplicate_event_ids})
+
+    evidence_ids = [entry.get("evidence_id") for entry in state.get("trust_evidence", [])]
+    duplicate_evidence_ids = sorted({value for value in evidence_ids if value and evidence_ids.count(value) > 1})
+    if duplicate_evidence_ids:
+        hard_errors.append({"code": "duplicate_evidence_ids", "ids": duplicate_evidence_ids})
+
+    settlement_ids = [entry.get("settlement_id") for entry in state.get("trust_settlements", [])]
+    duplicate_settlement_ids = sorted({value for value in settlement_ids if value and settlement_ids.count(value) > 1})
+    if duplicate_settlement_ids:
+        hard_errors.append({"code": "duplicate_settlement_ids", "ids": duplicate_settlement_ids})
+
+    known_sessions = {value for value in session_ids if value}
+    known_settlements = {value for value in settlement_ids if value}
+    known_evidence = {value for value in evidence_ids if value}
+    for entry in state.get("trust_evidence", []):
+        if entry.get("session_id") not in known_sessions:
+            hard_errors.append({"code": "orphan_trust_evidence", "evidence_id": entry.get("evidence_id")})
+        rule = TRUST_EVIDENCE_RULES.get(entry.get("evidence_type"))
+        if not rule or entry.get("direction") != rule["direction"]:
+            hard_errors.append({"code": "invalid_trust_evidence", "evidence_id": entry.get("evidence_id")})
+        consumed = entry.get("consumed_by_settlement_id")
+        if consumed and consumed not in known_settlements:
+            hard_errors.append({"code": "evidence_consumed_by_missing_settlement", "evidence_id": entry.get("evidence_id")})
+        elif consumed:
+            settlement = next(
+                item for item in state.get("trust_settlements", [])
+                if item.get("settlement_id") == consumed
+            )
+            if (
+                entry.get("evidence_id") not in settlement.get("evidence_ids", [])
+                or entry.get("session_id") != settlement.get("session_id")
+            ):
+                hard_errors.append({"code": "evidence_settlement_mismatch", "evidence_id": entry.get("evidence_id")})
+    for entry in state.get("trust_settlements", []):
+        if entry.get("session_id") not in known_sessions:
+            hard_errors.append({"code": "orphan_trust_settlement", "settlement_id": entry.get("settlement_id")})
+        missing_ids = [value for value in entry.get("evidence_ids", []) if value not in known_evidence]
+        if missing_ids:
+            hard_errors.append({
+                "code": "settlement_references_missing_evidence",
+                "settlement_id": entry.get("settlement_id"),
+                "evidence_ids": missing_ids,
+            })
+
+    current = state.get("session", {})
+    active_id = current.get("active_session_id")
+    if current.get("status") == "active":
+        ledger = session_record(state, active_id)
+        if not active_id or not ledger or ledger.get("status") != "active":
+            hard_errors.append({"code": "active_session_ledger_mismatch", "session_id": active_id})
+    elif active_id:
+        hard_errors.append({"code": "closed_state_has_active_session_id", "session_id": active_id})
+
+    task_markers = ["tests pass", "shipped", "deployed", "implemented", "完成", "搞定", "通过", "修复"]
+    for index, entry in enumerate(state.get("emotion_log", [])):
+        if entry.get("event_type") != "turn":
+            continue
+        session_id = entry.get("session_id")
+        if (
+            state.get("_schema") == STATE_SCHEMA
+            and not entry.get("legacy_v2_entry")
+            and session_id not in known_sessions
+        ):
+            hard_errors.append({"code": "orphan_turn", "log_index": index, "session_id": session_id})
+        text = " ".join(str(entry.get(key) or "") for key in ["situation", "impact", "relational_meaning"]).lower()
+        if not entry.get("legacy_v2_entry") and (
+            entry.get("subject") == "task"
+            or entry.get("semantic_event_type") == "work_checkpoint"
+            or any(marker in text for marker in task_markers)
+        ):
+            semantic_warnings.append({
+                "code": "task_like_emotional_memory",
+                "log_index": index,
+                "event_id": entry.get("event_id"),
+            })
+
+    return {
+        "ok": not hard_errors,
+        "schema": state.get("_schema"),
+        "identity_status": state.get("identity", {}).get("status"),
+        "hard_errors": hard_errors,
+        "semantic_warnings": semantic_warnings,
+        "counts": {
+            "sessions": len(state.get("session_ledger", [])),
+            "processed_events": len(processed_ids),
+            "trust_evidence": len(state.get("trust_evidence", [])),
+            "trust_settlements": len(state.get("trust_settlements", [])),
+        },
+    }
+
+
+def audit_emotion_log(state):
+    report = _legacy_audit_emotion_log(state)
+    integrity = audit_state_integrity(state)
+    report["ok"] = integrity["ok"]
+    report["hard_errors"] = integrity["hard_errors"]
+    report["semantic_warnings"] = integrity["semantic_warnings"]
+    report["integrity_counts"] = integrity["counts"]
+    return report
+
+
+def repair_plan(state):
+    """Return a non-mutating repair plan; ownership is never inferred."""
+    state = ensure_state_shape(state)
+    audit = audit_state_integrity(state)
+    actions = []
+    if state.get("_schema") != STATE_SCHEMA:
+        actions.append({
+            "action": "migrate_state",
+            "requires": ["character_id", "relationship_id"],
+            "automatic": False,
+        })
+    if state.get("_schema") == STATE_SCHEMA and state.get("identity", {}).get("status") != "bound":
+        actions.append({
+            "action": "bind_identity",
+            "requires": ["character_id", "relationship_id"],
+            "automatic": False,
+        })
+    warning_indices = [
+        warning["log_index"] for warning in audit["semantic_warnings"]
+        if warning.get("code") == "task_like_emotional_memory"
+    ]
+    if warning_indices:
+        actions.append({
+            "action": "review_task_like_entries",
+            "log_indices": warning_indices,
+            "automatic": False,
+        })
+    if any(error["code"].startswith("duplicate_") for error in audit["hard_errors"]):
+        actions.append({"action": "deduplicate_ledgers", "automatic": False})
+    return {"dry_run": True, "audit": audit, "proposed_actions": actions}
+
+
+def reconcile_trust_from_evidence(state, baseline_trust=None, apply=False):
+    """Preview or explicitly apply a trust rebuild from the evidence ledger."""
+    state = require_v3_state(state)
+    if baseline_trust is None:
+        return state, {
+            "status": "baseline_required",
+            "dry_run": True,
+            "message": "provide an explicit baseline_trust; the engine will not infer it",
+        }
+    baseline = round(clamp(float(baseline_trust), 0.05, 1.0), 4)
+    trust = baseline
+    used_ids = set()
+    steps = []
+    for session in state.get("session_ledger", []):
+        if session.get("status") not in {"closed", "settled"}:
+            continue
+        evidence = [
+            item for item in state.get("trust_evidence", [])
+            if item.get("session_id") == session.get("session_id")
+            and item.get("eligible") is True
+            and item.get("evidence_id") not in used_ids
+        ]
+        if not evidence:
+            continue
+        raw_delta = round(clamp(sum(
+            float(item.get("direction", 0)) * float(item.get("weight", 0.0)) for item in evidence
+        ), -0.2, 0.05), 4)
+        effective = raw_delta * (1 - trust) if raw_delta > 0 else (raw_delta * 0.5 if trust > 0.6 and raw_delta > -0.15 else raw_delta)
+        before = trust
+        trust = round(clamp(trust + effective, 0.05, 1.0), 4)
+        ids = [item["evidence_id"] for item in evidence]
+        used_ids.update(ids)
+        steps.append({
+            "session_id": session.get("session_id"),
+            "settlement_id": settlement_trajectory_signature(state, session.get("session_id"), ids),
+            "evidence_ids": ids,
+            "raw_delta": raw_delta,
+            "effective_delta": round(effective, 4),
+            "before": before,
+            "after": trust,
+        })
+    report = {"status": "reconcile_preview", "dry_run": not apply, "baseline_trust": baseline, "computed_trust": trust, "steps": steps}
+    if apply:
+        state["trust"] = trust
+        state["trust_anchor"] = max(state.get("trust_anchor", trust), trust)
+        reconciliation_id = f"reconcile-{uuid.uuid4()}"
+        append_limited(state, "trust_reconciliations", {
+            "reconciliation_id": reconciliation_id,
+            "timestamp": now_iso(),
+            "mode": "additive",
+            "baseline_trust": baseline,
+            "computed_trust": trust,
+            "steps": deepcopy(steps),
+            "note": "existing trust history, settlements, and evidence consumption were preserved",
+        }, 50)
+        report["reconciliation_id"] = reconciliation_id
+        report["status"] = "reconciled"
+    return state, report
 
 
 def parse_memory_args(args):
@@ -2254,10 +2993,39 @@ def parse_memory_args(args):
     return options
 
 
+def cli_option(args, name, default=None):
+    if name not in args:
+        return default
+    index = args.index(name)
+    if index + 1 >= len(args):
+        raise ValueError(f"{name} requires a value")
+    return args[index + 1]
+
+
+def strip_cli_options(args, option_names, flag_names=None):
+    flag_names = set(flag_names or [])
+    option_names = set(option_names)
+    output = []
+    index = 0
+    while index < len(args):
+        token = args[index]
+        if token in option_names:
+            if index + 1 >= len(args):
+                raise ValueError(f"{token} requires a value")
+            index += 2
+        elif token in flag_names:
+            index += 1
+        else:
+            output.append(token)
+            index += 1
+    return output
+
+
 # ── CLI ──────────────────────────────────────────────────────────────
 
 STATE_MUTATING_COMMANDS = {
-    "validate",
+    "bind_identity",
+    "migrate_state",
     "configure",
     "tune",
     "pause",
@@ -2273,15 +3041,44 @@ STATE_MUTATING_COMMANDS = {
     "compact_log",
     "session_start",
     "session_end",
+    "evaluate_turn",
+    "reconcile_trust",
 }
 
 
 def run_command(command, state_file, state):
 
-    if command == "validate":
-        save_state(state_file, state)
+    if command == "bind_identity":
+        args = sys.argv[3:]
+        state, result = bind_state_identity(
+            state,
+            cli_option(args, "--character-id"),
+            cli_option(args, "--relationship-id"),
+        )
+        if result["status"] == "bound":
+            save_state(state_file, state)
+        print_json(result)
+
+    elif command == "migrate_state":
+        args = sys.argv[3:]
+        migrated, result = migrate_state_v2(
+            state,
+            cli_option(args, "--character-id"),
+            cli_option(args, "--relationship-id"),
+            state_id=cli_option(args, "--state-id"),
+        )
+        apply = "--apply" in args
+        result["dry_run"] = not apply
+        if apply and result["status"] == "migration_ready":
+            save_state(state_file, migrated)
+            result["status"] = "migrated"
+            result["backup_path"] = state_backup_path(state_file)
+        print_json(result)
+
+    elif command == "validate":
+        integrity = audit_state_integrity(state)
         print_json({
-            "ok": True,
+            "ok": integrity["ok"],
             "schema": state["_schema"],
             "enabled": state["enabled"],
             "volatility_profile": state["volatility_profile"],
@@ -2290,6 +3087,8 @@ def run_command(command, state_file, state):
             "trust": state["trust"],
             "character_profile": state["character_profile"],
             "log_entries": len(state.get("emotion_log", [])),
+            "hard_errors": integrity["hard_errors"],
+            "semantic_warnings": integrity["semantic_warnings"],
         })
 
     elif command == "status":
@@ -2356,11 +3155,16 @@ def run_command(command, state_file, state):
         if "--factory" in sys.argv[3:]:
             state = default_state()
         else:
+            identity = deepcopy(state.get("identity", DEFAULT_STATE["identity"]))
             profile = deepcopy(state.get("character_profile", DEFAULT_STATE["character_profile"]))
             baseline = state.get("personality_baseline", DEFAULT_STATE["personality_baseline"])
             volatility_profile = state.get("volatility_profile", DEFAULT_STATE["volatility_profile"])
             enabled = state.get("enabled", True)
-            state = default_state()
+            state = default_state(
+                identity.get("character_id"),
+                identity.get("relationship_id"),
+                state_id=identity.get("state_id"),
+            )
             state["enabled"] = enabled
             state["volatility_profile"] = normalize_volatility_profile(volatility_profile)
             state["personality_baseline"] = normalize_emotion(baseline)
@@ -2370,6 +3174,12 @@ def run_command(command, state_file, state):
         print_json({"ok": True, "factory": "--factory" in sys.argv[3:], "status": public_status(state)})
 
     elif command == "decay":
+        args = sys.argv[3:]
+        state = require_expected_state_identity(
+            state,
+            cli_option(args, "--character-id"),
+            cli_option(args, "--relationship-id"),
+        )
         before = state["emotion"].copy()
         trust_before = state["trust"]
         state = compute_mood_time_decay(state)
@@ -2388,9 +3198,25 @@ def run_command(command, state_file, state):
         print_json({"emotion": state["emotion"], "affective_pulse": state["affective_pulse"], "trust": state["trust"]})
 
     elif command == "pre_turn_decay":
-        state = apply_in_session_decay(state)
-        save_state(state_file, state)
-        print_json({"emotion": state["emotion"], "affective_pulse": state["affective_pulse"]})
+        args = sys.argv[3:]
+        state = require_expected_state_identity(
+            state,
+            cli_option(args, "--character-id"),
+            cli_option(args, "--relationship-id"),
+        )
+        session_id = cli_option(args, "--session-id")
+        event_id = cli_option(args, "--event-id")
+        if not session_id or not event_id:
+            raise ValueError("pre_turn_decay requires --session-id and --event-id")
+        if event_already_processed(state, event_id):
+            print_json({"status": "duplicate_event", "session_id": session_id, "event_id": event_id})
+        elif state["session"].get("status") != "active" or state["session"].get("active_session_id") != session_id:
+            print_json({"status": "no_active_session", "session_id": session_id})
+        else:
+            state = apply_in_session_decay(state)
+            mark_event_processed(state, event_id)
+            save_state(state_file, state)
+            print_json({"status": "applied", "emotion": state["emotion"], "affective_pulse": state["affective_pulse"]})
 
     elif command == "appraise":
         if len(sys.argv) < 4:
@@ -2408,21 +3234,43 @@ def run_command(command, state_file, state):
             policy_args["message"],
             mode=policy_args["mode"],
             contexts=policy_args["contexts"],
+            subject=policy_args["subject"],
+            event_type=policy_args["event_type"],
+            host_approved=policy_args["host_approved"],
+            memory_owner=policy_args["memory_owner"],
+            source=policy_args["source"],
         ))
 
     elif command == "patterns":
         print_json(extract_patterns(state))
 
     elif command == "settle_trust":
-        state, result = settle_trust(state)
-        save_state(state_file, state)
+        args = sys.argv[3:]
+        state, result = settle_trust(
+            state,
+            session_id=cli_option(args, "--session-id"),
+            event_id=cli_option(args, "--event-id"),
+            character_id=cli_option(args, "--character-id"),
+            relationship_id=cli_option(args, "--relationship-id"),
+        )
+        if result["status"] == "settled":
+            save_state(state_file, state)
         print_json(result)
 
     elif command == "update_trust":
         if len(sys.argv) < 4:
             print("Usage: update_trust <state_file> <trust_delta>")
             sys.exit(1)
+        args = sys.argv[4:]
+        if "--host-approved" not in args or not cli_option(args, "--reason"):
+            raise ValueError("update_trust requires --host-approved and --reason")
+        state = require_expected_state_identity(
+            state,
+            cli_option(args, "--character-id"),
+            cli_option(args, "--relationship-id"),
+        )
         state = apply_trust_delta(state, sys.argv[3])
+        state["emotion_log"][-1]["manual_override_reason"] = truncate_text(cli_option(args, "--reason"), 220)
         save_state(state_file, state)
         print_json({"trust": state["trust"], "trust_anchor": state["trust_anchor"]})
 
@@ -2430,26 +3278,95 @@ def run_command(command, state_file, state):
         if len(sys.argv) < 6:
             print("Usage: record_turn <state_file> <P> <A> <D> [memory options]")
             sys.exit(1)
-        memory = parse_memory_args(sys.argv[6:])
-        state = record_turn(state, sys.argv[3], sys.argv[4], sys.argv[5], **memory)
-        save_state(state_file, state)
-        print_json({
-            "emotion": state["emotion"],
-            "affective_pulse": state["affective_pulse"],
-            "turn": len(state["emotion_trajectory"]),
-        })
+        args = sys.argv[6:]
+        option_names = {
+            "--session-id", "--event-id", "--subject", "--event-type", "--trust-evidence-json",
+            "--character-id", "--relationship-id",
+        }
+        memory = parse_memory_args(strip_cli_options(args, option_names, {"--host-approved"}))
+        evidence_json = cli_option(args, "--trust-evidence-json")
+        state, result = record_turn(
+            state,
+            sys.argv[3],
+            sys.argv[4],
+            sys.argv[5],
+            session_id=cli_option(args, "--session-id"),
+            event_id=cli_option(args, "--event-id"),
+            subject=cli_option(args, "--subject", "relationship"),
+            semantic_event_type=cli_option(args, "--event-type"),
+            trust_evidence=json.loads(evidence_json) if evidence_json else None,
+            host_approved="--host-approved" in args,
+            character_id=cli_option(args, "--character-id"),
+            relationship_id=cli_option(args, "--relationship-id"),
+            **memory,
+        )
+        if result["status"] == "recorded":
+            save_state(state_file, state)
+        result["emotion"] = state["emotion"]
+        result["affective_pulse"] = state["affective_pulse"]
+        print_json(result)
+
+    elif command == "evaluate_turn":
+        if len(sys.argv) < 6:
+            print("Usage: evaluate_turn <state_file> <P> <A> <D> --event-json <json>")
+            sys.exit(1)
+        args = sys.argv[6:]
+        event_json = cli_option(args, "--event-json")
+        if not event_json:
+            raise ValueError("evaluate_turn requires --event-json")
+        state, result = evaluate_and_record_turn(
+            state,
+            json.loads(event_json),
+            sys.argv[3],
+            sys.argv[4],
+            sys.argv[5],
+            character_id=cli_option(args, "--character-id"),
+            relationship_id=cli_option(args, "--relationship-id"),
+        )
+        if result["status"] in {"recorded", "state_only"}:
+            save_state(state_file, state)
+        print_json(result)
 
     elif command == "log_event":
         if len(sys.argv) < 5:
             print("Usage: log_event <state_file> <event_type> [memory options]")
             sys.exit(1)
-        memory = parse_memory_args(sys.argv[4:])
+        args = sys.argv[4:]
+        option_names = {
+            "--session-id", "--event-id", "--subject", "--event-type",
+            "--character-id", "--relationship-id",
+        }
+        memory = parse_memory_args(strip_cli_options(args, option_names, {"--host-approved"}))
+        state = require_expected_state_identity(
+            state,
+            cli_option(args, "--character-id"),
+            cli_option(args, "--relationship-id"),
+        )
+        session_id = cli_option(args, "--session-id")
+        event_id = cli_option(args, "--event-id")
+        if "--host-approved" not in args:
+            raise ValueError("log_event requires --host-approved")
+        if not session_id or not event_id:
+            raise ValueError("log_event requires --session-id and --event-id")
+        if event_already_processed(state, event_id):
+            print_json({"status": "duplicate_event", "event_id": event_id})
+            return
+        if state["session"].get("status") != "active" or state["session"].get("active_session_id") != session_id:
+            print_json({"status": "no_active_session", "session_id": session_id})
+            return
         state = add_emotion_log(
             state,
             sys.argv[3],
             tags=["manual"],
+            extra={
+                "session_id": session_id,
+                "event_id": event_id,
+                "subject": cli_option(args, "--subject", "relationship"),
+                "semantic_event_type": cli_option(args, "--event-type", sys.argv[3]),
+            },
             **memory,
         )
+        mark_event_processed(state, event_id)
         save_state(state_file, state)
         print_json({"ok": True, "log_entries": len(state.get("emotion_log", []))})
 
@@ -2459,6 +3376,25 @@ def run_command(command, state_file, state):
 
     elif command == "audit_log":
         print_json(audit_emotion_log(state))
+
+    elif command == "audit_state":
+        print_json(audit_state_integrity(state))
+
+    elif command == "repair_plan":
+        print_json(repair_plan(state))
+
+    elif command == "reconcile_trust":
+        args = sys.argv[3:]
+        apply = "--apply" in args
+        state, result = reconcile_trust_from_evidence(
+            state,
+            baseline_trust=cli_option(args, "--baseline-trust"),
+            apply=apply,
+        )
+        if result["status"] == "reconciled":
+            save_state(state_file, state)
+            result["backup_path"] = state_backup_path(state_file)
+        print_json(result)
 
     elif command == "compact_log":
         args = sys.argv[3:]
@@ -2475,19 +3411,31 @@ def run_command(command, state_file, state):
         print_json(report)
 
     elif command == "session_start":
-        state = session_start(state)
-        save_state(state_file, state)
-        print_json({
-            "emotion": state["emotion"],
-            "affective_pulse": state["affective_pulse"],
-            "trust": state["trust"],
-            "session_count": state["session_count"],
-        })
+        args = sys.argv[3:]
+        state, result = session_start(
+            state,
+            session_id=cli_option(args, "--session-id"),
+            event_id=cli_option(args, "--event-id"),
+            character_id=cli_option(args, "--character-id"),
+            relationship_id=cli_option(args, "--relationship-id"),
+        )
+        if result["status"] == "started":
+            save_state(state_file, state)
+        result.update({"emotion": state["emotion"], "trust": state["trust"]})
+        print_json(result)
 
     elif command == "session_end":
-        state, patterns = session_end(state)
-        save_state(state_file, state)
-        print_json(patterns)
+        args = sys.argv[3:]
+        state, result = session_end(
+            state,
+            session_id=cli_option(args, "--session-id"),
+            event_id=cli_option(args, "--event-id"),
+            character_id=cli_option(args, "--character-id"),
+            relationship_id=cli_option(args, "--relationship-id"),
+        )
+        if result["status"] == "closed":
+            save_state(state_file, state)
+        print_json(result)
 
     else:
         print(f"Unknown command: {command}")
@@ -2503,15 +3451,34 @@ def main():
     state_file = sys.argv[2]
 
     if command == "init":
+        args = sys.argv[3:]
         with state_file_lock(state_file):
-            state = default_state()
+            state = default_state(
+                character_id=cli_option(args, "--character-id"),
+                relationship_id=cli_option(args, "--relationship-id"),
+                state_id=cli_option(args, "--state-id"),
+            )
             save_state_unlocked(state_file, state)
-        print_json({"ok": True, "state_file": state_file, "schema": state["_schema"]})
+        print_json({
+            "ok": True,
+            "state_file": state_file,
+            "schema": state["_schema"],
+            "identity_status": state["identity"]["status"],
+            "capabilities": state["capabilities"],
+        })
         return
 
     if command in STATE_MUTATING_COMMANDS:
         with state_file_lock(state_file):
             state = load_state_unlocked(state_file)
+            if command != "migrate_state" and state.get("_schema") != STATE_SCHEMA:
+                print_json({
+                    "ok": False,
+                    "status": "migration_required",
+                    "schema": state.get("_schema"),
+                    "message": "v2 state is read-only; run migrate_state with explicit owner identity",
+                })
+                sys.exit(2)
             run_command(command, state_file, state)
         return
 

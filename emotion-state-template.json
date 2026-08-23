@@ -1,6 +1,21 @@
 {
-  "_schema": "emotion-engine-state/v2",
+  "_schema": "emotion-engine-state/v3",
+  "identity": {
+    "state_id": "replace-with-unique-state-id",
+    "character_id": null,
+    "relationship_id": null,
+    "status": "unbound"
+  },
+  "capabilities": [
+    "state_identity/v1",
+    "structured_record_policy/v1",
+    "session_idempotency/v1",
+    "trust_evidence/v1",
+    "behavior_audit/v1",
+    "repair_plan/v1"
+  ],
   "enabled": true,
+  "runtime_mode": "light",
   "volatility_profile": "steady",
   "emotion": {
     "pleasure": 0.0,
@@ -39,5 +54,17 @@
   "emotion_trajectory": [],
   "emotion_log": [],
   "trust_history": [],
+  "trust_evidence": [],
+  "trust_settlements": [],
+  "session": {
+    "active_session_id": null,
+    "last_session_id": null,
+    "status": "closed",
+    "opened_at": null,
+    "closed_at": null,
+    "settled_at": null
+  },
+  "session_ledger": [],
+  "processed_event_ids": [],
   "log_limit": 200
 }

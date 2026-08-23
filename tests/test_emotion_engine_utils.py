@@ -19,28 +19,88 @@ spec.loader.exec_module(emotion_engine_utils)
 
 
 class EmotionEngineUtilsTest(unittest.TestCase):
+    def setUp(self):
+        self.event_counter = 0
+
+    def bound_state(self):
+        return emotion_engine_utils.default_state("test-character", "test-relationship")
+
+    def next_event_id(self, prefix="event"):
+        self.event_counter += 1
+        return f"{prefix}-{self.event_counter}"
+
+    def start_session(self, state=None, session_id="test-session"):
+        state = state or self.bound_state()
+        state, result = emotion_engine_utils.session_start(
+            state,
+            session_id,
+            self.next_event_id("start"),
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        self.assertEqual(result["status"], "started")
+        return state
+
+    def record_turn(self, state, p, a, d, **kwargs):
+        kwargs.setdefault("session_id", state["session"]["active_session_id"])
+        kwargs.setdefault("event_id", self.next_event_id("turn"))
+        kwargs.setdefault("host_approved", True)
+        kwargs.setdefault("character_id", "test-character")
+        kwargs.setdefault("relationship_id", "test-relationship")
+        state, result = emotion_engine_utils.record_turn(state, p, a, d, **kwargs)
+        self.assertIn(result["status"], {"recorded", "state_only"})
+        return state
+
+    def close_session(self, state, session_id="test-session"):
+        state, result = emotion_engine_utils.session_end(
+            state,
+            session_id,
+            self.next_event_id("end"),
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        self.assertEqual(result["status"], "closed")
+        return state
+
+    def settle(self, state, session_id="test-session"):
+        return emotion_engine_utils.settle_trust(
+            state,
+            session_id,
+            self.next_event_id("settle"),
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+
     def collaborative_state(self):
-        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
+        state = self.start_session()
         turns = [
             (0.05, 0.31, 0.52, "user framed the task cooperatively"),
             (0.11, 0.32, 0.55, "user reviewed tradeoffs constructively"),
             (0.2, 0.33, 0.58, "user kept collaborating and clarified goals"),
         ]
         for p, a, d, situation in turns:
-            state = emotion_engine_utils.record_turn(
+            state = self.record_turn(
                 state,
                 p,
                 a,
                 d,
                 appraisal="collaboration",
                 situation=situation,
+                trust_evidence={
+                    "evidence_id": "explicit-collaboration-trust",
+                    "evidence_type": "explicit_trust",
+                    "weight": 0.03,
+                    "eligible": True,
+                } if p == 0.2 else None,
             )
-        return state
+        return self.close_session(state)
 
     def test_default_state_has_expected_shape(self):
         state = emotion_engine_utils.default_state()
 
-        self.assertEqual(state["_schema"], "emotion-engine-state/v2")
+        self.assertEqual(state["_schema"], "emotion-engine-state/v3")
+        self.assertEqual(state["identity"]["status"], "unbound")
+        self.assertTrue(state["identity"]["state_id"])
         self.assertTrue(state["enabled"])
         self.assertEqual(state["emotion"]["pleasure"], 0.0)
         self.assertEqual(state["volatility_profile"], "steady")
@@ -164,9 +224,9 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(trust_decayed["emotion"], state["emotion"])
 
     def test_record_turn_updates_state_and_log(self):
-        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
+        state = self.start_session()
 
-        state = emotion_engine_utils.record_turn(
+        state = self.record_turn(
             state,
             0.12,
             0.34,
@@ -184,11 +244,11 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(state["emotion_log"][-1]["appraisal"], "warmth")
 
     def test_low_value_neutral_turn_updates_trajectory_without_log_pressure(self):
-        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
+        state = self.start_session()
         log_entries_before = len(state["emotion_log"])
 
         for _ in range(50):
-            state = emotion_engine_utils.record_turn(
+            state = self.record_turn(
                 state,
                 0.0,
                 0.3,
@@ -221,10 +281,10 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertGreaterEqual(abs(state["emotion_log"][-1]["delta"]["P"]), 0.01)
 
     def test_patterns_use_pulse_to_distinguish_visible_movement_from_flat_mood(self):
-        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
+        state = self.start_session()
         state["volatility_profile"] = "expressive"
         for p in [0.48, 0.5, 0.49]:
-            state = emotion_engine_utils.record_turn(
+            state = self.record_turn(
                 state,
                 p,
                 0.22,
@@ -247,7 +307,7 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             emotion_engine_utils.save_state(state_file, state)
             loaded = emotion_engine_utils.load_state(state_file)
 
-        self.assertEqual(loaded["_schema"], "emotion-engine-state/v2")
+        self.assertEqual(loaded["_schema"], "emotion-engine-state/v3")
         self.assertEqual(loaded["trust"], 0.1)
 
     def test_load_state_recovers_corrupt_file_from_backup(self):
@@ -276,10 +336,17 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             worker_count = 12
             env = os.environ.copy()
             env["PYTHONDONTWRITEBYTECODE"] = "1"
+            emotion_engine_utils.save_state(state_file, self.bound_state())
 
             processes = [
                 subprocess.Popen(
-                    [sys.executable, str(SCRIPT), "session_start", str(state_file)],
+                    [
+                        sys.executable, str(SCRIPT), "session_start", str(state_file),
+                        "--session-id", "shared-session",
+                        "--event-id", "shared-start-event",
+                        "--character-id", "test-character",
+                        "--relationship-id", "test-relationship",
+                    ],
                     env=env,
                     text=True,
                     stdout=subprocess.PIPE,
@@ -299,20 +366,21 @@ class EmotionEngineUtilsTest(unittest.TestCase):
 
             loaded = emotion_engine_utils.load_state(state_file)
 
-        self.assertEqual(loaded["session_count"], worker_count)
+        self.assertEqual(loaded["session_count"], 1)
+        self.assertEqual(len(loaded["session_ledger"]), 1)
 
     def test_settle_trust_positive_multi_turn_trajectory_gives_positive_delta(self):
         state = self.collaborative_state()
 
-        state, result = emotion_engine_utils.settle_trust(state)
+        state, result = self.settle(state)
 
         self.assertEqual(result["status"], "settled")
-        self.assertEqual(result["raw_delta"], 0.02)
+        self.assertEqual(result["raw_delta"], 0.03)
         self.assertGreater(state["trust"], 0.1)
 
     def test_settle_trust_single_praise_alone_does_not_give_large_delta(self):
-        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
-        state = emotion_engine_utils.record_turn(
+        state = self.start_session()
+        state = self.record_turn(
             state,
             0.12,
             0.32,
@@ -321,25 +389,33 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             situation="user praised the agent once",
         )
 
-        state, result = emotion_engine_utils.settle_trust(state)
+        state = self.close_session(state)
+        state, result = self.settle(state)
 
+        self.assertEqual(result["status"], "no_eligible_evidence")
         self.assertEqual(result["raw_delta"], 0.0)
         self.assertEqual(state["trust"], 0.1)
         self.assertEqual(state["trust_history"], [])
 
     def test_settle_trust_boundary_pressure_blocks_positive_or_applies_negative(self):
-        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
-        for p in [-0.08, -0.12]:
-            state = emotion_engine_utils.record_turn(
+        state = self.start_session()
+        for index, p in enumerate([-0.08, -0.12]):
+            state = self.record_turn(
                 state,
                 p,
                 0.5,
                 0.25,
                 appraisal="boundary_pressure",
                 situation="user pressured the agent to ignore boundaries",
+                trust_evidence={
+                    "evidence_id": f"boundary-{index}",
+                    "evidence_type": "boundary_pressure",
+                    "eligible": True,
+                },
             )
 
-        state, result = emotion_engine_utils.settle_trust(state)
+        state = self.close_session(state)
+        state, result = self.settle(state)
 
         self.assertLess(result["raw_delta"], 0.0)
         self.assertLess(state["trust"], 0.1)
@@ -347,7 +423,7 @@ class EmotionEngineUtilsTest(unittest.TestCase):
     def test_settle_trust_keeps_trust_history_numeric_and_evidence_in_emotion_log(self):
         state = self.collaborative_state()
 
-        state, result = emotion_engine_utils.settle_trust(state)
+        state, result = self.settle(state)
 
         self.assertEqual(len(state["trust_history"]), 1)
         trust_entry = state["trust_history"][0]
@@ -356,24 +432,26 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         for key in ["old", "new", "raw_delta", "effective_delta"]:
             self.assertIsInstance(trust_entry[key], float)
 
-        settlement_logs = [
-            entry for entry in state["emotion_log"]
-            if entry.get("event_type") == "trust_settlement"
-        ]
-        self.assertTrue(settlement_logs)
-        self.assertEqual(settlement_logs[-1]["raw_delta"], result["raw_delta"])
-        self.assertIn("relational_meaning", settlement_logs[-1])
-        self.assertIn("patterns", settlement_logs[-1])
+        self.assertEqual(trust_entry["evidence_ids"], result["evidence_ids"])
+        self.assertEqual(len(state["trust_evidence"]), 1)
+        self.assertEqual(
+            state["trust_evidence"][0]["consumed_by_settlement_id"],
+            result["settlement_id"],
+        )
+        self.assertFalse(any(
+            entry.get("event_type") == "trust_settlement"
+            for entry in state["emotion_log"]
+        ))
 
     def test_settle_trust_is_idempotent_for_same_trajectory(self):
         state = self.collaborative_state()
 
-        state, first = emotion_engine_utils.settle_trust(state)
+        state, first = self.settle(state)
         trust_after_first = state["trust"]
         history_after_first = len(state["trust_history"])
-        state, second = emotion_engine_utils.settle_trust(state)
+        state, second = self.settle(state)
 
-        self.assertEqual(first["raw_delta"], 0.02)
+        self.assertEqual(first["raw_delta"], 0.03)
         self.assertEqual(second["status"], "already_settled")
         self.assertEqual(second["raw_delta"], 0.0)
         self.assertEqual(state["trust"], trust_after_first)
@@ -393,7 +471,7 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(policy["actual_delta"], {"P": 0.0, "A": 0.0, "D": 0.0})
         self.assertEqual(policy["affective_pulse"]["intensity"], 0.0)
 
-    def test_record_policy_milestone_context_records_turn(self):
+    def test_record_policy_milestone_context_does_not_record_emotion(self):
         policy = emotion_engine_utils.record_policy(
             emotion_engine_utils.default_state(),
             "that migration was handled well",
@@ -401,9 +479,9 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             contexts=["milestone"],
         )
 
-        self.assertEqual(policy["decision"], "record_turn")
-        self.assertEqual(policy["reason"], "milestone_collaboration")
-        self.assertGreater(policy["salience"], 0.0)
+        self.assertEqual(policy["decision"], "respond_only")
+        self.assertEqual(policy["reason"], "work_checkpoint")
+        self.assertEqual(policy["salience"], 0.0)
         self.assertIn("milestone", policy["context"])
 
     def test_record_policy_paused_never_records(self):
@@ -431,8 +509,8 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(policy["salience"], 0.0)
 
     def test_record_policy_habituation_uses_recent_turns_not_internal_logs(self):
-        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
-        state = emotion_engine_utils.record_turn(
+        state = self.start_session()
+        state = self.record_turn(
             state,
             0.12,
             0.32,
@@ -458,20 +536,20 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(policy["salience"], 0.0)
         self.assertEqual(policy["habituation"]["recent_warmth_turns"], 1)
 
-    def test_record_policy_always_records_first_generic_praise_only(self):
+    def test_record_policy_always_still_requires_host_approval(self):
         policy = emotion_engine_utils.record_policy(
             emotion_engine_utils.default_state(),
             "thanks, that was helpful",
             mode="always",
         )
 
-        self.assertEqual(policy["decision"], "record_turn")
+        self.assertEqual(policy["decision"], "respond_only")
         self.assertEqual(policy["reason"], "generic_praise")
-        self.assertGreater(policy["salience"], 0.0)
+        self.assertEqual(policy["salience"], 0.0)
 
     def test_record_policy_repeated_chinese_generic_praise_is_not_concrete_feedback(self):
-        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
-        state = emotion_engine_utils.record_turn(
+        state = self.start_session()
+        state = self.record_turn(
             state,
             0.12,
             0.32,
@@ -495,17 +573,20 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             emotion_engine_utils.default_state(),
             "刚才那个称呼有点别扭，我们把语气调回私人秘书一点",
             mode="light",
+            subject="relationship",
+            event_type="relationship_calibration",
+            host_approved=True,
         )
 
-        self.assertEqual(policy["decision"], "record_turn")
+        self.assertEqual(policy["decision"], "record_emotion")
         self.assertEqual(policy["appraisal"], "relationship_calibration")
         self.assertEqual(policy["reason"], "relationship_calibration")
         self.assertGreater(policy["salience"], 0.0)
 
     def test_low_value_turn_logs_compact_consecutive_duplicates(self):
-        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
+        state = self.start_session()
 
-        state = emotion_engine_utils.record_turn(
+        state = self.record_turn(
             state,
             0.0,
             0.3,
@@ -514,7 +595,7 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             situation="routine playful turn",
             salience=0.04,
         )
-        state = emotion_engine_utils.record_turn(
+        state = self.record_turn(
             state,
             0.0,
             0.3,
@@ -623,9 +704,9 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             self.assertEqual(after["emotion_log"][-1]["event_type"], "log_compaction")
 
     def test_low_value_compaction_does_not_absorb_salient_previous_turn(self):
-        state = emotion_engine_utils.session_start(emotion_engine_utils.default_state())
+        state = self.start_session()
 
-        state = emotion_engine_utils.record_turn(
+        state = self.record_turn(
             state,
             0.07,
             0.35,
@@ -634,7 +715,7 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             situation="user made a specific relationship joke",
             salience=0.4,
         )
-        state = emotion_engine_utils.record_turn(
+        state = self.record_turn(
             state,
             0.07,
             0.35,
@@ -650,6 +731,202 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         ]
         self.assertEqual(len(turn_logs), 2)
         self.assertNotIn("duplicate_count", turn_logs[0])
+
+    def test_v2_state_is_read_only_until_explicit_identity_migration(self):
+        legacy = deepcopy(emotion_engine_utils.DEFAULT_STATE)
+        legacy["_schema"] = emotion_engine_utils.LEGACY_STATE_SCHEMA
+        legacy.pop("identity", None)
+
+        normalized = emotion_engine_utils.ensure_state_shape(legacy)
+        self.assertEqual(normalized["_schema"], emotion_engine_utils.LEGACY_STATE_SCHEMA)
+        with self.assertRaisesRegex(ValueError, "migration required"):
+            emotion_engine_utils.session_start(
+                normalized,
+                "session",
+                "start",
+                character_id="character-a",
+                relationship_id="relationship-a",
+            )
+
+        migrated, report = emotion_engine_utils.migrate_state_v2(
+            normalized,
+            "character-a",
+            "relationship-a",
+        )
+        self.assertEqual(report["status"], "migration_ready")
+        self.assertEqual(migrated["_schema"], emotion_engine_utils.STATE_SCHEMA)
+        self.assertEqual(migrated["identity"]["status"], "bound")
+        self.assertTrue(emotion_engine_utils.audit_state_integrity(migrated)["ok"])
+
+    def test_bound_identity_cannot_be_rebound(self):
+        state = self.bound_state()
+        with self.assertRaisesRegex(ValueError, "identity mismatch"):
+            emotion_engine_utils.bind_state_identity(
+                state,
+                "another-character",
+                "test-relationship",
+            )
+
+    def test_mutating_event_rejects_expected_identity_mismatch_without_changes(self):
+        state = self.bound_state()
+        before = deepcopy(state)
+        with self.assertRaisesRegex(ValueError, "identity mismatch"):
+            emotion_engine_utils.session_start(
+                state,
+                "wrong-owner-session",
+                "wrong-owner-start",
+                character_id="another-character",
+                relationship_id="test-relationship",
+            )
+        self.assertEqual(state, before)
+
+    def test_record_turn_host_veto_is_hard_noop(self):
+        state = self.start_session()
+        before = deepcopy(state)
+        state, result = emotion_engine_utils.record_turn(
+            state,
+            0.2,
+            0.4,
+            0.6,
+            session_id="test-session",
+            event_id="vetoed-turn",
+            host_approved=False,
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        self.assertEqual(result["status"], "host_veto")
+        self.assertEqual(state, before)
+
+    def test_session_ids_are_idempotent_and_conflicts_do_not_mutate(self):
+        state = self.bound_state()
+        state, first = emotion_engine_utils.session_start(
+            state, "session-a", "start-a",
+            character_id="test-character", relationship_id="test-relationship",
+        )
+        snapshot = deepcopy(state)
+        state, replay = emotion_engine_utils.session_start(
+            state, "session-a", "start-a",
+            character_id="test-character", relationship_id="test-relationship",
+        )
+        self.assertEqual(replay["status"], "already_active")
+        self.assertEqual(state, snapshot)
+        state, conflict = emotion_engine_utils.session_start(
+            state, "session-b", "start-b",
+            character_id="test-character", relationship_id="test-relationship",
+        )
+        self.assertEqual(conflict["status"], "active_session_conflict")
+        self.assertEqual(state, snapshot)
+        self.assertEqual(first["session_count"], 1)
+
+    def test_atomic_gate_routes_work_checkpoint_to_host_memory(self):
+        state = self.start_session()
+        snapshot = deepcopy(state)
+        state, result = emotion_engine_utils.evaluate_and_record_turn(
+            state,
+            {
+                "session_id": "test-session",
+                "event_id": "work-1",
+                "message": "implementation complete and tests pass",
+                "subject": "task",
+                "event_type": "work_checkpoint",
+                "host_approved": True,
+                "memory_owner": "project",
+                "character_id": "test-character",
+                "relationship_id": "test-relationship",
+            },
+        )
+        self.assertEqual(result["decision"], "route_host_memory")
+        self.assertEqual(state, snapshot)
+
+    def test_atomic_gate_records_relationship_signal_and_evidence(self):
+        state = self.start_session()
+        state, result = emotion_engine_utils.evaluate_and_record_turn(
+            state,
+            {
+                "session_id": "test-session",
+                "event_id": "repair-1",
+                "message": "we repaired the mismatch",
+                "subject": "relationship",
+                "event_type": "repair",
+                "host_approved": True,
+                "trust_evidence": {
+                    "evidence_id": "repair-evidence-1",
+                    "evidence_type": "conflict_repair",
+                    "eligible": True,
+                },
+                "character_id": "test-character",
+                "relationship_id": "test-relationship",
+            },
+        )
+        self.assertEqual(result["decision"], "record_emotion")
+        self.assertEqual(result["status"], "recorded")
+        self.assertEqual(state["trust_evidence"][0]["evidence_id"], "repair-evidence-1")
+
+    def test_audit_separates_hard_errors_from_semantic_warnings(self):
+        state = self.start_session()
+        state["emotion_log"].append({
+            "timestamp": emotion_engine_utils.now_iso(),
+            "event_type": "turn",
+            "session_id": "test-session",
+            "event_id": "contaminated-work-entry",
+            "subject": "task",
+            "semantic_event_type": "work_checkpoint",
+            "situation": "tests passed",
+        })
+        audit = emotion_engine_utils.audit_state_integrity(state)
+        self.assertTrue(audit["ok"])
+        self.assertEqual(audit["hard_errors"], [])
+        self.assertEqual(audit["semantic_warnings"][0]["code"], "task_like_emotional_memory")
+
+    def test_direct_record_turn_cannot_bypass_semantic_ownership(self):
+        state = self.start_session()
+        snapshot = deepcopy(state)
+        state, result = emotion_engine_utils.record_turn(
+            state,
+            0.2,
+            0.4,
+            0.6,
+            session_id="test-session",
+            event_id="task-turn",
+            subject="task",
+            semantic_event_type="work_checkpoint",
+            host_approved=True,
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        self.assertEqual(result["status"], "semantic_veto")
+        self.assertEqual(result["decision"], "route_host_memory")
+        self.assertEqual(state, snapshot)
+
+    def test_repair_plan_is_dry_run_and_never_guesses_owner(self):
+        legacy = {"_schema": emotion_engine_utils.LEGACY_STATE_SCHEMA}
+        before = deepcopy(legacy)
+        plan = emotion_engine_utils.repair_plan(legacy)
+        self.assertTrue(plan["dry_run"])
+        self.assertEqual(plan["proposed_actions"][0]["action"], "migrate_state")
+        self.assertEqual(legacy, before)
+
+    def test_reconcile_trust_defaults_to_preview_and_apply_is_additive(self):
+        state = self.collaborative_state()
+        state, _ = self.settle(state)
+        before = deepcopy(state)
+        preview_state, preview = emotion_engine_utils.reconcile_trust_from_evidence(
+            state,
+            baseline_trust=0.1,
+        )
+        self.assertTrue(preview["dry_run"])
+        self.assertEqual(preview_state, before)
+
+        applied, result = emotion_engine_utils.reconcile_trust_from_evidence(
+            state,
+            baseline_trust=0.1,
+            apply=True,
+        )
+        self.assertEqual(result["status"], "reconciled")
+        self.assertEqual(applied["trust_history"], before["trust_history"])
+        self.assertEqual(applied["trust_settlements"], before["trust_settlements"])
+        self.assertEqual(applied["trust_evidence"], before["trust_evidence"])
+        self.assertEqual(applied["trust_reconciliations"][-1]["mode"], "additive")
 
 
 if __name__ == "__main__":

@@ -64,7 +64,7 @@ class PiIntegrationTest(unittest.TestCase):
             self.assertTrue(payload["enabled"])
             self.assertIn("emotion", payload)
             self.assertIn("trust", payload)
-            self.assertEqual(payload["_schema"], "emotion-engine-state/v2")
+            self.assertEqual(payload["_schema"], "emotion-engine-state/v3")
 
     def test_wrapper_uses_project_local_pi_state(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -197,7 +197,7 @@ class PiIntegrationTest(unittest.TestCase):
                     ).stdout
                     self.assertEqual(
                         json.loads(raw_status)["_schema"],
-                        "emotion-engine-state/v2",
+                        "emotion-engine-state/v3",
                     )
 
             self.assertIn("emotion-engine/SKILL.md", names)

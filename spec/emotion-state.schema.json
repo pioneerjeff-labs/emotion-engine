@@ -1,13 +1,16 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://pioneerjeff-labs.github.io/emotion-engine/spec/emotion-state.schema.json",
-  "title": "Emotion Engine State Protocol v2",
-  "description": "Machine-readable schema for the Emotion Engine v2 state packet. The root schema validates state packets; adapter event and output contracts are exposed under $defs.",
+  "title": "Emotion Engine State Protocol v3",
+  "description": "Machine-readable schema for identity-bound Emotion Engine v3 state packets. v2 packets require an explicit, read-only migration preview before mutation.",
   "type": "object",
   "additionalProperties": true,
   "required": [
     "_schema",
+    "identity",
+    "capabilities",
     "enabled",
+    "runtime_mode",
     "emotion",
     "personality_baseline",
     "character_profile",
@@ -19,14 +22,31 @@
     "emotion_trajectory",
     "emotion_log",
     "trust_history",
+    "trust_evidence",
+    "trust_settlements",
+    "session",
+    "session_ledger",
+    "processed_event_ids",
     "log_limit"
   ],
   "properties": {
     "_schema": {
-      "const": "emotion-engine-state/v2"
+      "const": "emotion-engine-state/v3"
+    },
+    "identity": {
+      "$ref": "#/$defs/stateIdentity"
+    },
+    "capabilities": {
+      "type": "array",
+      "items": {"type": "string"},
+      "contains": {"const": "state_identity/v1"}
     },
     "enabled": {
       "type": "boolean"
+    },
+    "runtime_mode": {
+      "type": "string",
+      "enum": ["light", "always", "paused"]
     },
     "volatility_profile": {
       "description": "Host-selected expressiveness envelope for mood inertia and short-lived affective pulse visibility.",
@@ -86,11 +106,31 @@
       }
     },
     "trust_history": {
-      "description": "Numeric ledger of applied trust changes. Semantic reasons and provenance belong in emotion_log, not trust_history.",
+      "description": "Numeric ledger of applied trust changes. Automatic settlements reference authoritative trust_evidence ids.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/trustHistoryEntry"
       }
+    },
+    "trust_evidence": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/trustEvidence"}
+    },
+    "trust_settlements": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/trustSettlement"}
+    },
+    "session": {
+      "$ref": "#/$defs/sessionState"
+    },
+    "session_ledger": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/sessionLedgerEntry"}
+    },
+    "processed_event_ids": {
+      "type": "array",
+      "items": {"type": "string"},
+      "uniqueItems": true
     },
     "log_limit": {
       "type": "integer",
@@ -109,6 +149,95 @@
     }
   },
   "$defs": {
+    "stateIdentity": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["state_id", "character_id", "relationship_id", "status"],
+      "properties": {
+        "state_id": {"type": "string", "minLength": 1},
+        "character_id": {"type": ["string", "null"]},
+        "relationship_id": {"type": ["string", "null"]},
+        "status": {"type": "string", "enum": ["bound", "unbound"]}
+      },
+      "allOf": [
+        {
+          "if": {"properties": {"status": {"const": "bound"}}},
+          "then": {
+            "properties": {
+              "character_id": {"type": "string", "minLength": 1},
+              "relationship_id": {"type": "string", "minLength": 1}
+            }
+          }
+        }
+      ]
+    },
+    "sessionState": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["active_session_id", "last_session_id", "status", "opened_at", "closed_at", "settled_at"],
+      "properties": {
+        "active_session_id": {"type": ["string", "null"]},
+        "last_session_id": {"type": ["string", "null"]},
+        "status": {"type": "string", "enum": ["active", "closing", "closed"]},
+        "opened_at": {"$ref": "#/$defs/nullableIsoTimestamp"},
+        "closed_at": {"$ref": "#/$defs/nullableIsoTimestamp"},
+        "settled_at": {"$ref": "#/$defs/nullableIsoTimestamp"}
+      }
+    },
+    "sessionLedgerEntry": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["session_id", "status", "opened_at", "turn_count"],
+      "properties": {
+        "session_id": {"type": "string", "minLength": 1},
+        "status": {"type": "string", "enum": ["active", "closing", "closed", "settled"]},
+        "opened_at": {"type": "string", "format": "date-time"},
+        "closed_at": {"$ref": "#/$defs/nullableIsoTimestamp"},
+        "settled_at": {"$ref": "#/$defs/nullableIsoTimestamp"},
+        "turn_count": {"type": "integer", "minimum": 0},
+        "settlement_id": {"type": ["string", "null"]}
+      }
+    },
+    "trustEvidence": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["evidence_id", "session_id", "event_id", "evidence_type", "direction", "weight", "eligible", "created_at", "consumed_by_settlement_id"],
+      "properties": {
+        "evidence_id": {"type": "string", "minLength": 1},
+        "session_id": {"type": "string", "minLength": 1},
+        "event_id": {"type": "string", "minLength": 1},
+        "evidence_type": {"type": "string", "enum": ["explicit_trust", "conflict_repair", "boundary_pressure", "hostility"]},
+        "direction": {"type": "integer", "enum": [-1, 1]},
+        "weight": {"type": "number", "minimum": 0, "maximum": 0.2},
+        "eligible": {"type": "boolean"},
+        "created_at": {"type": "string", "format": "date-time"},
+        "consumed_by_settlement_id": {"type": ["string", "null"]}
+      }
+    },
+    "trustEvidenceInput": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["evidence_id", "evidence_type", "eligible"],
+      "properties": {
+        "evidence_id": {"type": "string", "minLength": 1},
+        "evidence_type": {"type": "string", "enum": ["explicit_trust", "conflict_repair", "boundary_pressure", "hostility"]},
+        "weight": {"type": "number", "minimum": 0, "maximum": 0.2},
+        "eligible": {"const": true},
+        "source": {"type": "string"}
+      }
+    },
+    "trustSettlement": {
+      "type": "object",
+      "additionalProperties": true,
+      "required": ["settlement_id", "session_id", "raw_delta", "evidence_ids", "status"],
+      "properties": {
+        "settlement_id": {"type": "string", "minLength": 1},
+        "session_id": {"type": "string", "minLength": 1},
+        "raw_delta": {"type": "number", "minimum": -0.2, "maximum": 0.05},
+        "evidence_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
+        "status": {"const": "settled"}
+      }
+    },
     "nullableIsoTimestamp": {
       "description": "Timezone-aware ISO 8601 timestamp, or null when no event has occurred yet.",
       "oneOf": [
@@ -242,6 +371,10 @@
           "type": "integer",
           "minimum": 1
         },
+        "session_id": {"type": "string"},
+        "event_id": {"type": "string"},
+        "subject": {"type": "string", "enum": ["task", "relationship", "self", "mixed"]},
+        "semantic_event_type": {"type": "string"},
         "P": {
           "type": "number",
           "minimum": -1.0,
@@ -410,7 +543,7 @@
       }
     },
     "trustHistoryEntry": {
-      "description": "Numeric ledger entry for an applied trust update. Keep reasons, confidence, and source references in emotion_log entries instead.",
+      "description": "Numeric ledger entry for an applied trust update. Automatic settlements reference authoritative trust_evidence ids.",
       "type": "object",
       "additionalProperties": false,
       "required": [
@@ -440,6 +573,13 @@
         },
         "effective_delta": {
           "type": "number"
+        },
+        "session_id": {"type": ["string", "null"]},
+        "settlement_id": {"type": ["string", "null"]},
+        "evidence_ids": {
+          "type": "array",
+          "items": {"type": "string"},
+          "uniqueItems": true
         }
       }
     },
@@ -527,16 +667,20 @@
       }
     },
     "adapterEvent": {
-      "description": "Generic event envelope that a host adapter can map from a runtime such as Celiums Memory before updating Emotion Engine state.",
+      "description": "Raw, identity-bound lifecycle or turn envelope. Hosts must preserve native identifiers and explicitly approve emotional recording.",
       "type": "object",
       "additionalProperties": true,
       "required": [
         "_schema",
-        "event_type"
+        "event_type",
+        "event_id",
+        "session_id",
+        "character_id",
+        "relationship_id"
       ],
       "properties": {
         "_schema": {
-          "const": "emotion-engine-adapter-event/v1"
+          "const": "emotion-engine-adapter-event/v2"
         },
         "source": {
           "type": "string"
@@ -545,21 +689,34 @@
           "type": "string",
           "enum": [
             "session_start",
-            "turn_after",
-            "journal_append",
+            "turn",
             "session_end",
             "trust_settlement",
-            "trust_update",
-            "boundary_update",
-            "time_decay",
-            "manual"
+            "pre_turn_decay"
           ]
+        },
+        "event_id": {
+          "type": "string",
+          "minLength": 1
         },
         "occurred_at": {
           "$ref": "#/$defs/nullableIsoTimestamp"
         },
         "session_id": {
-          "type": "string"
+          "type": "string",
+          "minLength": 1
+        },
+        "character_id": {"type": "string", "minLength": 1},
+        "relationship_id": {"type": "string", "minLength": 1},
+        "subject": {"type": "string", "enum": ["task", "relationship", "self", "mixed"]},
+        "semantic_event_type": {"type": "string"},
+        "host_approved": {"type": "boolean"},
+        "memory_owner": {"type": "string"},
+        "trust_evidence": {
+          "oneOf": [
+            {"$ref": "#/$defs/trustEvidenceInput"},
+            {"type": "array", "items": {"$ref": "#/$defs/trustEvidenceInput"}}
+          ]
         },
         "turn_id": {
           "type": "string"
@@ -635,10 +792,10 @@
       ],
       "properties": {
         "_schema": {
-          "const": "emotion-engine-adapter-output/v1"
+          "const": "emotion-engine-adapter-output/v2"
         },
         "state_schema": {
-          "const": "emotion-engine-state/v2"
+          "const": "emotion-engine-state/v3"
         },
         "state_patch": {
           "type": "object",

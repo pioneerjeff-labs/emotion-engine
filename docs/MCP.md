@@ -9,13 +9,16 @@ This is not an Agent Harness management interface. Target refresh, doctor checks
 Use the Emotion Engine MCP server for:
 
 - reading public runtime status
+- checking schema, identity binding, and capabilities
 - building compact prompt-safe continuity summaries
-- deciding whether a turn should be recorded with `record_policy`
+- applying the structured semantic and host-approval gate
 - getting deterministic advisory appraisal output
 - recording host-approved PAD turn updates
 - applying pre-turn decay
-- starting sessions
-- settling agent-to-user trust
+- opening and closing native sessions idempotently
+- settling agent-to-user trust from explicit evidence only
+- auditing hard invariants separately from semantic warnings
+- previewing migration, repair, and evidence-based trust reconciliation
 - inspecting recent compact emotion log entries
 
 Do not use this MCP server for:
@@ -133,14 +136,22 @@ After changing MCP config, start a fresh client session or reload MCP servers so
 |---|---:|---|
 | `emotion_engine_status` | No | Read public status, or raw state only when explicitly requested. |
 | `emotion_engine_summary` | No | Return compact prompt-safe continuity guidance and recent compact memories. |
-| `emotion_engine_record_policy` | No | Decide whether a turn should be persisted under `light`, `always`, or `paused`. |
+| `emotion_engine_capabilities` | No | Read schema, identity status, and capability declarations. |
+| `emotion_engine_bind_identity` | Yes | Bind an unbound v3 packet once. |
+| `emotion_engine_migrate_state` | Optional | Preview v2-to-v3 migration by default; apply only when requested with explicit identity. |
+| `emotion_engine_record_policy` | No | Route structured task, relationship, self, or mixed events. |
 | `emotion_engine_appraise` | No | Return deterministic first-pass appraisal and PAD suggestion. Advisory only. |
-| `emotion_engine_session_start` | Yes | Record the start of a meaningful session. |
-| `emotion_engine_pre_turn_decay` | Yes | Apply small in-session drift before a turn. |
-| `emotion_engine_record_turn` | Yes | Persist host/LLM-approved final PAD values and compact memory fields. |
-| `emotion_engine_settle_trust` | Yes | Conservatively settle agent-to-user trust from recent evidence. |
+| `emotion_engine_session_start` | Yes | Idempotently open a native session using session and event ids. |
+| `emotion_engine_session_end` | Yes | Idempotently close only the matching active session. |
+| `emotion_engine_pre_turn_decay` | Yes | Apply guarded in-session drift. |
+| `emotion_engine_record_turn` | Yes | Persist explicitly host-approved final PAD and optional trust evidence. |
+| `emotion_engine_evaluate_and_record_turn` | Optional | Atomically gate and optionally record a structured turn. |
+| `emotion_engine_settle_trust` | Optional | Settle a closed session only when eligible evidence exists. |
 | `emotion_engine_recent_log` | No | Read recent compact emotion log entries. |
-| `emotion_engine_audit_log` | No | Inspect log pressure, low-value ratios, and retention warnings. |
+| `emotion_engine_audit_log` | No | Inspect log pressure plus invariant and semantic findings. |
+| `emotion_engine_audit_state` | No | Check identity, lifecycle, idempotency, and evidence invariants. |
+| `emotion_engine_repair_plan` | No | Return a dry-run plan without guessing ownership. |
+| `emotion_engine_reconcile_trust` | Optional | Preview by default; apply only with an explicit baseline. |
 | `emotion_engine_compact_log` | Optional | Preview safe compaction by default; mutates only when `apply` is `true`. |
 
 ## Minimal JSON-RPC Smoke Test
@@ -153,17 +164,17 @@ Start the server and send one JSON-RPC object per line:
 {"jsonrpc":"2.0","id":3,"method":"tools/call","params":{"name":"emotion_engine_record_policy","arguments":{"message":"that migration was handled well","mode":"light","contexts":["milestone"]}}}
 ```
 
-The `record_policy` call is side-effect free. It can return `record_turn` with a suggested appraisal and reply bias, but it does not write state.
+The `record_policy` call is side-effect free. This milestone example returns `respond_only` (or `route_host_memory` when a memory owner is supplied), never an emotional record.
 
 ## Host Flow
 
 Recommended loop for an MCP-capable local agent:
 
-1. Call `emotion_engine_summary` or `emotion_engine_status` to build compact context.
-2. Call `emotion_engine_record_policy` before deciding whether a user turn should be persisted.
-3. Let the host or LLM decide the final appraisal, PAD values, and compact memory.
-4. Call `emotion_engine_record_turn` only for host-approved updates.
-5. Call `emotion_engine_settle_trust` at a meaningful session or milestone close.
+1. Call `emotion_engine_capabilities`; migrate v2 explicitly and bind v3 identity before mutation.
+2. Open the native session with unique `session_id` and `event_id`.
+3. Call `emotion_engine_evaluate_and_record_turn` with `subject`, semantic `event_type`, and the host's explicit approval. Task checkpoints route to host memory.
+4. Supply trust evidence only as an explicit, uniquely identified host-approved object.
+5. Close the matching session, then settle once. With no eligible evidence, settlement is a no-op.
 
 For long-running `always` mode agents, periodically call `emotion_engine_audit_log`. If low-value `pre_turn_decay` or neutral-turn pressure is high, call `emotion_engine_compact_log` first without `apply`, inspect the report, then call it with `apply: true` only when the host accepts the retention plan.
 
