@@ -21,7 +21,13 @@ scripts/claude_emotion.sh configure --style "warm but not over-compliant, with c
 scripts/claude_emotion.sh tune "make it calmer"
 ```
 
-The wrapper automatically initializes a state file if missing. State path priority:
+The wrapper initializes an unbound v3 packet if missing. Bind it once before emotional mutation:
+
+```bash
+scripts/claude_emotion.sh bind_identity --character-id <character-id> --relationship-id <relationship-id>
+```
+
+Treat v2 as read-only; preview `migrate_state` with explicit owner ids before `--apply`. State path priority:
 1. `CLAUDE_EMOTION_STATE` environment variable
 2. current project: `./.emotion-engine/emotion-state.json`
 3. personal fallback: `~/.claude/emotion-engine/emotion-state.json`
@@ -46,13 +52,13 @@ Only run `clear_log` or `reset` after the user explicitly asks. They erase local
 At the start of a new meaningful conversation/session:
 
 ```bash
-scripts/claude_emotion.sh session_start
+scripts/claude_emotion.sh session_start --session-id <native-session-id> --event-id <unique-start-event-id> --character-id <character-id> --relationship-id <relationship-id>
 ```
 
 Before responding to each user message:
 
 ```bash
-scripts/claude_emotion.sh pre_turn_decay
+scripts/claude_emotion.sh pre_turn_decay --session-id <native-session-id> --event-id <unique-decay-event-id> --character-id <character-id> --relationship-id <relationship-id>
 scripts/claude_emotion.sh appraise "<user message>"
 ```
 
@@ -61,7 +67,7 @@ The appraisal helper is advisory. Claude must use full context, character profil
 After choosing final PAD values, record the turn:
 
 ```bash
-scripts/claude_emotion.sh record_turn <P> <A> <D> --appraisal <label> --situation <short emotional memory>
+scripts/claude_emotion.sh record_turn <P> <A> <D> --session-id <native-session-id> --event-id <unique-turn-event-id> --character-id <character-id> --relationship-id <relationship-id> --subject relationship --event-type <semantic-event-type> --host-approved --appraisal <label> --situation <short emotional memory>
 ```
 
 For important events, add only the memory fields that help future behavior:
@@ -75,16 +81,19 @@ scripts/claude_emotion.sh record_turn <P> <A> <D> \
   --impact pleasure rose, dominance stabilized \
   --open-loop false \
   --follow-up be more precise and structured next turn \
-  --salience 0.65
+  --salience 0.65 \
+  --session-id <native-session-id> --event-id <unique-turn-event-id> --character-id <character-id> --relationship-id <relationship-id> \
+  --subject relationship --event-type relationship_calibration --host-approved
 ```
 
 At session end:
 
 ```bash
-scripts/claude_emotion.sh settle_trust
+scripts/claude_emotion.sh session_end --session-id <native-session-id> --event-id <unique-end-event-id> --character-id <character-id> --relationship-id <relationship-id>
+scripts/claude_emotion.sh settle_trust --session-id <native-session-id> --event-id <unique-settlement-event-id> --character-id <character-id> --relationship-id <relationship-id>
 ```
 
-`settle_trust` extracts session patterns, checks recent turn-level emotion logs and the current trajectory, chooses a conservative raw delta in `-0.20` to `+0.05`, and applies it once for the same trajectory. Use `session_end` only to inspect patterns without changing trust, and `update_trust <trust_delta>` only for an explicit host-side override.
+Lifecycle calls are idempotent. Settlement requires a closed session and explicit unconsumed evidence; praise, task completion, appraisal tags, and PAD shape are not evidence. Without evidence it returns `no_eligible_evidence` without housekeeping writes.
 
 ## How State Should Shape Replies
 
@@ -103,7 +112,7 @@ Blend this with the user-provided character profile or SOUL.md.
 
 `emotion_log` should store situation-aware emotional memories, not transcripts.
 
-`trust_history` should stay a numeric ledger for applied trust changes. Keep reasons and provenance in `emotion_log`, including turn entries, session patterns, compact `trust_update` entries, or optional `source_refs`.
+`trust_history` stays numeric and references consumed `trust_evidence` ids. `emotion_log` is compact emotional continuity, not factual or trust-evidence storage.
 
 Good memory:
 

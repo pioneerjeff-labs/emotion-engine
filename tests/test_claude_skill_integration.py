@@ -45,7 +45,7 @@ class ClaudeSkillIntegrationTest(unittest.TestCase):
             self.assertTrue(payload["enabled"])
             self.assertIn("emotion", payload)
             self.assertIn("trust", payload)
-            self.assertEqual(payload["_schema"], "emotion-engine-state/v2")
+            self.assertEqual(payload["_schema"], "emotion-engine-state/v3")
 
     def test_package_script_builds_self_contained_zip(self):
         output = CLAUDE_INTEGRATION / "emotion-engine-claude-skill.zip"

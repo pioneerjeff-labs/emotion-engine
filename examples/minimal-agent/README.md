@@ -34,8 +34,9 @@ load state
 -> build prompt prelude
 -> advisory appraise
 -> mock LLM final decision
--> record_turn
--> settle_trust
+-> evaluate_and_record_turn
+-> session_end
+-> settle_trust when explicit evidence exists
 -> save final state
 ```
 
@@ -56,7 +57,7 @@ reply. A real application still owns:
 
 The deterministic `appraise` helper is only a hint. In production, your LLM or
 agent runtime should use full context to choose the final appraisal and PAD
-values, then call `record_turn`.
+values, then call the structured `evaluate_and_record_turn` gate.
 
 ## Files
 
@@ -74,5 +75,6 @@ Replace the mock section with your own agent runtime:
 1. Build a prompt prelude from `engine.public_status(state)` and recent compact memories.
 2. Call your LLM with your normal system prompt, retrieval context, policy layer, and user message.
 3. Ask the LLM or host policy to return the final appraisal and PAD values.
-4. Pass those values to `engine.record_turn(...)`.
-5. At session end, call `engine.settle_trust(...)` to extract patterns and apply one conservative, idempotent trust settlement for the current trajectory.
+4. Pass a structured, host-approved relationship event and those values to `engine.evaluate_and_record_turn(...)`; task-owned events are routed away from emotional memory.
+5. Close the identified session with `engine.session_end(...)`.
+6. If that closed session contains explicit, eligible relationship evidence, call `engine.settle_trust(...)` once. Praise, tags, and PAD movement alone cannot change trust.

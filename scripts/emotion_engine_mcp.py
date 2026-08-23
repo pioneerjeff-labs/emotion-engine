@@ -15,7 +15,7 @@ import emotion_engine_utils as engine
 
 
 SERVER_NAME = "emotion-engine"
-SERVER_VERSION = "1.0.0"
+SERVER_VERSION = "2.0.0-rc.1"
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
 
 
@@ -55,13 +55,17 @@ def load_state_for_tool(arguments=None, default_state_file=None):
     return state_file, engine.load_state(state_file)
 
 
-def mutate_state_for_tool(arguments, default_state_file, mutator):
+def mutate_state_for_tool(arguments, default_state_file, mutator, allow_legacy=False):
     state_file = resolve_state_file(arguments, default_state_file)
     ensure_state_parent(state_file)
     with engine.state_file_lock(state_file):
         state = engine.load_state_unlocked(state_file)
+        if not allow_legacy and state.get("_schema") != engine.STATE_SCHEMA:
+            raise JsonRpcError(-32602, "state migration required: v2 packets are read-only")
         state, result = mutator(state)
-        engine.save_state_unlocked(state_file, state)
+        changed = bool(result.pop("_changed", True))
+        if changed:
+            engine.save_state_unlocked(state_file, state)
     return {"state_file": state_file, **result}
 
 
@@ -88,6 +92,10 @@ def compact_summary(state, limit=5):
     recent = [compact_memory(entry) for entry in state.get("emotion_log", [])[-limit:]]
     return {
         "enabled": status["enabled"],
+        "schema": status["schema"],
+        "identity_status": status["identity_status"],
+        "migration_required": status["migration_required"],
+        "capabilities": status["capabilities"],
         "tone": status["summary"],
         "pulse": status["pulse"],
         "style": status["style"],
@@ -159,6 +167,46 @@ def call_tool(name, arguments=None, default_state_file=None):
         limit = int(arguments.get("limit", 5) or 5)
         return {"state_file": state_file, "summary": compact_summary(state, limit=limit)}
 
+    if name == "emotion_engine_capabilities":
+        state_file, state = load_state_for_tool(arguments, default_state_file)
+        return {
+            "state_file": state_file,
+            "schema": state.get("_schema"),
+            "capabilities": list(state.get("capabilities", [])),
+            "identity_status": state.get("identity", {}).get("status"),
+            "migration_required": state.get("_schema") != engine.STATE_SCHEMA,
+        }
+
+    if name == "emotion_engine_bind_identity":
+        def mutator(state):
+            state, result = engine.bind_state_identity(
+                state,
+                require_text(arguments, "character_id"),
+                require_text(arguments, "relationship_id"),
+            )
+            result["_changed"] = result["status"] == "bound"
+            return state, result
+
+        return mutate_state_for_tool(arguments, default_state_file, mutator)
+
+    if name == "emotion_engine_migrate_state":
+        apply = arguments.get("apply") is True
+
+        def mutator(state):
+            migrated, result = engine.migrate_state_v2(
+                state,
+                require_text(arguments, "character_id"),
+                require_text(arguments, "relationship_id"),
+                state_id=arguments.get("state_id"),
+            )
+            result["dry_run"] = not apply
+            result["_changed"] = apply and result["status"] == "migration_ready"
+            if result["_changed"]:
+                result["status"] = "migrated"
+            return migrated if apply else state, result
+
+        return mutate_state_for_tool(arguments, default_state_file, mutator, allow_legacy=True)
+
     if name == "emotion_engine_record_policy":
         message = require_text(arguments, "message")
         state_file, state = load_state_for_tool(arguments, default_state_file)
@@ -167,6 +215,11 @@ def call_tool(name, arguments=None, default_state_file=None):
             message,
             mode=arguments.get("mode"),
             contexts=optional_contexts(arguments),
+            subject=arguments.get("subject"),
+            event_type=arguments.get("event_type"),
+            host_approved=arguments.get("host_approved") is True,
+            memory_owner=arguments.get("memory_owner"),
+            source=arguments.get("source") or "model_inferred",
         )
         return {"state_file": state_file, "policy": policy}
 
@@ -177,20 +230,50 @@ def call_tool(name, arguments=None, default_state_file=None):
 
     if name == "emotion_engine_session_start":
         def mutator(state):
-            state = engine.session_start(state)
-            return state, {
-                "emotion": state["emotion"],
-                "affective_pulse": state["affective_pulse"],
-                "trust": state["trust"],
-                "session_count": state["session_count"],
-            }
+            state, result = engine.session_start(
+                state,
+                require_text(arguments, "session_id"),
+                require_text(arguments, "event_id"),
+                occurred_at=arguments.get("occurred_at"),
+                character_id=require_text(arguments, "character_id"),
+                relationship_id=require_text(arguments, "relationship_id"),
+            )
+            result["_changed"] = result["status"] == "started"
+            return state, result
+
+        return mutate_state_for_tool(arguments, default_state_file, mutator)
+
+    if name == "emotion_engine_session_end":
+        def mutator(state):
+            state, result = engine.session_end(
+                state,
+                require_text(arguments, "session_id"),
+                require_text(arguments, "event_id"),
+                occurred_at=arguments.get("occurred_at"),
+                character_id=require_text(arguments, "character_id"),
+                relationship_id=require_text(arguments, "relationship_id"),
+            )
+            result["_changed"] = result["status"] == "closed"
+            return state, result
 
         return mutate_state_for_tool(arguments, default_state_file, mutator)
 
     if name == "emotion_engine_pre_turn_decay":
         def mutator(state):
+            state = engine.require_expected_state_identity(
+                state,
+                require_text(arguments, "character_id"),
+                require_text(arguments, "relationship_id"),
+            )
+            session_id = require_text(arguments, "session_id")
+            event_id = require_text(arguments, "event_id")
+            if engine.event_already_processed(state, event_id):
+                return state, {"status": "duplicate_event", "_changed": False}
+            if state["session"].get("status") != "active" or state["session"].get("active_session_id") != session_id:
+                return state, {"status": "no_active_session", "_changed": False}
             state = engine.apply_in_session_decay(state)
-            return state, {"emotion": state["emotion"], "affective_pulse": state["affective_pulse"]}
+            engine.mark_event_processed(state, event_id)
+            return state, {"status": "applied", "emotion": state["emotion"], "affective_pulse": state["affective_pulse"]}
 
         return mutate_state_for_tool(arguments, default_state_file, mutator)
 
@@ -201,19 +284,61 @@ def call_tool(name, arguments=None, default_state_file=None):
         memory = memory_arguments(arguments)
 
         def mutator(state):
-            state = engine.record_turn(state, pleasure, arousal, dominance, **memory)
-            return state, {
-                "emotion": state["emotion"],
-                "affective_pulse": state["affective_pulse"],
-                "turn": len(state["emotion_trajectory"]),
-                "status": engine.public_status(state),
-            }
+            state, result = engine.record_turn(
+                state,
+                pleasure,
+                arousal,
+                dominance,
+                session_id=require_text(arguments, "session_id"),
+                event_id=require_text(arguments, "event_id"),
+                subject=arguments.get("subject") or "relationship",
+                semantic_event_type=arguments.get("event_type"),
+                trust_evidence=arguments.get("trust_evidence"),
+                host_approved=arguments.get("host_approved") is True,
+                character_id=require_text(arguments, "character_id"),
+                relationship_id=require_text(arguments, "relationship_id"),
+                **memory,
+            )
+            result["_changed"] = result["status"] == "recorded"
+            result["emotion"] = state["emotion"]
+            result["affective_pulse"] = state["affective_pulse"]
+            result["status_summary"] = engine.public_status(state)
+            return state, result
 
         return mutate_state_for_tool(arguments, default_state_file, mutator)
 
     if name == "emotion_engine_settle_trust":
         def mutator(state):
-            state, result = engine.settle_trust(state)
+            state, result = engine.settle_trust(
+                state,
+                require_text(arguments, "session_id"),
+                require_text(arguments, "event_id"),
+                character_id=require_text(arguments, "character_id"),
+                relationship_id=require_text(arguments, "relationship_id"),
+            )
+            result["_changed"] = result["status"] == "settled"
+            return state, result
+
+        return mutate_state_for_tool(arguments, default_state_file, mutator)
+
+    if name == "emotion_engine_evaluate_and_record_turn":
+        event = arguments.get("event")
+        if not isinstance(event, dict):
+            raise JsonRpcError(-32602, "event must be an object")
+
+        def mutator(state):
+            state, result = engine.evaluate_and_record_turn(
+                state,
+                event,
+                p=optional_float(arguments, "pleasure", "P"),
+                a=optional_float(arguments, "arousal", "A"),
+                d=optional_float(arguments, "dominance", "D"),
+                memory=memory_arguments(arguments),
+                mode=arguments.get("mode"),
+                character_id=arguments.get("character_id"),
+                relationship_id=arguments.get("relationship_id"),
+            )
+            result["_changed"] = result["status"] in {"recorded", "state_only"}
             return state, result
 
         return mutate_state_for_tool(arguments, default_state_file, mutator)
@@ -226,6 +351,28 @@ def call_tool(name, arguments=None, default_state_file=None):
     if name == "emotion_engine_audit_log":
         state_file, state = load_state_for_tool(arguments, default_state_file)
         return {"state_file": state_file, "audit": engine.audit_emotion_log(state)}
+
+    if name == "emotion_engine_audit_state":
+        state_file, state = load_state_for_tool(arguments, default_state_file)
+        return {"state_file": state_file, "audit": engine.audit_state_integrity(state)}
+
+    if name == "emotion_engine_repair_plan":
+        state_file, state = load_state_for_tool(arguments, default_state_file)
+        return {"state_file": state_file, "plan": engine.repair_plan(state)}
+
+    if name == "emotion_engine_reconcile_trust":
+        apply = arguments.get("apply") is True
+
+        def mutator(state):
+            state, result = engine.reconcile_trust_from_evidence(
+                state,
+                baseline_trust=arguments.get("baseline_trust"),
+                apply=apply,
+            )
+            result["_changed"] = result["status"] == "reconciled"
+            return state, result
+
+        return mutate_state_for_tool(arguments, default_state_file, mutator)
 
     if name == "emotion_engine_compact_log":
         apply = bool(arguments.get("apply", False))
@@ -251,11 +398,42 @@ def tool_schema():
         "state_file": {
             "type": "string",
             "description": (
-                "Optional path to emotion-engine-state/v2 JSON. Defaults to --state, "
+                "Optional path to Emotion Engine state JSON. v2 is read-only until explicit migration. Defaults to --state, "
                 "CODEX_EMOTION_STATE, EMOTION_ENGINE_STATE, Codex project state, "
                 "or .emotion-engine/emotion-state.json."
             ),
         }
+    }
+    lifecycle = {
+        "session_id": {"type": "string"},
+        "event_id": {"type": "string"},
+        "occurred_at": {"type": "string"},
+    }
+    identity = {
+        "character_id": {"type": "string"},
+        "relationship_id": {"type": "string"},
+    }
+    memory = {
+        "appraisal": {"type": "string"},
+        "situation": {"type": "string"},
+        "character_lens": {"type": "string"},
+        "relational_meaning": {"type": "string"},
+        "impact": {"type": "string"},
+        "open_loop": {"type": "boolean"},
+        "follow_up_bias": {"type": "string"},
+        "salience": {"type": "number", "minimum": 0, "maximum": 1},
+    }
+    pad = {
+        "pleasure": {"type": "number", "minimum": -1, "maximum": 1},
+        "arousal": {"type": "number", "minimum": 0, "maximum": 1},
+        "dominance": {"type": "number", "minimum": 0, "maximum": 1},
+    }
+    trust_evidence = {
+        "oneOf": [
+            {"type": "object"},
+            {"type": "array", "items": {"type": "object"}},
+        ],
+        "description": "Explicit host-approved evidence with evidence_id, evidence_type, and eligible=true.",
     }
     return [
         {
@@ -278,8 +456,35 @@ def tool_schema():
             },
         },
         {
+            "name": "emotion_engine_capabilities",
+            "description": "Read state schema, identity binding status, and capability declarations.",
+            "inputSchema": {"type": "object", "properties": state_arg},
+        },
+        {
+            "name": "emotion_engine_bind_identity",
+            "description": "Bind an unbound v3 state to one character and relationship. Rebinding is rejected.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {**state_arg, **identity},
+                "required": ["character_id", "relationship_id"],
+            },
+        },
+        {
+            "name": "emotion_engine_migrate_state",
+            "description": "Preview or explicitly apply v2-to-v3 migration. Ownership is never inferred.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    **state_arg, **identity,
+                    "state_id": {"type": "string"},
+                    "apply": {"type": "boolean", "default": False},
+                },
+                "required": ["character_id", "relationship_id"],
+            },
+        },
+        {
             "name": "emotion_engine_record_policy",
-            "description": "Decide whether a turn should be recorded under light/always/paused mode. Side-effect free.",
+            "description": "Apply the side-effect-free semantic and host-approval gate.",
             "inputSchema": {
                 "type": "object",
                 "properties": {
@@ -287,6 +492,11 @@ def tool_schema():
                     "message": {"type": "string"},
                     "mode": {"type": "string", "enum": ["light", "always", "paused"]},
                     "contexts": {"type": "array", "items": {"type": "string"}},
+                    "subject": {"type": "string", "enum": ["task", "relationship", "self", "mixed"]},
+                    "event_type": {"type": "string", "enum": sorted(engine.POLICY_EVENT_TYPES)},
+                    "host_approved": {"type": "boolean"},
+                    "memory_owner": {"type": "string"},
+                    "source": {"type": "string"},
                 },
                 "required": ["message"],
             },
@@ -302,13 +512,27 @@ def tool_schema():
         },
         {
             "name": "emotion_engine_session_start",
-            "description": "Record the start of a meaningful local session.",
-            "inputSchema": {"type": "object", "properties": state_arg},
+            "description": "Idempotently open one explicitly identified session.",
+            "inputSchema": {
+                "type": "object", "properties": {**state_arg, **lifecycle, **identity},
+                "required": ["session_id", "event_id", "character_id", "relationship_id"],
+            },
+        },
+        {
+            "name": "emotion_engine_session_end",
+            "description": "Idempotently close the matching active session.",
+            "inputSchema": {
+                "type": "object", "properties": {**state_arg, **lifecycle, **identity},
+                "required": ["session_id", "event_id", "character_id", "relationship_id"],
+            },
         },
         {
             "name": "emotion_engine_pre_turn_decay",
             "description": "Apply small in-session drift before a turn.",
-            "inputSchema": {"type": "object", "properties": state_arg},
+            "inputSchema": {
+                "type": "object", "properties": {**state_arg, **lifecycle, **identity},
+                "required": ["session_id", "event_id", "character_id", "relationship_id"],
+            },
         },
         {
             "name": "emotion_engine_record_turn",
@@ -316,26 +540,48 @@ def tool_schema():
             "inputSchema": {
                 "type": "object",
                 "properties": {
-                    **state_arg,
-                    "pleasure": {"type": "number", "minimum": -1, "maximum": 1},
-                    "arousal": {"type": "number", "minimum": 0, "maximum": 1},
-                    "dominance": {"type": "number", "minimum": 0, "maximum": 1},
-                    "appraisal": {"type": "string"},
-                    "situation": {"type": "string"},
-                    "character_lens": {"type": "string"},
-                    "relational_meaning": {"type": "string"},
-                    "impact": {"type": "string"},
-                    "open_loop": {"type": "boolean"},
-                    "follow_up_bias": {"type": "string"},
-                    "salience": {"type": "number", "minimum": 0, "maximum": 1},
+                    **state_arg, **lifecycle, **identity, **pad, **memory,
+                    "subject": {"type": "string", "enum": ["task", "relationship", "self", "mixed"]},
+                    "event_type": {"type": "string"},
+                    "trust_evidence": trust_evidence,
+                    "host_approved": {"type": "boolean", "const": True},
                 },
-                "required": ["pleasure", "arousal", "dominance"],
+                "required": ["session_id", "event_id", "character_id", "relationship_id", "pleasure", "arousal", "dominance", "host_approved"],
+            },
+        },
+        {
+            "name": "emotion_engine_evaluate_and_record_turn",
+            "description": "Atomically apply semantic ownership, host approval, idempotency, and optional emotion recording.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    **state_arg, **identity, **pad, **memory,
+                    "mode": {"type": "string", "enum": ["light", "always", "paused"]},
+                    "event": {
+                        "type": "object",
+                        "properties": {
+                            **lifecycle,
+                            "message": {"type": "string"},
+                            "subject": {"type": "string", "enum": ["task", "relationship", "self", "mixed"]},
+                            "event_type": {"type": "string", "enum": sorted(engine.POLICY_EVENT_TYPES)},
+                            "host_approved": {"type": "boolean"},
+                            "memory_owner": {"type": "string"},
+                            "source": {"type": "string"},
+                            "trust_evidence": trust_evidence,
+                        },
+                        "required": ["session_id", "event_id", "subject", "event_type", "host_approved"],
+                    },
+                },
+                "required": ["event", "character_id", "relationship_id"],
             },
         },
         {
             "name": "emotion_engine_settle_trust",
-            "description": "Conservatively settle agent-to-user trust from recent evidence.",
-            "inputSchema": {"type": "object", "properties": state_arg},
+            "description": "Settle a closed session once from explicit unconsumed trust evidence only.",
+            "inputSchema": {
+                "type": "object", "properties": {**state_arg, **lifecycle, **identity},
+                "required": ["session_id", "event_id", "character_id", "relationship_id"],
+            },
         },
         {
             "name": "emotion_engine_recent_log",
@@ -350,8 +596,31 @@ def tool_schema():
         },
         {
             "name": "emotion_engine_audit_log",
-            "description": "Inspect emotion_log retention pressure without mutating state.",
+            "description": "Inspect retention plus hard invariants and heuristic semantic warnings.",
             "inputSchema": {"type": "object", "properties": state_arg},
+        },
+        {
+            "name": "emotion_engine_audit_state",
+            "description": "Check identity, lifecycle, evidence, and idempotency invariants without mutation.",
+            "inputSchema": {"type": "object", "properties": state_arg},
+        },
+        {
+            "name": "emotion_engine_repair_plan",
+            "description": "Return a dry-run repair plan without inferring ownership or changing state.",
+            "inputSchema": {"type": "object", "properties": state_arg},
+        },
+        {
+            "name": "emotion_engine_reconcile_trust",
+            "description": "Preview trust reconstruction from evidence; apply only with an explicit baseline.",
+            "inputSchema": {
+                "type": "object",
+                "properties": {
+                    **state_arg,
+                    "baseline_trust": {"type": "number", "minimum": 0.05, "maximum": 1},
+                    "apply": {"type": "boolean", "default": False},
+                },
+                "required": ["baseline_trust"],
+            },
         },
         {
             "name": "emotion_engine_compact_log",
@@ -412,7 +681,10 @@ def handle_request(message, default_state_file=None):
         name = params.get("name")
         if not isinstance(name, str) or not name:
             raise JsonRpcError(-32602, "tools/call requires a tool name")
-        result = call_tool(name, params.get("arguments") or {}, default_state_file)
+        try:
+            result = call_tool(name, params.get("arguments") or {}, default_state_file)
+        except ValueError as exc:
+            raise JsonRpcError(-32602, str(exc)) from exc
         return jsonrpc_result(request_id, tool_result(result))
     raise JsonRpcError(-32601, f"Method not found: {method}")
 

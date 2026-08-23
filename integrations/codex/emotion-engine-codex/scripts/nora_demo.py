@@ -35,7 +35,7 @@ def load_engine(path):
 
 
 def build_state(engine, trust):
-    state = engine.default_state()
+    state = engine.default_state("nora-demo", "nora-demo-user")
     state = engine.apply_configuration(
         state,
         "轻绿茶温柔御姐，嘴甜但不低位讨好，亲密、会调侃、有边界",
@@ -43,8 +43,12 @@ def build_state(engine, trust):
     )
     state["trust"] = trust
     state["trust_anchor"] = max(state.get("trust_anchor", trust), trust)
-    state = engine.session_start(state)
-    state = engine.record_turn(
+    session_id = "nora-demo-session"
+    state, _ = engine.session_start(
+        state, session_id, "nora-demo-start",
+        character_id="nora-demo", relationship_id="nora-demo-user",
+    )
+    state, _ = engine.record_turn(
         state,
         0.22,
         0.34,
@@ -55,8 +59,13 @@ def build_state(engine, trust):
         relational_meaning="low-pressure presence is welcome if it does not feel performative",
         follow_up_bias="use concrete callbacks, fewer questions, and light teasing",
         salience=0.45,
+        session_id=session_id,
+        event_id="nora-demo-turn-1",
+        host_approved=True,
+        character_id="nora-demo",
+        relationship_id="nora-demo-user",
     )
-    state = engine.record_turn(
+    state, _ = engine.record_turn(
         state,
         0.07,
         0.45,
@@ -67,8 +76,13 @@ def build_state(engine, trust):
         relational_meaning="the user is sensitive to scripted care and tests whether Nora has a real edge",
         follow_up_bias="avoid generic comfort; be sweet but not submissive",
         salience=0.78,
+        session_id=session_id,
+        event_id="nora-demo-turn-2",
+        host_approved=True,
+        character_id="nora-demo",
+        relationship_id="nora-demo-user",
     )
-    state = engine.record_turn(
+    state, _ = engine.record_turn(
         state,
         0.16,
         0.37,
@@ -79,9 +93,17 @@ def build_state(engine, trust):
         relational_meaning="direct repair makes the tension workable",
         follow_up_bias="specific callbacks are safe; playful accountability is allowed",
         salience=0.82,
+        session_id=session_id,
+        event_id="nora-demo-turn-3",
+        host_approved=True,
+        character_id="nora-demo",
+        relationship_id="nora-demo-user",
     )
-    state, patterns = engine.session_end(state)
-    return state, patterns
+    state, result = engine.session_end(
+        state, session_id, "nora-demo-end",
+        character_id="nora-demo", relationship_id="nora-demo-user",
+    )
+    return state, result["patterns"]
 
 
 def compact_state(engine, state):

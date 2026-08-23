@@ -112,12 +112,17 @@ def run(turns_path=DEFAULT_TURNS, state_path=DEFAULT_STATE):
     if state_exists:
         print(f"Loaded existing state: {state_path}")
     else:
+        state = engine.default_state("minimal-agent", "minimal-agent-demo")
         state = engine.apply_configuration(state, DEFAULT_STYLE, "minimal-agent")
         print(f"No state file found at {state_path}; initialized a default state.")
     print(f"Status: {engine.public_status(state)['summary']} | trust {state['trust']:.4f}")
 
     print_step("session_start")
-    state = engine.session_start(state)
+    session_id = "minimal-agent-session"
+    state, _ = engine.session_start(
+        state, session_id, "minimal-agent-session-start",
+        character_id="minimal-agent", relationship_id="minimal-agent-demo",
+    )
     print(f"Session count: {state['session_count']}")
 
     for idx, turn in enumerate(turns, 1):
@@ -146,7 +151,7 @@ def run(turns_path=DEFAULT_TURNS, state_path=DEFAULT_STATE):
 
         print_step("record_turn")
         final_pad = decision["final_pad"]
-        state = engine.record_turn(
+        state, _ = engine.record_turn(
             state,
             final_pad["P"],
             final_pad["A"],
@@ -158,13 +163,27 @@ def run(turns_path=DEFAULT_TURNS, state_path=DEFAULT_STATE):
             follow_up_bias=decision["follow_up_bias"],
             salience=decision["salience"],
             character_lens=state["character_profile"].get("interpretation"),
+            session_id=session_id,
+            event_id=f"minimal-agent-turn-{idx}",
+            subject="relationship",
+            semantic_event_type=decision["final_appraisal"],
+            host_approved=True,
+            character_id="minimal-agent",
+            relationship_id="minimal-agent-demo",
         )
         print(f"Recorded turn {len(state['emotion_trajectory'])}; state is now {pad_line(state['emotion'])}")
         print(f"Visible pulse is now {pulse_line(state['affective_pulse'])}")
 
     print_step("settle_trust")
     trust_before = state["trust"]
-    state, settlement = engine.settle_trust(state)
+    state, _ = engine.session_end(
+        state, session_id, "minimal-agent-session-end",
+        character_id="minimal-agent", relationship_id="minimal-agent-demo",
+    )
+    state, settlement = engine.settle_trust(
+        state, session_id, "minimal-agent-trust-settlement",
+        character_id="minimal-agent", relationship_id="minimal-agent-demo",
+    )
     print(f"Settlement: {settlement['status']} | raw delta {settlement['raw_delta']:+.4f}")
     print(f"Reason: {settlement.get('reason', settlement['status'])}")
     print(f"Trust: {trust_before:.4f} -> {state['trust']:.4f}")

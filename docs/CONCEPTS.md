@@ -43,7 +43,7 @@ Trust can:
 
 Trust should not be used as obedience, a user score, safety permission, dependency, attachment pressure, or a way to manipulate the user or punish absence.
 
-`trust_history` is only a numeric ledger: `old`, `new`, `raw_delta`, and `effective_delta`. The reason for a trust change belongs in `emotion_log`, usually in the relevant turn entries, session patterns, or a compact `trust_update` log entry.
+`trust_history` is a numeric ledger: `old`, `new`, `raw_delta`, `effective_delta`, and evidence references. Automatic settlement reasons live in explicit `trust_evidence`; prose, praise, task completion, appraisal tags, and PAD shape are not evidence.
 
 ## Emotion Log
 
@@ -89,7 +89,7 @@ At session end, Emotion Engine can extract simple trajectory patterns:
 - dominance suppression
 - boundary pressure
 
-These patterns inform `settle_trust`, which applies a conservative, idempotent host-side trust settlement for the current trajectory. They should remain advisory. A real integration should let the LLM interpret the broader context, and should use manual `update_trust` only for explicit host-side overrides.
+These patterns are advisory continuity diagnostics. They do not feed `settle_trust`. Settlement is idempotent per closed native session and consumes only explicit, uniquely identified, host-approved evidence. Use manual `update_trust` only for an explicit host-side override.
 
 ## Deterministic Appraisal Helper
 

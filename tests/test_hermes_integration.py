@@ -48,7 +48,7 @@ class HermesIntegrationTest(unittest.TestCase):
             self.assertTrue(payload["enabled"])
             self.assertIn("emotion", payload)
             self.assertIn("trust", payload)
-            self.assertEqual(payload["_schema"], "emotion-engine-state/v2")
+            self.assertEqual(payload["_schema"], "emotion-engine-state/v3")
 
     def test_package_script_builds_self_contained_zip(self):
         output = HERMES_INTEGRATION / "emotion-engine-hermes-skill.zip"
@@ -120,7 +120,7 @@ class HermesIntegrationTest(unittest.TestCase):
                 )
                 payload = json.loads(result.stdout)
 
-            self.assertEqual(payload["_schema"], "emotion-engine-state/v2")
+            self.assertEqual(payload["_schema"], "emotion-engine-state/v3")
             self.assertTrue(payload["enabled"])
         finally:
             if output.exists():
@@ -153,7 +153,7 @@ class HermesIntegrationTest(unittest.TestCase):
             )
             payload = json.loads(result.stdout)
 
-        self.assertEqual(payload["_schema"], "emotion-engine-state/v2")
+        self.assertEqual(payload["_schema"], "emotion-engine-state/v3")
         self.assertTrue(payload["enabled"])
 
 

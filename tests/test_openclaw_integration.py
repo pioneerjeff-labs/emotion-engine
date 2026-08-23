@@ -44,7 +44,7 @@ class OpenClawIntegrationTest(unittest.TestCase):
 
             with state_file.open() as f:
                 state = json.load(f)
-            self.assertEqual(state["_schema"], "emotion-engine-state/v2")
+            self.assertEqual(state["_schema"], "emotion-engine-state/v3")
 
     def test_package_script_builds_self_contained_zip(self):
         output = OPENCLAW_INTEGRATION / "emotion-engine-openclaw-skill.zip"

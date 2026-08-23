@@ -48,7 +48,7 @@ class CodexIntegrationTest(unittest.TestCase):
             self.assertTrue(payload["enabled"])
             self.assertIn("emotion", payload)
             self.assertIn("trust", payload)
-            self.assertEqual(payload["_schema"], "emotion-engine-state/v2")
+            self.assertEqual(payload["_schema"], "emotion-engine-state/v3")
 
     def test_nora_demo_generates_isolated_reply_prompt(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -82,7 +82,8 @@ class CodexIntegrationTest(unittest.TestCase):
 
         payload = json.loads(output)
         self.assertEqual(payload["mode"], "light")
-        self.assertEqual(payload["decision"], "record_turn")
+        self.assertEqual(payload["decision"], "respond_only")
+        self.assertEqual(payload["reason"], "work_checkpoint")
         self.assertIn("reply_bias", payload)
         self.assertIn("milestone", payload["context"])
 
@@ -124,7 +125,7 @@ class CodexIntegrationTest(unittest.TestCase):
                 stderr=subprocess.PIPE,
                 check=True,
             ).stdout
-            self.assertEqual(json.loads(raw_status)["_schema"], "emotion-engine-state/v2")
+            self.assertEqual(json.loads(raw_status)["_schema"], "emotion-engine-state/v3")
 
             listed = subprocess.run(
                 [sys.executable, str(installed / "scripts" / "emotion_engine_mcp.py"), "--state", str(state_file)],
@@ -171,7 +172,7 @@ class CodexIntegrationTest(unittest.TestCase):
                 stderr=subprocess.PIPE,
                 check=True,
             ).stdout
-            self.assertEqual(json.loads(raw_status)["_schema"], "emotion-engine-state/v2")
+            self.assertEqual(json.loads(raw_status)["_schema"], "emotion-engine-state/v3")
 
     def test_package_script_builds_self_contained_zip(self):
         output = CODEX_INTEGRATION / "emotion-engine-codex-skill.zip"
@@ -219,7 +220,7 @@ class CodexIntegrationTest(unittest.TestCase):
                         stderr=subprocess.PIPE,
                         check=True,
                     ).stdout
-                    self.assertEqual(json.loads(raw_status)["_schema"], "emotion-engine-state/v2")
+                    self.assertEqual(json.loads(raw_status)["_schema"], "emotion-engine-state/v3")
 
             self.assertIn("emotion-engine-codex/SKILL.md", names)
             self.assertIn("emotion-engine-codex/install.sh", names)

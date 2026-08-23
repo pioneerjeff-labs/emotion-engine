@@ -1,7 +1,7 @@
 ---
 name: emotion-engine
-description: Persistent PAD mood, affective pulse, trust, decay, and compact emotional memories for Hermes Agent conversations.
-version: 0.2.1
+description: Persistent PAD emotion state, trust, decay, and compact emotional memories for Hermes Agent conversations.
+version: 0.1.2
 author: PioneerJeff Labs
 license: MIT
 platforms: [macos, linux]
@@ -20,7 +20,7 @@ metadata:
 
 Use this skill when the user wants Hermes to maintain lightweight emotional continuity across sessions, character workflows, personal assistant interactions, or long-running agent relationships.
 
-Emotion Engine is not a chatbot and does not generate replies by itself. Hermes still interprets the situation, decides the final emotional meaning, and writes the reply. Emotion Engine persists continuity: PAD state, short-lived affective pulse, agent-to-user trust, decay, and compact emotional memories.
+Emotion Engine is not a chatbot and does not generate replies by itself. Hermes still interprets the situation, decides the final emotional meaning, and writes the reply. Emotion Engine persists continuity: PAD state, agent-to-user trust, decay, and compact emotional memories.
 
 ## Quick Reference
 
@@ -32,7 +32,13 @@ ${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh configure --style "warm but not ov
 ${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh tune "make it calmer"
 ```
 
-The wrapper automatically initializes a state file if missing. State path priority:
+The wrapper initializes an unbound v3 packet if missing. Bind it once before emotional mutation:
+
+```bash
+${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh bind_identity --character-id <character-id> --relationship-id <relationship-id>
+```
+
+Treat v2 as read-only and preview explicit migration before `--apply`. State path priority:
 1. `HERMES_EMOTION_STATE` environment variable
 2. current project: `./.emotion-engine/hermes-state.json`
 3. personal fallback: `~/.hermes/emotion-engine/emotion-state.json`
@@ -70,13 +76,13 @@ Only run `clear_log` or `reset` after the user explicitly asks. They erase local
 At the start of a new meaningful session:
 
 ```bash
-${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh session_start
+${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh session_start --session-id <native-session-id> --event-id <unique-start-event-id> --character-id <character-id> --relationship-id <relationship-id>
 ```
 
 Before responding to each user message:
 
 ```bash
-${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh pre_turn_decay
+${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh pre_turn_decay --session-id <native-session-id> --event-id <unique-decay-event-id> --character-id <character-id> --relationship-id <relationship-id>
 ${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh appraise "<user message>"
 ```
 
@@ -85,7 +91,7 @@ The appraisal helper is advisory. Hermes must use full context, memory, characte
 After choosing final PAD values, record the turn:
 
 ```bash
-${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh record_turn <P> <A> <D> --appraisal <label> --situation <short emotional memory>
+${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh record_turn <P> <A> <D> --session-id <native-session-id> --event-id <unique-turn-event-id> --character-id <character-id> --relationship-id <relationship-id> --subject relationship --event-type <semantic-event-type> --host-approved --appraisal <label> --situation <short emotional memory>
 ```
 
 For important events, add only the memory fields that help future behavior:
@@ -99,16 +105,19 @@ ${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh record_turn <P> <A> <D> \
   --impact pleasure rose, dominance stabilized \
   --open-loop false \
   --follow-up be more precise and structured next turn \
-  --salience 0.65
+  --salience 0.65 \
+  --session-id <native-session-id> --event-id <unique-turn-event-id> --character-id <character-id> --relationship-id <relationship-id> \
+  --subject relationship --event-type relationship_calibration --host-approved
 ```
 
 At session end:
 
 ```bash
-${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh settle_trust
+${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh session_end --session-id <native-session-id> --event-id <unique-end-event-id> --character-id <character-id> --relationship-id <relationship-id>
+${HERMES_SKILL_DIR}/scripts/hermes_emotion.sh settle_trust --session-id <native-session-id> --event-id <unique-settlement-event-id> --character-id <character-id> --relationship-id <relationship-id>
 ```
 
-`settle_trust` extracts session patterns, checks recent turn-level emotion logs and the current trajectory, chooses a conservative raw delta in `-0.20` to `+0.05`, and applies it once for the same trajectory. Trust is agent-to-user only: it is the agent/persona's internal continuity estimate and does not infer the user's trust in the agent. Use `session_end` only to inspect patterns without changing trust, and `update_trust <trust_delta>` only for an explicit host-side override.
+Lifecycle calls are idempotent. Settlement requires a closed session and explicit unconsumed evidence; praise, task completion, appraisal tags, and PAD shape are not evidence. Trust is agent-to-user only. Use `update_trust` only for an explicit host override.
 
 ## How State Should Shape Replies
 
@@ -127,7 +136,7 @@ Blend this with Hermes memory, user preferences, and any SOUL.md character profi
 
 `emotion_log` should store situation-aware emotional memories, not transcripts.
 
-`trust_history` should stay a numeric ledger for applied trust changes. Keep reasons and provenance in `emotion_log`, including turn entries, session patterns, compact `trust_update` entries, or optional `source_refs`.
+`trust_history` stays numeric and references consumed `trust_evidence` ids. `emotion_log` is compact emotional continuity, not factual or trust-evidence storage.
 
 Good memory:
 

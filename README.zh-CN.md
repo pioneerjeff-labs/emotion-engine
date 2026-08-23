@@ -18,7 +18,7 @@ Emotion Engine 给大模型智能体提供一个小而可检查的连续性层�
 
 Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 关注面向创意 AI 应用的可复用底层基础设施层。
 
-状态：v1 稳定版。当前版本：[v1.1.0 - Pi Agent integration](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v1.1.0)。
+状态：v3 / `2.0.0-rc.1` 候选发布版。最新稳定标签仍是 [v1.1.0](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v1.1.0)，使用 v2 状态契约。
 
 ## 从这里开始
 
@@ -85,7 +85,7 @@ Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 
 
 在线演示：[打开 live demo](https://pioneerjeff-labs.github.io/emotion-engine/demo/)
 
-Hugging Face Space：[打开 state playground](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground)，直接查看 prompt prelude 和 `emotion-engine-state/v2` 状态包。
+Hugging Face Space：[打开 state playground](https://huggingface.co/spaces/pioneerjeff/emotion-engine-state-playground)，直接查看 prompt prelude 和状态包。仓库当前的 v3 开发版要求显式绑定角色与关系身份；旧 v2 状态只读，必须显式迁移。
 
 可以直接打开：
 

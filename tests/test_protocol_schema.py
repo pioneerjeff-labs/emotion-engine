@@ -17,10 +17,12 @@ class ProtocolSchemaTest(unittest.TestCase):
 
     def test_template_matches_required_state_contract(self):
         self.assertEqual(self.schema["$schema"], "https://json-schema.org/draft/2020-12/schema")
-        self.assertEqual(self.schema["properties"]["_schema"]["const"], "emotion-engine-state/v2")
-        self.assertEqual(self.template["_schema"], "emotion-engine-state/v2")
+        self.assertEqual(self.schema["properties"]["_schema"]["const"], "emotion-engine-state/v3")
+        self.assertEqual(self.template["_schema"], "emotion-engine-state/v3")
         self.assertIn("affective_pulse", self.template)
         self.assertIn("volatility_profile", self.template)
+        self.assertEqual(self.template["identity"]["status"], "unbound")
+        self.assertIn("state_identity/v1", self.template["capabilities"])
 
         for field in self.schema["required"]:
             self.assertIn(field, self.template)
@@ -50,15 +52,21 @@ class ProtocolSchemaTest(unittest.TestCase):
         self.assertIn("adapterOutput", defs)
         self.assertEqual(
             defs["adapterEvent"]["properties"]["_schema"]["const"],
-            "emotion-engine-adapter-event/v1",
+            "emotion-engine-adapter-event/v2",
         )
         self.assertEqual(
             defs["adapterOutput"]["properties"]["_schema"]["const"],
-            "emotion-engine-adapter-output/v1",
+            "emotion-engine-adapter-output/v2",
         )
         self.assertIn(
-            "turn_after",
+            "turn",
             defs["adapterEvent"]["properties"]["event_type"]["enum"],
+        )
+        for field in ["event_id", "session_id", "character_id", "relationship_id"]:
+            self.assertIn(field, defs["adapterEvent"]["required"])
+        self.assertEqual(
+            defs["adapterOutput"]["properties"]["state_schema"]["const"],
+            "emotion-engine-state/v3",
         )
         self.assertIn("oneOf", defs["adapterEvent"]["properties"]["limbicState"])
         self.assertIn("oneOf", defs["adapterEvent"]["properties"]["limbic_state"])
@@ -73,19 +81,32 @@ class ProtocolSchemaTest(unittest.TestCase):
         self.assertEqual(self.schema["$defs"]["compactPadDelta"]["properties"]["D"]["minimum"], -1.0)
         self.assertIn("source_refs", properties)
 
+    def test_schema_exposes_identity_session_and_evidence_ledgers(self):
+        for field in [
+            "identity", "capabilities", "session", "session_ledger",
+            "processed_event_ids", "trust_evidence", "trust_settlements",
+        ]:
+            self.assertIn(field, self.schema["required"])
+        self.assertTrue(self.schema["properties"]["processed_event_ids"]["uniqueItems"])
+        self.assertEqual(
+            self.schema["$defs"]["trustEvidenceInput"]["properties"]["eligible"]["const"],
+            True,
+        )
+
     def test_trust_history_stays_numeric_ledger(self):
         trust_history = self.schema["$defs"]["trustHistoryEntry"]
         properties = trust_history["properties"]
 
         self.assertEqual(
             self.schema["properties"]["trust_history"]["description"],
-            "Numeric ledger of applied trust changes. Semantic reasons and provenance belong in emotion_log, not trust_history.",
+            "Numeric ledger of applied trust changes. Automatic settlements reference authoritative trust_evidence ids.",
         )
         self.assertIn("agent-to-user", self.schema["properties"]["trust"]["description"])
         self.assertFalse(trust_history["additionalProperties"])
         for semantic_field in ["reason", "source_refs", "confidence"]:
             self.assertNotIn(semantic_field, trust_history["required"])
             self.assertNotIn(semantic_field, properties)
+        self.assertIn("evidence_ids", properties)
 
     def test_boundary_state_is_optional_extension(self):
         boundary = self.schema["properties"]["boundary_state"]
@@ -100,8 +121,8 @@ class ProtocolSchemaTest(unittest.TestCase):
 
         self.assertIn("Celiums Memory Adapter Boundary", protocol)
         self.assertIn("limbicState", protocol)
-        self.assertIn("emotion-engine-adapter-event/v1", protocol)
-        self.assertIn("emotion-engine-adapter-output/v1", protocol)
+        self.assertIn("emotion-engine-adapter-event/v2", protocol)
+        self.assertIn("emotion-engine-adapter-output/v2", protocol)
 
     def test_github_tap_schema_matches_root_schema(self):
         self.assertEqual(

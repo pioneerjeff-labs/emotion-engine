@@ -1,6 +1,6 @@
 # Emotion Engine State Protocol
 
-Status: stable v1.0 contract for `emotion-engine-state/v2`
+Status: v3 contract for the `2.0.0-rc.1` release candidate
 
 Emotion Engine is a compact emotional-continuity state layer for LLM-powered agents. This document describes the state packet shape and integration contract so adapters can read, write, and map Emotion Engine state without reverse-engineering the helper script.
 
@@ -14,7 +14,8 @@ Emotion Engine keeps a small, inspectable continuity packet:
 - short-lived affective pulse for visible per-turn movement
 - volatility profile for steady vs expressive agents
 - personality baseline for decay
-- trust and trust history
+- identity-bound state ownership
+- trust, explicit trust evidence, and trust history
 - compact emotion log
 - per-session trajectory and patterns
 - advisory boundary signals
@@ -37,12 +38,13 @@ Emotion Engine separates compact numeric state from the explanation for that sta
 - `volatility_profile` controls how strongly short-term movement is surfaced for a steady assistant, expressive companion, or dramatic test character.
 - `emotion_trajectory` is the current-session PAD numeric trajectory.
 - `trust` is the current agent-to-user trust coefficient.
-- `trust_history` is a numeric ledger for applied trust changes.
-- `emotion_log` is the explanation layer for both PAD and trust changes.
+- `trust_evidence` is the only automatic input to trust settlement.
+- `trust_history` is a numeric ledger for applied trust changes and references the consumed evidence ids.
+- `emotion_log` explains emotional state changes; it is not a substitute trust-evidence ledger.
 
-`emotion_log` is not a factual memory store. It should carry compact continuity evidence such as repair, boundary pressure, relationship calibration, concrete feedback, affective movement, open loops, and high-salience session events. Ordinary facts, task state, documents, vector indexes, todo systems, and durable user profiles belong to the host runtime or adapter. Emotion Engine may expose retention diagnostics or host-facing routing hints, but it does not prescribe where factual memory is stored.
+`emotion_log` is not a factual memory store. It should carry compact relationship or self-state continuity such as host-approved repair, boundary pressure, relationship calibration, affective movement, and open loops. Work checkpoints, ordinary facts, task state, documents, todo systems, and durable user preferences belong to the host runtime or adapter. `record_policy` can return `route_host_memory`; it must not convert those facts into emotional memory.
 
-Do not move semantic reasons into `trust_history`. If trust changes because of repair, collaboration, hostility, boundary pressure, or any other relational evidence, keep that reason in the surrounding `emotion_log` entries and session patterns. `trust_history` should record only the applied numeric effect: `old`, `new`, `raw_delta`, and `effective_delta`.
+Do not infer trust from praise, collaboration tags, PAD shape, or free text. A host must submit a unique, eligible evidence record. Settlement consumes that evidence once and writes its ids into `trust_history` and `trust_settlements`.
 
 Similarly, do not treat PAD numbers as self-explanatory. The reason a PAD state changed belongs in `emotion_log` through fields such as `situation`, `appraisal`, `relational_meaning`, `impact`, `before`, `after`, `delta`, `tags`, and optional `source_refs`.
 
@@ -52,10 +54,14 @@ Cryptographic auditability, hash chains, signed anchors, or tamper-evident prove
 
 Readers and writers should follow these rules:
 
-- Treat `_schema: "emotion-engine-state/v2"` as the current packet identifier.
+- Treat `_schema: "emotion-engine-state/v3"` as the current packet identifier.
+- Treat `_schema: "emotion-engine-state/v2"` as read-only. Migration requires explicit `character_id` and `relationship_id`; the helper never guesses them.
+- Require a bound `identity` before emotional mutation.
+- Preserve native `session_id` and `event_id`; every stateful lifecycle event is idempotent.
+- Treat `host_approved: true` as a hard gate, not an advisory score.
 - Use [`spec/emotion-state.schema.json`](../spec/emotion-state.schema.json) as the machine-readable schema for state packets and adapter envelopes.
 - Ignore unknown top-level fields so optional extensions can be added safely.
-- Treat missing known fields as defaultable. The Python helper fills missing fields through `ensure_state_shape`.
+- Treat optional v3 fields as defaultable. Identity and lifecycle identifiers are never invented while migrating or recording.
 - Do not store full private transcripts in `emotion_log`.
 - Keep low-value lifecycle noise out of `emotion_log`; routine in-session drift and ordinary neutral turns should be suppressed or compacted when they do not carry durable emotional continuity.
 - Do not treat deterministic `appraise` output as final emotional truth.
@@ -66,7 +72,7 @@ Readers and writers should follow these rules:
 The current state packet version is:
 
 ```text
-emotion-engine-state/v2
+emotion-engine-state/v3
 ```
 
 The state packet version is separate from helper script versions and package versions. Patch-level helper changes may add optional fields, improve normalization, or refine prompt wording without changing the state version.
@@ -75,20 +81,35 @@ Change the state packet version only when a reader or writer can no longer safel
 
 | Envelope | Current identifier |
 |---|---|
-| State packet | `emotion-engine-state/v2` |
-| Adapter event input | `emotion-engine-adapter-event/v1` |
-| Adapter output | `emotion-engine-adapter-output/v1` |
+| State packet | `emotion-engine-state/v3` |
+| Adapter event input | `emotion-engine-adapter-event/v2` |
+| Adapter output | `emotion-engine-adapter-output/v2` |
 
 Adapters should preserve unknown fields when possible, and should include their own source or provenance fields for host-specific extensions.
 
 ## Canonical Packet
 
-A minimal v2 packet looks like this:
+A minimal unbound v3 packet looks like this. It can be inspected and configured, but must be explicitly bound before emotional mutation:
 
 ```json
 {
-  "_schema": "emotion-engine-state/v2",
+  "_schema": "emotion-engine-state/v3",
+  "identity": {
+    "state_id": "7e88c84c-61cc-4b72-bd3d-8a6dca482bb1",
+    "character_id": null,
+    "relationship_id": null,
+    "status": "unbound"
+  },
+  "capabilities": [
+    "state_identity/v1",
+    "structured_record_policy/v1",
+    "session_idempotency/v1",
+    "trust_evidence/v1",
+    "behavior_audit/v1",
+    "repair_plan/v1"
+  ],
   "enabled": true,
+  "runtime_mode": "light",
   "volatility_profile": "steady",
   "emotion": {
     "pleasure": 0.0,
@@ -123,6 +144,18 @@ A minimal v2 packet looks like this:
   "emotion_trajectory": [],
   "emotion_log": [],
   "trust_history": [],
+  "trust_evidence": [],
+  "trust_settlements": [],
+  "session": {
+    "active_session_id": null,
+    "last_session_id": null,
+    "status": "closed",
+    "opened_at": null,
+    "closed_at": null,
+    "settled_at": null
+  },
+  "session_ledger": [],
+  "processed_event_ids": [],
   "log_limit": 200
 }
 ```
@@ -136,10 +169,20 @@ String schema identifier.
 Current value:
 
 ```text
-emotion-engine-state/v2
+emotion-engine-state/v3
 ```
 
 Adapters should not assume that every compatible packet has only the fields listed here. Unknown fields should be preserved when possible.
+
+### `identity`, `capabilities`, and lifecycle ledgers
+
+`identity.state_id` identifies the physical packet. `character_id` identifies the persona and `relationship_id` identifies that persona's relationship with its user or counterpart. A packet is writable only when all three are present and `status` is `bound`.
+
+`capabilities` lets a host gate integration behavior before forwarding events. `session`, `session_ledger`, and `processed_event_ids` enforce one open/close/settle lifecycle per native session and make event replay a no-op.
+
+### `trust_evidence` and `trust_settlements`
+
+Eligible evidence is explicit, host-approved, session-scoped, uniquely identified, and consumed by at most one settlement. Supported evidence types are `explicit_trust`, `conflict_repair`, `boundary_pressure`, and `hostility`. Praise and ordinary collaboration are not evidence by themselves.
 
 ### `enabled`
 
@@ -396,7 +439,7 @@ Example:
 
 Positive deltas have diminishing returns as trust rises. Negative deltas can be softened when trust is already high, but major negative deltas still matter.
 
-`trust_history` is intentionally not the explanation layer. It should stay a compact numeric ledger. The reason for a trust change should be recorded in `emotion_log`, usually through the preceding turn entries, `session_end` patterns, or a compact `trust_update` log entry that points back to the relevant relationship evidence.
+`trust_history` stays a compact numeric ledger. Its `evidence_ids` point to the authoritative entries in `trust_evidence`; prose and PAD patterns are not settlement inputs.
 
 ### `log_limit`
 
@@ -420,6 +463,19 @@ The helper is advisory. In a real integration, the LLM should decide the final a
 
 ## Lifecycle Contract
 
+### Structured semantic gate
+
+Every candidate turn supplies `subject`, `event_type`, and `host_approved`. The deterministic result is one of:
+
+| Decision | Meaning |
+|---|---|
+| `respond_only` | Shape the current reply; do not mutate emotional state. |
+| `route_host_memory` | Send task or durable preference information to the host-owned memory path. |
+| `state_only` | Update short-lived state but do not append emotional memory. |
+| `record_emotion` | Record a host-approved relationship event in the active session. |
+
+`work_checkpoint` is always task-owned, including when message text says “done”, “passed”, or “shipped”. Keyword matches can provide an advisory appraisal, but cannot bypass semantic ownership or host veto.
+
 ### Decay Policies
 
 Emotion Engine uses separate decay policies for mood and trust:
@@ -435,39 +491,58 @@ Adapters should not treat the whole emotional packet as one uniformly decaying m
 A typical integration loop:
 
 ```text
-load state
-session_start
+load state and verify v3 capabilities + bound identity
+session_start(native session_id, unique event_id, expected character_id, expected relationship_id)
 for each user message:
-  pre_turn_decay
+  pre_turn_decay(session_id, event_id, expected character_id, expected relationship_id)
   build prompt prelude from current state
   optionally call appraise for advisory signal
   ask the LLM to interpret context and generate the reply
-  ask the LLM or host policy to choose final PAD/appraisal/memory
-  record_turn
-settle_trust
+  host labels subject + semantic event type and applies its hard approval gate
+  evaluate_and_record_turn(structured event carrying expected identity)
+session_end(session_id, event_id, expected character_id, expected relationship_id)
+settle_trust(session_id, event_id, expected character_id, expected relationship_id) only when explicit evidence exists
 save state
 ```
 
 The helper can perform the persistence steps through CLI commands:
 
 ```bash
-python3 scripts/emotion_engine_utils.py init emotion-state.json
+python3 scripts/emotion_engine_utils.py init emotion-state.json \
+  --character-id assistant --relationship-id assistant-user
 python3 scripts/emotion_engine_utils.py validate emotion-state.json
 python3 scripts/emotion_engine_utils.py configure emotion-state.json --style "calm, reliable, and clearly bounded"
-python3 scripts/emotion_engine_utils.py session_start emotion-state.json
-python3 scripts/emotion_engine_utils.py pre_turn_decay emotion-state.json
+python3 scripts/emotion_engine_utils.py session_start emotion-state.json \
+  --session-id session-123 --event-id lifecycle-start-123 \
+  --character-id assistant --relationship-id assistant-user
+python3 scripts/emotion_engine_utils.py pre_turn_decay emotion-state.json \
+  --session-id session-123 --event-id decay-123-1 \
+  --character-id assistant --relationship-id assistant-user
 python3 scripts/emotion_engine_utils.py appraise emotion-state.json "I want to challenge one part of the design."
 python3 scripts/emotion_engine_utils.py record_turn emotion-state.json 0.18 0.32 0.61 \
   --appraisal collaboration \
   --situation user challenged the design in a constructive way \
   --meaning disagreement feels safe and productive \
   --follow-up be precise, warm, and clearly bounded \
-  --salience 0.65
-python3 scripts/emotion_engine_utils.py settle_trust emotion-state.json
-python3 scripts/emotion_engine_utils.py update_trust emotion-state.json 0.02
+  --salience 0.65 \
+  --session-id session-123 --event-id turn-123-1 \
+  --character-id assistant --relationship-id assistant-user \
+  --subject relationship --event-type relationship_calibration \
+  --host-approved
+python3 scripts/emotion_engine_utils.py session_end emotion-state.json \
+  --session-id session-123 --event-id lifecycle-end-123 \
+  --character-id assistant --relationship-id assistant-user
+python3 scripts/emotion_engine_utils.py settle_trust emotion-state.json \
+  --session-id session-123 --event-id settlement-123 \
+  --character-id assistant --relationship-id assistant-user
+python3 scripts/emotion_engine_utils.py update_trust emotion-state.json 0.02 \
+  --host-approved --reason "explicit host relationship judgment" \
+  --character-id assistant --relationship-id assistant-user
 ```
 
-`settle_trust` is the normal host-side trust settlement command. It reuses pattern extraction, logs the session close if needed, checks the current session trajectory and recent turn-level emotion log evidence, chooses a conservative raw delta in `[-0.20, +0.05]`, and then applies the trust update once for that trajectory. Repeated settlement for the same trajectory should be treated as idempotent and return `already_settled` with `raw_delta: 0.0`. `session_end` remains available for pattern inspection without trust changes, and `update_trust` remains available for explicit host policy overrides.
+`session_start`, `record_turn`, `session_end`, and `settle_trust` require explicit native identifiers. Replaying the same event or session id does not increment counters or append housekeeping entries. A different session cannot replace an active one.
+
+`settle_trust` never closes a session implicitly and never scans prose, appraisal labels, or PAD patterns for trust. It accepts only a closed session with explicit, unconsumed evidence, clamps the combined raw delta to `[-0.20, +0.05]`, consumes the evidence once, and returns `already_settled` on replay. With no evidence it returns `no_eligible_evidence` without adding a settlement log. `update_trust` remains an explicit host override.
 
 ## Adapter Event Contract
 
@@ -477,12 +552,17 @@ The adapter event envelope is intentionally host-neutral:
 
 ```json
 {
-  "_schema": "emotion-engine-adapter-event/v1",
+  "_schema": "emotion-engine-adapter-event/v2",
   "source": "celiums-memory",
-  "event_type": "turn_after",
+  "event_type": "turn",
+  "event_id": "turn_456",
   "occurred_at": "2026-05-29T15:20:00.000000+00:00",
   "session_id": "session_123",
-  "turn_id": "turn_456",
+  "character_id": "assistant",
+  "relationship_id": "assistant-user",
+  "subject": "relationship",
+  "semantic_event_type": "relationship_calibration",
+  "host_approved": true,
   "limbicState": {
     "pleasure": 0.18,
     "arousal": 0.32,
@@ -512,20 +592,21 @@ Recommended event types:
 | Event type | Adapter behavior |
 |---|---|
 | `session_start` | Run Emotion Engine session start / time decay before the host turn loop. |
-| `turn_after` | Map final host PAD or `limbicState` into `record_turn`; append compact memory only after the host/LLM finalizes the turn meaning. |
-| `journal_append` | Append a compact `emotion_log` entry that points to the host journal via `source_refs`. |
-| `session_end` | Extract patterns and optionally prepare a trust update. |
-| `trust_settlement` | Run conservative host-side settlement once for the current trajectory. |
-| `trust_update` | Apply a small trust delta chosen by host policy plus session interpretation. |
-| `boundary_update` | Preserve or update optional `boundary_state` without turning Emotion Engine into a policy engine. |
+| `turn` | Map final host PAD or `limbicState` into `record_turn`; append compact memory only after the host/LLM finalizes the turn meaning. |
+| `session_end` | Close only the matching active session and extract patterns. |
+| `trust_settlement` | Consume explicit eligible evidence once for the closed session. |
+| `pre_turn_decay` | Apply in-session drift under the same session and event-id guards. |
 
 Event input rules:
 
 - Prefer final host interpretation over deterministic `appraise` output.
+- Preserve native `event_id`, `session_id`, `character_id`, and `relationship_id` exactly.
+- Mark task progress as `subject: task`, `semantic_event_type: work_checkpoint`; route it to host memory instead of `emotion_log`.
+- Require `host_approved: true` before any emotional mutation.
 - Provide PAD as either long-form fields or compact `P/A/D` under `limbicState`, `limbic_state`, or `pad`.
 - Put grounded details in the host memory or journal; put only compact affective summaries in `compact_memory`.
 - Use `source_refs` to point back to external records instead of copying private text into Emotion Engine.
-- Keep `trust_delta` small and slow-moving; do not update trust as a direct reward or punishment signal.
+- Submit trust evidence explicitly; never derive it from praise, task completion, or a text keyword.
 
 ## Adapter Output Contract
 
@@ -535,8 +616,8 @@ Example:
 
 ```json
 {
-  "_schema": "emotion-engine-adapter-output/v1",
-  "state_schema": "emotion-engine-state/v2",
+  "_schema": "emotion-engine-adapter-output/v2",
+  "state_schema": "emotion-engine-state/v3",
   "state_patch": {
     "emotion": {
       "pleasure": 0.18,
@@ -578,7 +659,7 @@ Recommended mapping:
 |---|---|
 | `limbicState` PAD | `state.emotion` and `emotion_trajectory` PAD |
 | Journal compact entry | `emotion_log` entry with `source_refs` back to Celiums |
-| `turn_after` event | Adapter `turn_after` event, usually followed by `record_turn` |
+| `turn` event | Adapter `turn` event, usually followed by `record_turn` |
 | Celiums retrieval | External context fetched before prompt construction, not copied into Emotion Engine |
 | Celiums ethics/policy | Host responsibility; Emotion Engine only emits advisory boundary signals |
 | Celiums turn context | Consumer of Emotion Engine compact snapshot / prompt prelude |
@@ -609,7 +690,7 @@ Current continuity state:
 
 Boundary signals:
 - Recent boundary pressure: none
-- Standing boundary state: not provided in v2
+- Standing boundary state: not provided by the core packet
 
 LLM task:
 - Interpret the user message using full conversation context.
@@ -684,7 +765,7 @@ Rules:
 
 ## Boundary Signals And `boundary_state`
 
-In `emotion-engine-state/v2`, boundary is represented indirectly through:
+In `emotion-engine-state/v3`, boundary is represented indirectly through:
 
 - PAD `dominance`
 - `boundary_pressure` appraisal
@@ -725,7 +806,7 @@ Recommended `boundary_state.status` values:
 
 `firmness` and `recent_pressure` are prompt-guidance signals in `[0.0, 1.0]`. They are not safety policy decisions, user classifications, or permission systems.
 
-Adapters should say "boundary signals" rather than "boundaries" when describing the v2 packet, unless their host runtime owns a real boundary or policy model outside Emotion Engine.
+Adapters should say "boundary signals" rather than "boundaries" when describing the core packet, unless their host runtime owns a real boundary or policy model outside Emotion Engine.
 
 ## Deterministic Helper Responsibilities
 
@@ -757,9 +838,11 @@ When writing state:
 - Clamp PAD and trust values to their documented ranges.
 - Keep `emotion_log` entries compact.
 - Store timestamps with timezone information.
-- Use `session_start` to begin a session and clear `emotion_trajectory`.
-- Use `record_turn` only after the final appraisal and PAD values are chosen.
-- Update trust slowly, usually at session boundaries.
+- Verify the state identity and advertised capabilities before forwarding events.
+- Use `session_start` with native session and event ids to begin a session and clear `emotion_trajectory` exactly once.
+- Use the atomic semantic gate, or call `record_turn` only with explicit host approval after final appraisal and PAD values are chosen.
+- Close the matching session before settlement.
+- Update trust only from explicit eligible evidence, or through a clearly identified manual host override.
 - Keep trust separate from obedience, affection, compliance, or entitlement.
 
 ## Reader Checklist

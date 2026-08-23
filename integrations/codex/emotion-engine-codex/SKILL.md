@@ -17,9 +17,10 @@ Use the project wrapper when Agent Harness installed one:
 
 ```bash
 scripts/codex_emotion.sh status
+scripts/codex_emotion.sh audit_state
 scripts/codex_emotion.sh audit_log
 scripts/codex_emotion.sh compact_log --dry-run
-scripts/codex_emotion.sh record_policy --mode light --context milestone "that migration was handled well"
+scripts/codex_emotion.sh record_policy --mode light --subject task --event-type work_checkpoint --memory-owner project "that migration was handled well"
 scripts/codex_emotion.sh configure --style "warm but not over-compliant, with clear boundaries"
 scripts/codex_emotion.sh tune "make it calmer"
 ```
@@ -44,7 +45,13 @@ python3 .codex/skills/emotion-engine-codex/scripts/register_mcp_client.py codex 
 
 The MCP server exposes runtime/protocol tools only. Agent Harness owns install refresh, doctor, repair, manifest checks, and sidecar drift checks.
 
-The wrapper automatically initializes a state file if missing. State path priority:
+The wrapper automatically initializes an unbound v3 state file if missing. Before the first emotional mutation, bind it explicitly:
+
+```bash
+scripts/codex_emotion.sh bind_identity --character-id <character-id> --relationship-id <relationship-id>
+```
+
+Existing v2 packets are read-only. Preview `migrate_state` first, then rerun it with `--apply`; never guess either owner id. State path priority:
 
 1. `CODEX_EMOTION_STATE` environment variable
 2. `CODEX_PROJECT_DIR/.emotion-engine/codex-state.json`
@@ -84,19 +91,21 @@ Only run `clear_log` or `reset` after the user explicitly asks. They erase local
 
 ## Runtime Modes And Record Policy
 
-Emotion Engine state is a modulation layer, not an identity layer. Do not edit `AGENTS.md`, `CLAUDE.md`, or durable memory just because PAD changes. Use compact state only as temporary turn context.
+Emotion Engine is a modulation layer with an identity binding guard; it does not define the persona itself. Do not edit `AGENTS.md`, `CLAUDE.md`, or durable memory just because PAD changes.
 
 Use `record_policy` before deciding whether to persist a turn:
 
 ```bash
-scripts/codex_emotion.sh record_policy --mode light --context milestone "老登夸了刚完成的迁移"
+scripts/codex_emotion.sh record_policy --mode light \
+  --subject task --event-type work_checkpoint --memory-owner project \
+  "老登夸了刚完成的迁移"
 ```
 
-The command is deterministic and side-effect free. It returns a JSON decision such as `record_turn` or `respond_only`, plus `reason`, `appraisal`, `salience`, `trust_eligible`, and structured `reply_bias`. It does not call an LLM and does not write state.
+The command is deterministic and side-effect free. It returns `respond_only`, `route_host_memory`, `state_only`, or `record_emotion`. `host_approved` is a hard gate. Keyword appraisal cannot override `subject` or semantic `event_type`.
 
 Mode contract:
 
-- `light`: event-triggered. Generic praise, small talk, and ordinary task progress should usually be `respond_only`; concrete feedback, milestones, repair, stable preferences, boundary pressure, or explicit emotional-continuity discussion may be recorded.
+- `light`: event-triggered. Task progress, concrete work feedback, and durable preferences go to host memory. Relationship repair, calibration, boundary pressure, or explicit emotional-continuity events remain candidates until the host approves them.
 - `always`: per-meaningful-turn tracking. Compact turn records are allowed more often, but habituation, salience, low-value duplicate compaction, and trust-settlement rules still apply.
 - `paused`: preserve local state but do not record lifecycle updates or modulate replies.
 
@@ -105,21 +114,21 @@ Mode contract:
 Habituation rules:
 
 - Repeated generic praise loses weight across recent turns.
-- Concrete feedback, milestone warmth, repair, boundary pressure, or a stable future preference may bypass ordinary praise rate limits.
-- Trust does not grow from praise alone; use `settle_trust` at session or milestone close.
+- Work milestones and stable preferences never bypass semantic ownership.
+- Trust does not grow from praise, collaboration tags, or PAD patterns. Settlement consumes explicit eligible evidence only.
 
 ## Session Flow
 
 At the start of a new meaningful conversation/session:
 
 ```bash
-scripts/codex_emotion.sh session_start
+scripts/codex_emotion.sh session_start --session-id <native-session-id> --event-id <unique-start-event-id> --character-id <character-id> --relationship-id <relationship-id>
 ```
 
 Before responding to each user message:
 
 ```bash
-scripts/codex_emotion.sh pre_turn_decay
+scripts/codex_emotion.sh pre_turn_decay --session-id <native-session-id> --event-id <unique-decay-event-id> --character-id <character-id> --relationship-id <relationship-id>
 scripts/codex_emotion.sh appraise "<user message>"
 ```
 
@@ -128,7 +137,10 @@ The appraisal helper is advisory. Codex must use full context, project context, 
 After choosing final PAD values, record the turn:
 
 ```bash
-scripts/codex_emotion.sh record_turn <P> <A> <D> --appraisal <label> --situation <short emotional memory>
+scripts/codex_emotion.sh record_turn <P> <A> <D> \
+  --session-id <native-session-id> --event-id <unique-turn-event-id> --character-id <character-id> --relationship-id <relationship-id> \
+  --subject relationship --event-type <semantic-event-type> --host-approved \
+  --appraisal <label> --situation <short emotional memory>
 ```
 
 For important events, add only the memory fields that help future behavior:
@@ -142,16 +154,19 @@ scripts/codex_emotion.sh record_turn <P> <A> <D> \
   --impact pleasure rose, dominance stabilized \
   --open-loop false \
   --follow-up be more precise and structured next turn \
-  --salience 0.65
+  --salience 0.65 \
+  --session-id <native-session-id> --event-id <unique-turn-event-id> --character-id <character-id> --relationship-id <relationship-id> \
+  --subject relationship --event-type relationship_calibration --host-approved
 ```
 
 At session end:
 
 ```bash
-scripts/codex_emotion.sh settle_trust
+scripts/codex_emotion.sh session_end --session-id <native-session-id> --event-id <unique-end-event-id> --character-id <character-id> --relationship-id <relationship-id>
+scripts/codex_emotion.sh settle_trust --session-id <native-session-id> --event-id <unique-settlement-event-id> --character-id <character-id> --relationship-id <relationship-id>
 ```
 
-`settle_trust` extracts session patterns, checks recent turn-level emotion logs and the current trajectory, chooses a conservative raw delta in `-0.20` to `+0.05`, and applies it once for the same trajectory. Repeating it should return `already_settled` with `raw_delta: 0.0`. Use `session_end` only to inspect patterns without changing trust, and `update_trust <trust_delta>` only for an explicit host-side override.
+Lifecycle calls are idempotent. A different session cannot replace an active one, and settlement never closes a session implicitly. `settle_trust` uses only explicit, unconsumed evidence attached to host-approved turns; without it, the command returns `no_eligible_evidence` and writes no settlement housekeeping. Use `update_trust <trust_delta>` only for an explicit host override.
 
 ## How State Should Shape Replies
 
@@ -189,7 +204,7 @@ Generate one reply prompt at a time. This keeps model comparisons clean and avoi
 
 `emotion_log` should store situation-aware emotional memories, not transcripts.
 
-`trust_history` should stay a numeric ledger for applied trust changes. Keep reasons and provenance in `emotion_log`, including turn entries, session patterns, compact `trust_update` entries, or optional `source_refs`.
+`trust_history` stays numeric and references consumed evidence ids. The authoritative settlement inputs live in `trust_evidence`; `emotion_log` remains compact PAD/continuity explanation, not factual or trust evidence storage.
 
 Good memory:
 
@@ -212,6 +227,8 @@ For long-running agents, use `audit_log` to inspect retention pressure and `comp
 - Do not expose raw PAD values in normal user-facing replies.
 - Do not treat the deterministic appraisal helper as the final emotional judge.
 - Do not store full private transcripts in `emotion_log`; store compact emotional summaries.
+- Do not record task checkpoints, project progress, or durable preferences as emotional memory.
+- Do not mutate a v2 or identity-unbound packet.
 - Do not use trust as obedience, sweetness, user scoring, safety permission, user-to-agent trust, or attachment pressure.
 - Do not run `reset`, `clear_log`, or other destructive commands unless the user explicitly asks.
 

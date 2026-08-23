@@ -21,7 +21,7 @@ Ready-to-adapt starter integrations:
 4. Ask the LLM to choose final appraisal and PAD values
 5. Record the turn
 6. Generate or refine the assistant response using current state
-7. At session end, settle agent-to-user trust from session evidence
+7. Close the matching session; settle agent-to-user trust only from explicit eligible evidence
 ```
 
 ## Adapter Boundary
@@ -39,7 +39,9 @@ Do not use Emotion Engine as a replacement memory stack, retrieval layer, safety
 ## Start A Session
 
 ```bash
-python3 scripts/emotion_engine_utils.py session_start emotion-state.json
+python3 scripts/emotion_engine_utils.py session_start emotion-state.json \
+  --session-id session-123 --event-id start-123 \
+  --character-id assistant --relationship-id assistant-user
 ```
 
 This applies time-based decay, updates session counters, and clears the current trajectory.
@@ -49,7 +51,9 @@ This applies time-based decay, updates session counters, and clears the current 
 Apply in-session drift:
 
 ```bash
-python3 scripts/emotion_engine_utils.py pre_turn_decay emotion-state.json
+python3 scripts/emotion_engine_utils.py pre_turn_decay emotion-state.json \
+  --session-id session-123 --event-id decay-123-1 \
+  --character-id assistant --relationship-id assistant-user
 ```
 
 Optionally get an advisory appraisal:
@@ -95,24 +99,35 @@ python3 scripts/emotion_engine_utils.py record_turn emotion-state.json 0.18 0.32
   --situation user challenged the design in a constructive way \
   --meaning disagreement feels safe and productive \
   --follow-up be precise, warm, and clearly bounded \
-  --salience 0.65
+  --salience 0.65 \
+  --session-id session-123 --event-id turn-123-1 \
+  --character-id assistant --relationship-id assistant-user \
+  --subject relationship --event-type relationship_calibration \
+  --host-approved
 ```
 
 ## End A Session
 
 ```bash
-python3 scripts/emotion_engine_utils.py settle_trust emotion-state.json
+python3 scripts/emotion_engine_utils.py session_end emotion-state.json \
+  --session-id session-123 --event-id end-123 \
+  --character-id assistant --relationship-id assistant-user
+python3 scripts/emotion_engine_utils.py settle_trust emotion-state.json \
+  --session-id session-123 --event-id settle-123 \
+  --character-id assistant --relationship-id assistant-user
 ```
 
-This extracts patterns, logs the session close, checks recent turn-level `emotion_log` entries and the current `emotion_trajectory`, chooses a conservative raw delta in `[-0.20, +0.05]`, and applies it at most once for the same session trajectory. Repeating it for the same trajectory returns `already_settled` with `raw_delta: 0.0`.
+Settlement requires an already closed session and explicit, unconsumed trust evidence. It never scans prose, appraisal tags, praise, collaboration, or PAD shape for trust. Without evidence it returns `no_eligible_evidence` and does not add housekeeping logs.
 
 To inspect patterns without changing trust, run:
 
 ```bash
-python3 scripts/emotion_engine_utils.py session_end emotion-state.json
+python3 scripts/emotion_engine_utils.py session_end emotion-state.json \
+  --session-id session-123 --event-id end-123 \
+  --character-id assistant --relationship-id assistant-user
 ```
 
-Use manual settlement only when the host has made its own trust judgment from both:
+Use a manual trust override only when the host has made its own explicit judgment from both:
 
 - extracted trajectory patterns
 - the LLM's interpretation of the session
@@ -120,10 +135,12 @@ Use manual settlement only when the host has made its own trust judgment from bo
 Then apply the final trust update:
 
 ```bash
-python3 scripts/emotion_engine_utils.py update_trust emotion-state.json 0.02
+python3 scripts/emotion_engine_utils.py update_trust emotion-state.json 0.02 \
+  --host-approved --reason "explicit host relationship judgment" \
+  --character-id assistant --relationship-id assistant-user
 ```
 
-`settle_trust` and `update_trust` write the numeric effect to `trust_history`. Keep the reason for the change in `emotion_log`: the preceding turn entries, the `session_end` pattern log, or the compact `trust_settlement` / `trust_update` entries. Do not add semantic reasons, confidence, or external references to `trust_history`; use `emotion_log.source_refs` for adapter provenance.
+`settle_trust` writes consumed evidence ids into `trust_history` and `trust_settlements`. The authoritative reason lives in `trust_evidence`; `emotion_log` remains the PAD and compact continuity explanation layer.
 
 ## State Control
 
