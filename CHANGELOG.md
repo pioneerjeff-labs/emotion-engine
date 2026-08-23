@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 2.0.0-rc.1 - 2026-08-23
+
 - Added the identity-bound v3 state contract with explicit v2 migration, capability declarations, and read-only legacy handling.
 - Added native session and event identifiers, lifecycle idempotency, active-session conflict protection, and one settlement per closed session.
 - Replaced milestone-keyword persistence with structured semantic ownership, a hard host approval gate, and atomic `evaluate_and_record_turn` routing.

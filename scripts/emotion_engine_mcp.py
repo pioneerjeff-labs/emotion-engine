@@ -15,7 +15,7 @@ import emotion_engine_utils as engine
 
 
 SERVER_NAME = "emotion-engine"
-SERVER_VERSION = "2.0.0-dev"
+SERVER_VERSION = "2.0.0-rc.1"
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
 
 
