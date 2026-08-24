@@ -21,7 +21,7 @@ It is not a memory stack. It is a portable emotional-continuity state layer that
 
 Emotion Engine is part of PioneerJeff Labs, an open-source lab building reusable infrastructure layers for creative AI applications.
 
-Status: v3 / `2.0.0-rc.1` release candidate. The latest tagged stable release remains [v1.1.0](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v1.1.0) and uses the v2 state contract.
+Status: v3 / `2.0.0-rc.2` release candidate. The latest tagged stable release remains [v1.1.0](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v1.1.0) and uses the v2 state contract.
 
 ## Start Here
 
@@ -380,6 +380,7 @@ Emotion Engine stores and updates:
 - **Trust evidence**: explicit host-approved evidence consumed at most once by settlement.
 - **Trust history**: numeric ledger for trust changes with evidence references.
 - **Session patterns**: conflict, repair, volatility, suppression, and trust signals.
+- **Bounded replay protection**: exact idempotency inside an observable retained window, without unbounded JSON ledgers.
 
 Read more in [Concepts](docs/CONCEPTS.md).
 
@@ -402,6 +403,7 @@ See [Integration Guide](docs/INTEGRATION.md) for the full sequence.
 python3 scripts/emotion_engine_utils.py init <state_file> --character-id <id> --relationship-id <id>
 python3 scripts/emotion_engine_utils.py migrate_state <state_file> --character-id <id> --relationship-id <id> --dry-run
 python3 scripts/emotion_engine_utils.py bind_identity <state_file> --character-id <id> --relationship-id <id>
+python3 scripts/emotion_engine_utils.py activation_check <state_file>
 python3 scripts/emotion_engine_utils.py validate <state_file>
 python3 scripts/emotion_engine_utils.py configure <state_file> --style <description>
 python3 scripts/emotion_engine_utils.py configure <state_file> --soul-file <SOUL.md>
@@ -425,6 +427,8 @@ python3 scripts/emotion_engine_utils.py compact_log <state_file> --apply
 ```
 
 `audit_log` and `compact_log` are retention tools for long-running agents, especially `always` mode companions. They keep `emotion_log` focused on compact continuity signals by suppressing or rolling up low-value drift and ordinary neutral turns. They do not decide where factual memory should live; host runtimes own facts, task memory, vector stores, documents, and project-specific routing.
+
+`activation_check` is read-only. Installers use it to distinguish a ready v3 packet from an existing v2 packet that needs explicit migration or a new unbound packet that needs explicit owner identity. Installers never migrate or bind state automatically.
 
 ## What It Is Not
 

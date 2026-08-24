@@ -1,6 +1,6 @@
 # Emotion Engine State Protocol
 
-Status: v3 contract for the `2.0.0-rc.1` release candidate
+Status: v3 contract for the `2.0.0-rc.2` release candidate
 
 Emotion Engine is a compact emotional-continuity state layer for LLM-powered agents. This document describes the state packet shape and integration contract so adapters can read, write, and map Emotion Engine state without reverse-engineering the helper script.
 
@@ -58,6 +58,7 @@ Readers and writers should follow these rules:
 - Treat `_schema: "emotion-engine-state/v2"` as read-only. Migration requires explicit `character_id` and `relationship_id`; the helper never guesses them.
 - Require a bound `identity` before emotional mutation.
 - Preserve native `session_id` and `event_id`; every stateful lifecycle event is idempotent.
+- Treat idempotency as exact within the packet's declared retained window; inspect pruning counters before assuming an arbitrarily old event id is still retained.
 - Treat `host_approved: true` as a hard gate, not an advisory score.
 - Use [`spec/emotion-state.schema.json`](../spec/emotion-state.schema.json) as the machine-readable schema for state packets and adapter envelopes.
 - Ignore unknown top-level fields so optional extensions can be added safely.
@@ -106,7 +107,9 @@ A minimal unbound v3 packet looks like this. It can be inspected and configured,
     "session_idempotency/v1",
     "trust_evidence/v1",
     "behavior_audit/v1",
-    "repair_plan/v1"
+    "repair_plan/v1",
+    "migration_extensions/v1",
+    "bounded_idempotency/v1"
   ],
   "enabled": true,
   "runtime_mode": "light",
@@ -156,6 +159,16 @@ A minimal unbound v3 packet looks like this. It can be inspected and configured,
   },
   "session_ledger": [],
   "processed_event_ids": [],
+  "idempotency_retention": {
+    "scope": "retained_window",
+    "session_limit": 512,
+    "event_limit": 4096,
+    "pruned_sessions": 0,
+    "pruned_events": 0,
+    "pruned_evidence": 0,
+    "pruned_settlements": 0,
+    "last_pruned_at": null
+  },
   "log_limit": 200
 }
 ```
@@ -178,7 +191,9 @@ Adapters should not assume that every compatible packet has only the fields list
 
 `identity.state_id` identifies the physical packet. `character_id` identifies the persona and `relationship_id` identifies that persona's relationship with its user or counterpart. A packet is writable only when all three are present and `status` is `bound`.
 
-`capabilities` lets a host gate integration behavior before forwarding events. `session`, `session_ledger`, and `processed_event_ids` enforce one open/close/settle lifecycle per native session and make event replay a no-op.
+`capabilities` lets a host gate integration behavior before forwarding events. `session`, `session_ledger`, and `processed_event_ids` enforce one open/close/settle lifecycle per native session and make retained event replay a no-op.
+
+`idempotency_retention` bounds ledger growth. The engine keeps the newest 512 sessions and 4096 processed event ids by default, never prunes the active session ledger entry, and removes trust evidence and settlements together with a pruned completed session. The counters make pruning visible. Once an id falls outside the retained window, the core no longer promises duplicate rejection for that old id; hosts needing permanent replay protection should keep an external durable event ledger.
 
 ### `trust_evidence` and `trust_settlements`
 

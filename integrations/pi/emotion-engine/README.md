@@ -24,6 +24,8 @@ Manual user-level skill install from this folder:
 sh install.sh
 ```
 
+Manual installation never migrates or binds state automatically. It runs a read-only activation check and prints the exact explicit migration or identity-binding command when state is not ready.
+
 Default skill path:
 
 ```text

@@ -7,6 +7,7 @@ Usage:
   python3 emotion_engine_utils.py init <state_file> [--character-id <id> --relationship-id <id>]
   python3 emotion_engine_utils.py migrate_state <state_file> --character-id <id> --relationship-id <id> [--apply]
   python3 emotion_engine_utils.py bind_identity <state_file> --character-id <id> --relationship-id <id>
+  python3 emotion_engine_utils.py activation_check <state_file>
   python3 emotion_engine_utils.py validate <state_file>
   python3 emotion_engine_utils.py decay <state_file>
   python3 emotion_engine_utils.py pre_turn_decay <state_file>
@@ -39,9 +40,11 @@ Usage:
 import json
 import math
 import os
+import shlex
 import sys
 import hashlib
 import tempfile
+import threading
 import uuid
 import warnings
 from contextlib import contextmanager
@@ -90,6 +93,7 @@ VOLATILITY_PROFILES = {
     },
 }
 
+ENGINE_VERSION = "2.0.0-rc.2"
 STATE_SCHEMA = "emotion-engine-state/v3"
 LEGACY_STATE_SCHEMA = "emotion-engine-state/v2"
 STATE_CAPABILITIES = [
@@ -99,7 +103,20 @@ STATE_CAPABILITIES = [
     "trust_evidence/v1",
     "behavior_audit/v1",
     "repair_plan/v1",
+    "migration_extensions/v1",
+    "bounded_idempotency/v1",
 ]
+
+DEFAULT_IDEMPOTENCY_RETENTION = {
+    "scope": "retained_window",
+    "session_limit": 512,
+    "event_limit": 4096,
+    "pruned_sessions": 0,
+    "pruned_events": 0,
+    "pruned_evidence": 0,
+    "pruned_settlements": 0,
+    "last_pruned_at": None,
+}
 
 
 DEFAULT_STATE = {
@@ -143,10 +160,13 @@ DEFAULT_STATE = {
     },
     "session_ledger": [],
     "processed_event_ids": [],
+    "idempotency_retention": deepcopy(DEFAULT_IDEMPOTENCY_RETENTION),
     "log_limit": 200,
 }
 
-_STATE_LOCKS_HELD = set()
+_STATE_THREAD_LOCKS = {}
+_STATE_THREAD_LOCKS_GUARD = threading.Lock()
+_STATE_LOCKS_HELD = threading.local()
 
 PAD_LIMITS = {
     "pleasure": (-1.0, 1.0),
@@ -340,18 +360,22 @@ def release_file_lock(lock_file):
 def state_file_lock(path):
     lock_path = state_lock_path(path)
     lock_key = os.path.abspath(lock_path)
-    if lock_key in _STATE_LOCKS_HELD:
-        yield
-        return
-
-    with open(lock_path, "a+", encoding="utf-8") as lock_file:
-        acquire_file_lock(lock_file)
-        _STATE_LOCKS_HELD.add(lock_key)
-        try:
+    with _STATE_THREAD_LOCKS_GUARD:
+        thread_lock = _STATE_THREAD_LOCKS.setdefault(lock_key, threading.RLock())
+    with thread_lock:
+        held_keys = getattr(_STATE_LOCKS_HELD, "keys", set())
+        if lock_key in held_keys:
             yield
-        finally:
-            _STATE_LOCKS_HELD.discard(lock_key)
-            release_file_lock(lock_file)
+            return
+
+        with open(lock_path, "a+", encoding="utf-8") as lock_file:
+            acquire_file_lock(lock_file)
+            _STATE_LOCKS_HELD.keys = held_keys | {lock_key}
+            try:
+                yield
+            finally:
+                _STATE_LOCKS_HELD.keys = held_keys
+                release_file_lock(lock_file)
 
 
 def state_directory(path):
@@ -583,6 +607,22 @@ def normalize_session(value):
     return session
 
 
+def normalize_idempotency_retention(value):
+    retention = deepcopy(DEFAULT_IDEMPOTENCY_RETENTION)
+    if isinstance(value, dict):
+        retention.update(value)
+    retention["scope"] = "retained_window"
+    retention["session_limit"] = max(1, int(retention.get("session_limit", 512) or 512))
+    retention["event_limit"] = max(4, int(retention.get("event_limit", 4096) or 4096))
+    for key in [
+        "pruned_sessions", "pruned_events", "pruned_evidence", "pruned_settlements",
+    ]:
+        retention[key] = max(0, int(retention.get(key, 0) or 0))
+    if retention.get("last_pruned_at") is not None:
+        retention["last_pruned_at"] = str(retention["last_pruned_at"])
+    return retention
+
+
 def ensure_state_shape(state):
     raw_schema = state.get("_schema") if isinstance(state, dict) else None
     schema = raw_schema or LEGACY_STATE_SCHEMA
@@ -631,6 +671,9 @@ def ensure_state_shape(state):
             merged[key] = []
 
     merged["session"] = normalize_session(merged.get("session"))
+    merged["idempotency_retention"] = normalize_idempotency_retention(
+        merged.get("idempotency_retention")
+    )
 
     for key in ["session_count", "total_turns"]:
         merged[key] = int(merged.get(key, 0) or 0)
@@ -713,14 +756,14 @@ def migrate_state_v2(state, character_id, relationship_id, state_id=None):
         raise ValueError("migration requires explicit character_id and relationship_id")
 
     migrated = default_state(character_id, relationship_id, state_id=state_id)
-    for key in DEFAULT_STATE:
-        if key in {
-            "_schema", "identity", "capabilities", "session", "session_ledger",
-            "processed_event_ids", "emotion_trajectory", "trust_evidence", "trust_settlements",
-        }:
-            continue
-        if key in source:
-            migrated[key] = deepcopy(source[key])
+    engine_controlled_keys = {
+        "_schema", "identity", "capabilities", "session", "session_ledger",
+        "processed_event_ids", "emotion_trajectory", "trust_evidence", "trust_settlements",
+        "idempotency_retention", "legacy_v2",
+    }
+    for key, value in source.items():
+        if key not in engine_controlled_keys:
+            migrated[key] = deepcopy(value)
     for entry in migrated.get("emotion_log", []):
         if isinstance(entry, dict):
             entry["legacy_v2_entry"] = True
@@ -1089,6 +1132,7 @@ def public_status(state):
     state = ensure_state_shape(state)
     progress = trust_progress(state["trust"])
     return {
+        "engine_version": ENGINE_VERSION,
         "enabled": state["enabled"],
         "summary": emotion_summary(state),
         "pulse": pulse_summary(state),
@@ -1104,8 +1148,58 @@ def public_status(state):
         "migration_required": state.get("_schema") != STATE_SCHEMA,
         "capabilities": list(state.get("capabilities", [])),
         "session_status": state.get("session", {}).get("status"),
+        "idempotency_retention": deepcopy(state.get("idempotency_retention")),
         "log_entries": len(state.get("emotion_log", [])),
         "hint": "Use tune for small changes, pause/resume for control, and status --raw for debug values.",
+    }
+
+
+def activation_check(state, state_file, helper_path="emotion_engine_utils.py"):
+    """Report the exact non-destructive activation step for an installed host."""
+    state = ensure_state_shape(state)
+    base = {
+        "engine_version": ENGINE_VERSION,
+        "state_file": os.fspath(state_file),
+        "schema": state.get("_schema"),
+    }
+    command_prefix = f"python3 {shlex.quote(os.fspath(helper_path))}"
+    quoted_state_file = shlex.quote(os.fspath(state_file))
+    if state.get("_schema") != STATE_SCHEMA:
+        return {
+            **base,
+            "ok": False,
+            "status": "migration_required",
+            "message": "Runtime installed; existing v2 state remains unchanged and read-only.",
+            "next_steps": {
+                "dry_run": (
+                    f"{command_prefix} migrate_state {quoted_state_file} "
+                    "--character-id <character-id> --relationship-id <relationship-id>"
+                ),
+                "apply": (
+                    f"{command_prefix} migrate_state {quoted_state_file} "
+                    "--character-id <character-id> --relationship-id <relationship-id> --apply"
+                ),
+            },
+        }
+    if state.get("identity", {}).get("status") != "bound":
+        return {
+            **base,
+            "ok": False,
+            "status": "identity_binding_required",
+            "message": "Runtime installed; bind explicit owner identity before activation.",
+            "next_steps": {
+                "bind": (
+                    f"{command_prefix} bind_identity {quoted_state_file} "
+                    "--character-id <character-id> --relationship-id <relationship-id>"
+                ),
+            },
+        }
+    return {
+        **base,
+        "ok": True,
+        "status": "ready",
+        "identity_status": "bound",
+        "capabilities": list(state.get("capabilities", [])),
     }
 
 
@@ -1593,6 +1687,39 @@ def apply_in_session_decay(state):
             },
         )
     return state
+
+
+def pre_turn_decay(
+    state,
+    session_id=None,
+    event_id=None,
+    character_id=None,
+    relationship_id=None,
+):
+    """Apply between-turn decay once inside the expected active session."""
+    state = require_expected_state_identity(state, character_id, relationship_id)
+    session_id = normalize_identifier(session_id, "session_id")
+    event_id = normalize_identifier(event_id, "event_id")
+    if not session_id or not event_id:
+        raise ValueError("pre_turn_decay requires session_id and event_id")
+    if event_already_processed(state, event_id):
+        return state, {
+            "status": "duplicate_event", "session_id": session_id, "event_id": event_id,
+        }
+    if (
+        state.get("session", {}).get("status") != "active"
+        or state["session"].get("active_session_id") != session_id
+    ):
+        return state, {
+            "status": "no_active_session",
+            "session_id": session_id,
+            "active_session_id": state.get("session", {}).get("active_session_id"),
+        }
+    if not state.get("enabled", True):
+        return state, {"status": "paused", "session_id": session_id, "event_id": event_id}
+    state = apply_in_session_decay(state)
+    mark_event_processed(state, event_id)
+    return state, {"status": "applied", "session_id": session_id, "event_id": event_id}
 
 
 # ── Appraisal ────────────────────────────────────────────────────────
@@ -2134,13 +2261,69 @@ def event_already_processed(state, event_id):
     return bool(event_id) and str(event_id) in state.get("processed_event_ids", [])
 
 
+def enforce_idempotency_retention(state):
+    """Bound replay ledgers and prune completed session evidence as one bundle.
+
+    Replay protection is exact within the retained window. The active session is
+    never removed, even when callers configure a very small test window.
+    """
+    retention = normalize_idempotency_retention(state.get("idempotency_retention"))
+    state["idempotency_retention"] = retention
+    pruned_any = False
+
+    events = state.setdefault("processed_event_ids", [])
+    event_overflow = max(0, len(events) - retention["event_limit"])
+    if event_overflow:
+        del events[:event_overflow]
+        retention["pruned_events"] += event_overflow
+        pruned_any = True
+
+    ledger = state.setdefault("session_ledger", [])
+    terminal_indexes = [
+        index for index, entry in enumerate(ledger)
+        if entry.get("status") in {"closed", "settled"}
+    ]
+    overflow = max(0, len(ledger) - retention["session_limit"])
+    indexes_to_remove = set(terminal_indexes[:overflow])
+    if indexes_to_remove:
+        pruned_session_ids = {
+            ledger[index].get("session_id") for index in indexes_to_remove
+            if ledger[index].get("session_id")
+        }
+        state["session_ledger"] = [
+            entry for index, entry in enumerate(ledger) if index not in indexes_to_remove
+        ]
+        retention["pruned_sessions"] += len(indexes_to_remove)
+
+        old_evidence = state.setdefault("trust_evidence", [])
+        state["trust_evidence"] = [
+            entry for entry in old_evidence
+            if entry.get("session_id") not in pruned_session_ids
+        ]
+        retention["pruned_evidence"] += len(old_evidence) - len(state["trust_evidence"])
+
+        old_settlements = state.setdefault("trust_settlements", [])
+        state["trust_settlements"] = [
+            entry for entry in old_settlements
+            if entry.get("session_id") not in pruned_session_ids
+        ]
+        retention["pruned_settlements"] += (
+            len(old_settlements) - len(state["trust_settlements"])
+        )
+        pruned_any = True
+
+    if pruned_any:
+        retention["last_pruned_at"] = now_iso()
+    return state
+
+
 def mark_event_processed(state, event_id):
     event_id = normalize_identifier(event_id, "event_id")
     if not event_id:
         raise ValueError("event_id is required for idempotent mutations")
     if not event_already_processed(state, event_id):
         state.setdefault("processed_event_ids", []).append(event_id)
-    return state
+    return enforce_idempotency_retention(state)
 
 
 def normalize_trust_evidence(evidence, session_id, event_id):
@@ -2735,6 +2918,98 @@ def evaluate_and_record_turn(
     return state, result
 
 
+def record_semantic_event(
+    state,
+    event_type,
+    *,
+    session_id=None,
+    event_id=None,
+    subject="relationship",
+    message=None,
+    memory_owner=None,
+    host_approved=False,
+    character_id=None,
+    relationship_id=None,
+    **memory,
+):
+    """Persist a non-turn event only when the shared semantic policy allows it."""
+    state = require_expected_state_identity(state, character_id, relationship_id)
+    session_id = normalize_identifier(session_id, "session_id")
+    event_id = normalize_identifier(event_id, "event_id")
+    if not session_id or not event_id:
+        raise ValueError("log_event requires session_id and event_id")
+    if host_approved is not True:
+        return state, {
+            "status": "host_veto", "session_id": session_id, "event_id": event_id,
+        }
+    if not state.get("enabled", True):
+        return state, {"status": "paused", "session_id": session_id, "event_id": event_id}
+    if event_already_processed(state, event_id):
+        return state, {
+            "status": "duplicate_event", "session_id": session_id, "event_id": event_id,
+        }
+    if (
+        state.get("session", {}).get("status") != "active"
+        or state["session"].get("active_session_id") != session_id
+    ):
+        return state, {
+            "status": "no_active_session",
+            "session_id": session_id,
+            "active_session_id": state.get("session", {}).get("active_session_id"),
+        }
+
+    policy_message = message or memory.get("situation") or event_type
+    policy = record_policy(
+        state,
+        policy_message,
+        subject=subject,
+        event_type=event_type,
+        host_approved=True,
+        memory_owner=memory_owner,
+        source="host_approved_log_event",
+    )
+    if policy["decision"] != "record_emotion":
+        return state, {
+            "status": "not_recorded",
+            "decision": policy["decision"],
+            "reason": policy["reason"],
+            "session_id": session_id,
+            "event_id": event_id,
+            "policy": policy,
+        }
+
+    memory = dict(memory)
+    if memory.get("appraisal") is None:
+        semantic_appraisal = {
+            "boundary": "boundary_pressure",
+        }.get(policy["reason"], policy["reason"])
+        memory["appraisal"] = (
+            semantic_appraisal if semantic_appraisal in APPRAISAL_PROFILES else policy["appraisal"]
+        )
+    if memory.get("salience") is None:
+        memory["salience"] = policy["salience"]
+    state = add_emotion_log(
+        state,
+        event_type,
+        tags=["manual", policy["reason"]],
+        extra={
+            "session_id": session_id,
+            "event_id": event_id,
+            "subject": policy["subject"],
+            "semantic_event_type": policy["event_type"],
+        },
+        **memory,
+    )
+    mark_event_processed(state, event_id)
+    return state, {
+        "status": "recorded",
+        "decision": policy["decision"],
+        "session_id": session_id,
+        "event_id": event_id,
+        "policy": policy,
+    }
+
+
 _legacy_audit_emotion_log = audit_emotion_log
 
 
@@ -2772,6 +3047,23 @@ def audit_state_integrity(state):
     known_sessions = {value for value in session_ids if value}
     known_settlements = {value for value in settlement_ids if value}
     known_evidence = {value for value in evidence_ids if value}
+    evidence_by_id = {
+        entry.get("evidence_id"): entry for entry in state.get("trust_evidence", [])
+        if entry.get("evidence_id")
+    }
+    settlements_by_session = {}
+    for entry in state.get("trust_settlements", []):
+        settlements_by_session.setdefault(entry.get("session_id"), set()).add(
+            entry.get("settlement_id")
+        )
+    multiply_settled_sessions = sorted(
+        session_id for session_id, ids in settlements_by_session.items()
+        if session_id and len({value for value in ids if value}) > 1
+    )
+    if multiply_settled_sessions:
+        hard_errors.append({
+            "code": "multiple_settlements_for_session", "session_ids": multiply_settled_sessions,
+        })
     for entry in state.get("trust_evidence", []):
         if entry.get("session_id") not in known_sessions:
             hard_errors.append({"code": "orphan_trust_evidence", "evidence_id": entry.get("evidence_id")})
@@ -2801,6 +3093,60 @@ def audit_state_integrity(state):
                 "settlement_id": entry.get("settlement_id"),
                 "evidence_ids": missing_ids,
             })
+        ineligible_ids = [
+            value for value in entry.get("evidence_ids", [])
+            if value in evidence_by_id and evidence_by_id[value].get("eligible") is not True
+        ]
+        if ineligible_ids:
+            hard_errors.append({
+                "code": "settlement_references_ineligible_evidence",
+                "settlement_id": entry.get("settlement_id"),
+                "evidence_ids": ineligible_ids,
+            })
+
+    active_ledger = [
+        entry for entry in state.get("session_ledger", []) if entry.get("status") == "active"
+    ]
+    if len(active_ledger) > 1:
+        hard_errors.append({
+            "code": "multiple_active_sessions",
+            "session_ids": [entry.get("session_id") for entry in active_ledger],
+        })
+    for entry in state.get("session_ledger", []):
+        session_id = entry.get("session_id")
+        status = entry.get("status")
+        opened_at = entry.get("opened_at")
+        closed_at = entry.get("closed_at")
+        settled_at = entry.get("settled_at")
+        settlement_id = entry.get("settlement_id")
+        inconsistent = False
+        if status == "active":
+            inconsistent = bool(closed_at or settled_at or settlement_id)
+        elif status == "closed":
+            inconsistent = not closed_at or bool(settled_at or settlement_id)
+        elif status == "settled":
+            inconsistent = (
+                not closed_at or not settled_at or not settlement_id
+                or settlement_id not in known_settlements
+            )
+        else:
+            inconsistent = True
+        if inconsistent:
+            hard_errors.append({
+                "code": "session_ledger_lifecycle_inconsistent", "session_id": session_id,
+            })
+        try:
+            opened = parse_iso_datetime(opened_at)
+            closed = parse_iso_datetime(closed_at)
+            settled = parse_iso_datetime(settled_at)
+            if (closed and opened and closed < opened) or (settled and closed and settled < closed):
+                hard_errors.append({
+                    "code": "session_ledger_timestamp_order", "session_id": session_id,
+                })
+        except (TypeError, ValueError):
+            hard_errors.append({
+                "code": "session_ledger_invalid_timestamp", "session_id": session_id,
+            })
 
     current = state.get("session", {})
     active_id = current.get("active_session_id")
@@ -2812,27 +3158,131 @@ def audit_state_integrity(state):
         hard_errors.append({"code": "closed_state_has_active_session_id", "session_id": active_id})
 
     task_markers = ["tests pass", "shipped", "deployed", "implemented", "完成", "搞定", "通过", "修复"]
+    session_log_counts = {}
+    logged_turn_counts = {}
+    nonlegacy_log_entries = []
+    task_like_count = 0
+    housekeeping_count = 0
+    turn_log_count = 0
     for index, entry in enumerate(state.get("emotion_log", [])):
-        if entry.get("event_type") != "turn":
+        if entry.get("legacy_v2_entry"):
             continue
+        nonlegacy_log_entries.append(entry)
         session_id = entry.get("session_id")
+        event_type = entry.get("event_type")
+        if event_type in {"session_start", "session_end"} and session_id:
+            counts = session_log_counts.setdefault(session_id, {"session_start": 0, "session_end": 0})
+            counts[event_type] += effective_event_count(entry)
+        if event_type in {
+            "session_start", "session_end", "pre_turn_decay", "trust_update", "trust_settlement",
+        }:
+            housekeeping_count += effective_event_count(entry)
+        if event_type != "turn":
+            continue
+        turn_log_count += effective_event_count(entry)
+        if session_id:
+            logged_turn_counts[session_id] = logged_turn_counts.get(session_id, 0) + effective_event_count(entry)
         if (
             state.get("_schema") == STATE_SCHEMA
-            and not entry.get("legacy_v2_entry")
             and session_id not in known_sessions
         ):
             hard_errors.append({"code": "orphan_turn", "log_index": index, "session_id": session_id})
         text = " ".join(str(entry.get(key) or "") for key in ["situation", "impact", "relational_meaning"]).lower()
-        if not entry.get("legacy_v2_entry") and (
+        if (
             entry.get("subject") == "task"
             or entry.get("semantic_event_type") == "work_checkpoint"
             or any(marker in text for marker in task_markers)
         ):
+            task_like_count += effective_event_count(entry)
             semantic_warnings.append({
                 "code": "task_like_emotional_memory",
                 "log_index": index,
                 "event_id": entry.get("event_id"),
             })
+
+        ledger = session_record(state, session_id)
+        if ledger:
+            try:
+                timestamp = parse_iso_datetime(entry.get("timestamp"))
+                opened = parse_iso_datetime(ledger.get("opened_at"))
+                closed = parse_iso_datetime(ledger.get("closed_at"))
+                if timestamp and ((opened and timestamp < opened) or (closed and timestamp > closed)):
+                    hard_errors.append({
+                        "code": "turn_outside_session_window",
+                        "log_index": index,
+                        "session_id": session_id,
+                    })
+            except (TypeError, ValueError):
+                hard_errors.append({"code": "turn_invalid_timestamp", "log_index": index})
+
+    for session_id, counts in session_log_counts.items():
+        if counts["session_end"] > counts["session_start"]:
+            hard_errors.append({
+                "code": "session_end_without_matching_start",
+                "session_id": session_id,
+                "starts": counts["session_start"],
+                "ends": counts["session_end"],
+            })
+    for entry in state.get("session_ledger", []):
+        session_id = entry.get("session_id")
+        if int(entry.get("turn_count", 0) or 0) < logged_turn_counts.get(session_id, 0):
+            hard_errors.append({
+                "code": "session_ledger_turn_count_too_small", "session_id": session_id,
+            })
+
+    trajectory = state.get("emotion_trajectory", [])
+    trajectory_turns = [entry.get("turn") for entry in trajectory]
+    if trajectory_turns != list(range(1, len(trajectory) + 1)):
+        hard_errors.append({"code": "trajectory_turn_sequence", "turns": trajectory_turns})
+    trajectory_event_ids = [entry.get("event_id") for entry in trajectory if entry.get("event_id")]
+    duplicate_trajectory_events = sorted({
+        value for value in trajectory_event_ids if trajectory_event_ids.count(value) > 1
+    })
+    if duplicate_trajectory_events:
+        hard_errors.append({
+            "code": "duplicate_trajectory_event_ids", "ids": duplicate_trajectory_events,
+        })
+    if not state.get("idempotency_retention", {}).get("pruned_events"):
+        missing_trajectory_events = [
+            value for value in trajectory_event_ids if value not in set(processed_ids)
+        ]
+        if missing_trajectory_events:
+            hard_errors.append({
+                "code": "trajectory_events_not_processed", "ids": missing_trajectory_events,
+            })
+    if int(state.get("total_turns", 0) or 0) < len(trajectory):
+        hard_errors.append({"code": "total_turns_below_trajectory"})
+    expected_trajectory_session = active_id or current.get("last_session_id")
+    mismatched_trajectory_sessions = sorted({
+        entry.get("session_id") for entry in trajectory
+        if entry.get("session_id") != expected_trajectory_session
+    }, key=lambda value: str(value))
+    if mismatched_trajectory_sessions:
+        hard_errors.append({
+            "code": "trajectory_session_mismatch",
+            "expected_session_id": expected_trajectory_session,
+            "actual_session_ids": mismatched_trajectory_sessions,
+        })
+
+    if turn_log_count >= 3 and task_like_count / turn_log_count >= 0.35:
+        semantic_warnings.append({
+            "code": "high_task_like_memory_ratio",
+            "task_like_turns": task_like_count,
+            "turns": turn_log_count,
+        })
+    if turn_log_count >= 3 and housekeeping_count > turn_log_count * 2:
+        semantic_warnings.append({
+            "code": "excessive_lifecycle_housekeeping",
+            "housekeeping_entries": housekeeping_count,
+            "turns": turn_log_count,
+        })
+    if len(nonlegacy_log_entries) >= 10 and all(
+        is_core_retention_entry(entry) for entry in nonlegacy_log_entries
+    ):
+        semantic_warnings.append({
+            "code": "all_entries_core_retention",
+            "entries": len(nonlegacy_log_entries),
+        })
 
     return {
         "ok": not hard_errors,
@@ -2845,6 +3295,9 @@ def audit_state_integrity(state):
             "processed_events": len(processed_ids),
             "trust_evidence": len(state.get("trust_evidence", [])),
             "trust_settlements": len(state.get("trust_settlements", [])),
+            "turns": turn_log_count,
+            "task_like_turns": task_like_count,
+            "lifecycle_housekeeping": housekeeping_count,
         },
     }
 
@@ -2863,7 +3316,11 @@ def repair_plan(state):
     """Return a non-mutating repair plan; ownership is never inferred."""
     state = ensure_state_shape(state)
     audit = audit_state_integrity(state)
-    actions = []
+    actions = [{
+        "action": "archive_state_before_repair",
+        "automatic": False,
+        "required": True,
+    }]
     if state.get("_schema") != STATE_SCHEMA:
         actions.append({
             "action": "migrate_state",
@@ -2888,7 +3345,31 @@ def repair_plan(state):
         })
     if any(error["code"].startswith("duplicate_") for error in audit["hard_errors"]):
         actions.append({"action": "deduplicate_ledgers", "automatic": False})
-    return {"dry_run": True, "audit": audit, "proposed_actions": actions}
+    if any("settlement" in error["code"] or "trust_evidence" in error["code"] for error in audit["hard_errors"]):
+        actions.append({
+            "action": "reconcile_trust_evidence",
+            "requires": ["explicit_baseline_trust"],
+            "automatic": False,
+        })
+    if any(
+        error["code"].startswith("session_")
+        or error["code"].startswith("turn_")
+        or error["code"].startswith("trajectory_")
+        for error in audit["hard_errors"]
+    ):
+        actions.append({"action": "review_lifecycle_ledgers", "automatic": False})
+    return {
+        "dry_run": True,
+        "audit": audit,
+        "before_counts": deepcopy(audit["counts"]),
+        "proposed_actions": actions,
+        "acceptance_checks": [
+            "audit_state reports no hard_errors",
+            "owner identity remains explicit and unchanged",
+            "session, evidence, settlement, and event ledgers agree",
+            "task-owned facts are removed from emotional memory or routed by the host",
+        ],
+    }
 
 
 def reconcile_trust_from_evidence(state, baseline_trust=None, apply=False):
@@ -3097,6 +3578,14 @@ def run_command(command, state_file, state):
         else:
             print_json(public_status(state))
 
+    elif command == "activation_check":
+        result = activation_check(state, state_file, os.path.abspath(sys.argv[0]))
+        print_json(result)
+        if result["status"] == "migration_required":
+            sys.exit(2)
+        if result["status"] == "identity_binding_required":
+            sys.exit(3)
+
     elif command == "configure":
         args = sys.argv[3:]
         if "--style" in args:
@@ -3199,24 +3688,17 @@ def run_command(command, state_file, state):
 
     elif command == "pre_turn_decay":
         args = sys.argv[3:]
-        state = require_expected_state_identity(
+        state, result = pre_turn_decay(
             state,
-            cli_option(args, "--character-id"),
-            cli_option(args, "--relationship-id"),
+            session_id=cli_option(args, "--session-id"),
+            event_id=cli_option(args, "--event-id"),
+            character_id=cli_option(args, "--character-id"),
+            relationship_id=cli_option(args, "--relationship-id"),
         )
-        session_id = cli_option(args, "--session-id")
-        event_id = cli_option(args, "--event-id")
-        if not session_id or not event_id:
-            raise ValueError("pre_turn_decay requires --session-id and --event-id")
-        if event_already_processed(state, event_id):
-            print_json({"status": "duplicate_event", "session_id": session_id, "event_id": event_id})
-        elif state["session"].get("status") != "active" or state["session"].get("active_session_id") != session_id:
-            print_json({"status": "no_active_session", "session_id": session_id})
-        else:
-            state = apply_in_session_decay(state)
-            mark_event_processed(state, event_id)
+        if result["status"] == "applied":
             save_state(state_file, state)
-            print_json({"status": "applied", "emotion": state["emotion"], "affective_pulse": state["affective_pulse"]})
+        result.update({"emotion": state["emotion"], "affective_pulse": state["affective_pulse"]})
+        print_json(result)
 
     elif command == "appraise":
         if len(sys.argv) < 4:
@@ -3334,41 +3816,26 @@ def run_command(command, state_file, state):
         args = sys.argv[4:]
         option_names = {
             "--session-id", "--event-id", "--subject", "--event-type",
-            "--character-id", "--relationship-id",
+            "--character-id", "--relationship-id", "--memory-owner", "--message",
         }
         memory = parse_memory_args(strip_cli_options(args, option_names, {"--host-approved"}))
-        state = require_expected_state_identity(
-            state,
-            cli_option(args, "--character-id"),
-            cli_option(args, "--relationship-id"),
-        )
-        session_id = cli_option(args, "--session-id")
-        event_id = cli_option(args, "--event-id")
-        if "--host-approved" not in args:
-            raise ValueError("log_event requires --host-approved")
-        if not session_id or not event_id:
-            raise ValueError("log_event requires --session-id and --event-id")
-        if event_already_processed(state, event_id):
-            print_json({"status": "duplicate_event", "event_id": event_id})
-            return
-        if state["session"].get("status") != "active" or state["session"].get("active_session_id") != session_id:
-            print_json({"status": "no_active_session", "session_id": session_id})
-            return
-        state = add_emotion_log(
+        state, result = record_semantic_event(
             state,
             sys.argv[3],
-            tags=["manual"],
-            extra={
-                "session_id": session_id,
-                "event_id": event_id,
-                "subject": cli_option(args, "--subject", "relationship"),
-                "semantic_event_type": cli_option(args, "--event-type", sys.argv[3]),
-            },
+            session_id=cli_option(args, "--session-id"),
+            event_id=cli_option(args, "--event-id"),
+            subject=cli_option(args, "--subject", "relationship"),
+            message=cli_option(args, "--message"),
+            memory_owner=cli_option(args, "--memory-owner"),
+            host_approved="--host-approved" in args,
+            character_id=cli_option(args, "--character-id"),
+            relationship_id=cli_option(args, "--relationship-id"),
             **memory,
         )
-        mark_event_processed(state, event_id)
-        save_state(state_file, state)
-        print_json({"ok": True, "log_entries": len(state.get("emotion_log", []))})
+        if result["status"] == "recorded":
+            save_state(state_file, state)
+        result["log_entries"] = len(state.get("emotion_log", []))
+        print_json(result)
 
     elif command == "recent_log":
         limit = int(sys.argv[3]) if len(sys.argv) >= 4 else 5
@@ -3461,6 +3928,7 @@ def main():
             save_state_unlocked(state_file, state)
         print_json({
             "ok": True,
+            "engine_version": ENGINE_VERSION,
             "state_file": state_file,
             "schema": state["_schema"],
             "identity_status": state["identity"]["status"],
@@ -3474,6 +3942,7 @@ def main():
             if command != "migrate_state" and state.get("_schema") != STATE_SCHEMA:
                 print_json({
                     "ok": False,
+                    "engine_version": ENGINE_VERSION,
                     "status": "migration_required",
                     "schema": state.get("_schema"),
                     "message": "v2 state is read-only; run migrate_state with explicit owner identity",

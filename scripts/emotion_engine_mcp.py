@@ -15,7 +15,7 @@ import emotion_engine_utils as engine
 
 
 SERVER_NAME = "emotion-engine"
-SERVER_VERSION = "2.0.0-rc.1"
+SERVER_VERSION = engine.ENGINE_VERSION
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
 
 
@@ -91,6 +91,7 @@ def compact_summary(state, limit=5):
     status = engine.public_status(state)
     recent = [compact_memory(entry) for entry in state.get("emotion_log", [])[-limit:]]
     return {
+        "engine_version": status["engine_version"],
         "enabled": status["enabled"],
         "schema": status["schema"],
         "identity_status": status["identity_status"],
@@ -171,6 +172,7 @@ def call_tool(name, arguments=None, default_state_file=None):
         state_file, state = load_state_for_tool(arguments, default_state_file)
         return {
             "state_file": state_file,
+            "engine_version": engine.ENGINE_VERSION,
             "schema": state.get("_schema"),
             "capabilities": list(state.get("capabilities", [])),
             "identity_status": state.get("identity", {}).get("status"),
@@ -260,20 +262,17 @@ def call_tool(name, arguments=None, default_state_file=None):
 
     if name == "emotion_engine_pre_turn_decay":
         def mutator(state):
-            state = engine.require_expected_state_identity(
+            state, result = engine.pre_turn_decay(
                 state,
-                require_text(arguments, "character_id"),
-                require_text(arguments, "relationship_id"),
+                session_id=require_text(arguments, "session_id"),
+                event_id=require_text(arguments, "event_id"),
+                character_id=require_text(arguments, "character_id"),
+                relationship_id=require_text(arguments, "relationship_id"),
             )
-            session_id = require_text(arguments, "session_id")
-            event_id = require_text(arguments, "event_id")
-            if engine.event_already_processed(state, event_id):
-                return state, {"status": "duplicate_event", "_changed": False}
-            if state["session"].get("status") != "active" or state["session"].get("active_session_id") != session_id:
-                return state, {"status": "no_active_session", "_changed": False}
-            state = engine.apply_in_session_decay(state)
-            engine.mark_event_processed(state, event_id)
-            return state, {"status": "applied", "emotion": state["emotion"], "affective_pulse": state["affective_pulse"]}
+            result["_changed"] = result["status"] == "applied"
+            result["emotion"] = state["emotion"]
+            result["affective_pulse"] = state["affective_pulse"]
+            return state, result
 
         return mutate_state_for_tool(arguments, default_state_file, mutator)
 

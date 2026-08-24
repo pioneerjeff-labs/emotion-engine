@@ -46,7 +46,7 @@ class EmotionEngineMcpTest(unittest.TestCase):
         initialized = emotion_engine_mcp.handle_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
 
         self.assertEqual(initialized["result"]["serverInfo"]["name"], "emotion-engine")
-        self.assertEqual(initialized["result"]["serverInfo"]["version"], "2.0.0-rc.1")
+        self.assertEqual(initialized["result"]["serverInfo"]["version"], "2.0.0-rc.2")
         self.assertIn("tools", initialized["result"]["capabilities"])
 
         listed = emotion_engine_mcp.handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})
@@ -249,6 +249,8 @@ class EmotionEngineMcpTest(unittest.TestCase):
             legacy = emotion_engine_mcp.engine.default_state()
             legacy["_schema"] = emotion_engine_mcp.engine.LEGACY_STATE_SCHEMA
             legacy.pop("identity", None)
+            legacy["boundary_state"] = {"last_boundary": "keep scope"}
+            legacy["host_extension"] = {"preserve": [1, 2, 3]}
             state_file.write_text(json.dumps(legacy), encoding="utf-8")
             before = state_file.read_text(encoding="utf-8")
 
@@ -273,7 +275,10 @@ class EmotionEngineMcpTest(unittest.TestCase):
                 },
             )
             self.assertEqual(applied["status"], "migrated")
-            self.assertEqual(json.loads(state_file.read_text())["_schema"], "emotion-engine-state/v3")
+            migrated = json.loads(state_file.read_text())
+            self.assertEqual(migrated["_schema"], "emotion-engine-state/v3")
+            self.assertEqual(migrated["boundary_state"], legacy["boundary_state"])
+            self.assertEqual(migrated["host_extension"], legacy["host_extension"])
             backup = json.loads(Path(f"{state_file}.bak").read_text())
             self.assertEqual(backup["_schema"], "emotion-engine-state/v2")
             self.assertNotIn("identity", backup)

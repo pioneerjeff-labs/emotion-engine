@@ -29,10 +29,10 @@ class MinimalAgentExampleTest(unittest.TestCase):
         self.assertIn("collaboration", appraisals)
         self.assertIn("boundary_pressure", appraisals)
 
-    def test_demo_runs_and_writes_valid_state(self):
+    def test_demo_runs_twice_as_two_complete_sessions(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             state_file = Path(tmpdir) / "emotion-state.json"
-            result = subprocess.run(
+            first = subprocess.run(
                 [
                     sys.executable,
                     str(SCRIPT),
@@ -44,8 +44,15 @@ class MinimalAgentExampleTest(unittest.TestCase):
                 capture_output=True,
                 check=True,
             )
+            second = subprocess.run(
+                [sys.executable, str(SCRIPT), "--state", str(state_file)],
+                cwd=ROOT,
+                text=True,
+                capture_output=True,
+                check=True,
+            )
 
-            output = result.stdout
+            output = first.stdout
             self.assertIn("Minimal Emotion Engine Agent Loop", output)
             self.assertIn("build prompt prelude", output)
             self.assertIn("mock LLM final decision", output)
@@ -55,11 +62,22 @@ class MinimalAgentExampleTest(unittest.TestCase):
             self.assertNotIn("new session initialized", output)
             self.assertNotIn("quiet drift toward personality baseline", output)
             self.assertIn("- Recent compact memories: none yet", output)
+            self.assertIn("Loaded existing state", second.stdout)
+            self.assertIn("Session count: 2", second.stdout)
+            self.assertNotIn("already_closed", second.stdout)
+            self.assertNotIn("duplicate_event", second.stdout)
 
             state = json.loads(state_file.read_text(encoding="utf-8"))
             self.assertEqual(state["_schema"], "emotion-engine-state/v3")
-            self.assertEqual(state["total_turns"], 2)
+            self.assertEqual(state["session_count"], 2)
+            self.assertEqual(state["total_turns"], 4)
+            self.assertEqual(len(state["session_ledger"]), 2)
+            self.assertNotEqual(
+                state["session_ledger"][0]["session_id"],
+                state["session_ledger"][1]["session_id"],
+            )
             self.assertGreaterEqual(len(state["emotion_log"]), 2)
+            self.assertEqual(len(state["emotion_trajectory"]), 2)
             self.assertEqual(state["emotion_trajectory"][-1]["appraisal"], "boundary_pressure")
 
     def test_readme_command_and_root_links_are_valid(self):

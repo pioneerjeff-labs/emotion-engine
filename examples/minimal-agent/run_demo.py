@@ -9,6 +9,7 @@ final PAD choice, assistant reply, and compact memory judgment.
 import argparse
 import json
 import sys
+import uuid
 from pathlib import Path
 
 
@@ -99,7 +100,12 @@ def print_step(title):
     print(f"== {title} ==")
 
 
-def run(turns_path=DEFAULT_TURNS, state_path=DEFAULT_STATE):
+def require_status(result, expected, operation):
+    if result.get("status") not in set(expected):
+        raise RuntimeError(f"{operation} failed: {json.dumps(result, ensure_ascii=False)}")
+
+
+def run(turns_path=DEFAULT_TURNS, state_path=DEFAULT_STATE, session_id=None):
     turns = load_turns(turns_path)
 
     print("# Minimal Emotion Engine Agent Loop")
@@ -118,11 +124,13 @@ def run(turns_path=DEFAULT_TURNS, state_path=DEFAULT_STATE):
     print(f"Status: {engine.public_status(state)['summary']} | trust {state['trust']:.4f}")
 
     print_step("session_start")
-    session_id = "minimal-agent-session"
-    state, _ = engine.session_start(
-        state, session_id, "minimal-agent-session-start",
+    session_id = session_id or f"minimal-agent-{uuid.uuid4().hex}"
+    event_prefix = session_id
+    state, started = engine.session_start(
+        state, session_id, f"{event_prefix}-start",
         character_id="minimal-agent", relationship_id="minimal-agent-demo",
     )
+    require_status(started, {"started"}, "session_start")
     print(f"Session count: {state['session_count']}")
 
     for idx, turn in enumerate(turns, 1):
@@ -130,7 +138,14 @@ def run(turns_path=DEFAULT_TURNS, state_path=DEFAULT_STATE):
         decision = turn["mock_llm_decision"]
 
         print_step(f"turn {idx}: pre_turn_decay")
-        state = engine.apply_in_session_decay(state)
+        state, decayed = engine.pre_turn_decay(
+            state,
+            session_id=session_id,
+            event_id=f"{event_prefix}-decay-{idx}",
+            character_id="minimal-agent",
+            relationship_id="minimal-agent-demo",
+        )
+        require_status(decayed, {"applied"}, "pre_turn_decay")
         print(f"State before prompt: {pad_line(state['emotion'])}")
         print(f"Pulse before prompt: {pulse_line(state['affective_pulse'])}")
 
@@ -151,7 +166,7 @@ def run(turns_path=DEFAULT_TURNS, state_path=DEFAULT_STATE):
 
         print_step("record_turn")
         final_pad = decision["final_pad"]
-        state, _ = engine.record_turn(
+        state, recorded = engine.record_turn(
             state,
             final_pad["P"],
             final_pad["A"],
@@ -164,26 +179,29 @@ def run(turns_path=DEFAULT_TURNS, state_path=DEFAULT_STATE):
             salience=decision["salience"],
             character_lens=state["character_profile"].get("interpretation"),
             session_id=session_id,
-            event_id=f"minimal-agent-turn-{idx}",
+            event_id=f"{event_prefix}-turn-{idx}",
             subject="relationship",
             semantic_event_type=decision["final_appraisal"],
             host_approved=True,
             character_id="minimal-agent",
             relationship_id="minimal-agent-demo",
         )
-        print(f"Recorded turn {len(state['emotion_trajectory'])}; state is now {pad_line(state['emotion'])}")
+        require_status(recorded, {"recorded", "state_only"}, "record_turn")
+        print(f"Recorded turn {recorded['turn']}; state is now {pad_line(state['emotion'])}")
         print(f"Visible pulse is now {pulse_line(state['affective_pulse'])}")
 
     print_step("settle_trust")
     trust_before = state["trust"]
-    state, _ = engine.session_end(
-        state, session_id, "minimal-agent-session-end",
+    state, closed = engine.session_end(
+        state, session_id, f"{event_prefix}-end",
         character_id="minimal-agent", relationship_id="minimal-agent-demo",
     )
+    require_status(closed, {"closed"}, "session_end")
     state, settlement = engine.settle_trust(
-        state, session_id, "minimal-agent-trust-settlement",
+        state, session_id, f"{event_prefix}-settle",
         character_id="minimal-agent", relationship_id="minimal-agent-demo",
     )
+    require_status(settlement, {"settled", "no_eligible_evidence"}, "settle_trust")
     print(f"Settlement: {settlement['status']} | raw delta {settlement['raw_delta']:+.4f}")
     print(f"Reason: {settlement.get('reason', settlement['status'])}")
     print(f"Trust: {trust_before:.4f} -> {state['trust']:.4f}")
@@ -207,8 +225,9 @@ def main():
     parser = argparse.ArgumentParser(description="Run a minimal Emotion Engine agent-loop example.")
     parser.add_argument("--turns", type=Path, default=DEFAULT_TURNS, help="Turns JSON file to replay.")
     parser.add_argument("--state", type=Path, default=DEFAULT_STATE, help="Output state path.")
+    parser.add_argument("--session-id", help="Optional explicit session id; defaults to a unique id per run.")
     args = parser.parse_args()
-    run(args.turns, args.state)
+    run(args.turns, args.state, args.session_id)
 
 
 if __name__ == "__main__":

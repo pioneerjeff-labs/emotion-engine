@@ -21,6 +21,8 @@ From this folder:
 sh install.sh
 ```
 
+Installation never migrates or binds state automatically. It runs a read-only activation check: existing v2 state is preserved with explicit migration preview/apply commands, while a new unbound v3 packet gets an explicit `bind_identity` command.
+
 The installer creates a user-level Codex skill, not a bundled/system skill. It uses `CODEX_SKILLS_DIR` when set. Otherwise, it prefers an existing local `~/.codex/skills` directory and falls back to:
 
 ```text
