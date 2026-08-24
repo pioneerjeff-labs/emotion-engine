@@ -4,6 +4,8 @@ import os
 import subprocess
 import sys
 import tempfile
+import threading
+import time
 import unittest
 from copy import deepcopy
 from datetime import datetime, timedelta, timezone
@@ -107,6 +109,9 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(state["affective_pulse"]["intensity"], 0.0)
         self.assertEqual(state["trust"], 0.1)
         self.assertEqual(state["emotion_log"], [])
+        self.assertEqual(
+            emotion_engine_utils.public_status(state)["engine_version"], "2.0.0-rc.2"
+        )
 
     def test_configure_style_updates_baseline(self):
         state = emotion_engine_utils.default_state()
@@ -280,6 +285,31 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(state["emotion_log"][-1]["event_type"], "pre_turn_decay")
         self.assertGreaterEqual(abs(state["emotion_log"][-1]["delta"]["P"]), 0.01)
 
+    def test_guarded_pre_turn_decay_is_idempotent_and_paused_is_noop(self):
+        state = self.start_session()
+        state["emotion"] = {"pleasure": 0.4, "arousal": 0.5, "dominance": 0.7}
+        state, applied = emotion_engine_utils.pre_turn_decay(
+            state, "test-session", "decay-once",
+            character_id="test-character", relationship_id="test-relationship",
+        )
+        self.assertEqual(applied["status"], "applied")
+        snapshot = deepcopy(state)
+        state, duplicate = emotion_engine_utils.pre_turn_decay(
+            state, "test-session", "decay-once",
+            character_id="test-character", relationship_id="test-relationship",
+        )
+        self.assertEqual(duplicate["status"], "duplicate_event")
+        self.assertEqual(state, snapshot)
+
+        state["enabled"] = False
+        paused_snapshot = deepcopy(state)
+        state, paused = emotion_engine_utils.pre_turn_decay(
+            state, "test-session", "decay-paused",
+            character_id="test-character", relationship_id="test-relationship",
+        )
+        self.assertEqual(paused["status"], "paused")
+        self.assertEqual(state, paused_snapshot)
+
     def test_patterns_use_pulse_to_distinguish_visible_movement_from_flat_mood(self):
         state = self.start_session()
         state["volatility_profile"] = "expressive"
@@ -368,6 +398,45 @@ class EmotionEngineUtilsTest(unittest.TestCase):
 
         self.assertEqual(loaded["session_count"], 1)
         self.assertEqual(len(loaded["session_ledger"]), 1)
+
+    def test_state_file_lock_serializes_threads_in_same_process(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            emotion_engine_utils.save_state(state_file, self.bound_state())
+            outer_acquired = threading.Event()
+            inner_started = threading.Event()
+            inner_acquired = threading.Event()
+
+            def update_outer():
+                with emotion_engine_utils.state_file_lock(state_file):
+                    state = emotion_engine_utils.load_state_unlocked(state_file)
+                    outer_acquired.set()
+                    inner_started.wait(timeout=2)
+                    time.sleep(0.1)
+                    state["session_count"] += 1
+                    emotion_engine_utils.save_state_unlocked(state_file, state)
+
+            def update_inner():
+                outer_acquired.wait(timeout=2)
+                inner_started.set()
+                with emotion_engine_utils.state_file_lock(state_file):
+                    inner_acquired.set()
+                    state = emotion_engine_utils.load_state_unlocked(state_file)
+                    state["session_count"] += 1
+                    emotion_engine_utils.save_state_unlocked(state_file, state)
+
+            outer = threading.Thread(target=update_outer)
+            inner = threading.Thread(target=update_inner)
+            outer.start()
+            inner.start()
+            inner_started.wait(timeout=2)
+            self.assertFalse(inner_acquired.wait(timeout=0.05))
+            outer.join(timeout=3)
+            inner.join(timeout=3)
+
+            self.assertFalse(outer.is_alive())
+            self.assertFalse(inner.is_alive())
+            self.assertEqual(emotion_engine_utils.load_state(state_file)["session_count"], 2)
 
     def test_settle_trust_positive_multi_turn_trajectory_gives_positive_delta(self):
         state = self.collaborative_state()
@@ -758,6 +827,20 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(migrated["identity"]["status"], "bound")
         self.assertTrue(emotion_engine_utils.audit_state_integrity(migrated)["ok"])
 
+    def test_v2_migration_preserves_boundary_and_host_extension_fields(self):
+        legacy = deepcopy(emotion_engine_utils.DEFAULT_STATE)
+        legacy["_schema"] = emotion_engine_utils.LEGACY_STATE_SCHEMA
+        legacy.pop("identity", None)
+        legacy["boundary_state"] = {"pressure_count": 2, "last_boundary": "keep scope"}
+        legacy["host_extension"] = {"nested": [1, {"preserve": True}]}
+
+        migrated, _ = emotion_engine_utils.migrate_state_v2(
+            legacy, "character-a", "relationship-a"
+        )
+
+        self.assertEqual(migrated["boundary_state"], legacy["boundary_state"])
+        self.assertEqual(migrated["host_extension"], legacy["host_extension"])
+
     def test_bound_identity_cannot_be_rebound(self):
         state = self.bound_state()
         with self.assertRaisesRegex(ValueError, "identity mismatch"):
@@ -838,6 +921,170 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(result["decision"], "route_host_memory")
         self.assertEqual(state, snapshot)
 
+    def test_log_event_uses_semantic_gate_for_task_checkpoint(self):
+        state = self.start_session()
+        snapshot = deepcopy(state)
+
+        state, result = emotion_engine_utils.record_semantic_event(
+            state,
+            "work_checkpoint",
+            session_id="test-session",
+            event_id="task-log-1",
+            subject="task",
+            message="implementation complete and tests pass",
+            memory_owner="project",
+            host_approved=True,
+            character_id="test-character",
+            relationship_id="test-relationship",
+            situation="tests passed",
+        )
+
+        self.assertEqual(result["status"], "not_recorded")
+        self.assertEqual(result["decision"], "route_host_memory")
+        self.assertEqual(state, snapshot)
+
+    def test_log_event_is_exact_noop_while_paused(self):
+        state = self.start_session()
+        state["enabled"] = False
+        snapshot = deepcopy(state)
+
+        state, result = emotion_engine_utils.record_semantic_event(
+            state,
+            "repair",
+            session_id="test-session",
+            event_id="paused-log-1",
+            subject="relationship",
+            message="we repaired the mismatch",
+            host_approved=True,
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+
+        self.assertEqual(result["status"], "paused")
+        self.assertEqual(state, snapshot)
+
+    def test_log_event_records_host_approved_relationship_event(self):
+        state = self.start_session()
+        state, result = emotion_engine_utils.record_semantic_event(
+            state,
+            "repair",
+            session_id="test-session",
+            event_id="repair-log-1",
+            subject="relationship",
+            message="we repaired the mismatch",
+            host_approved=True,
+            character_id="test-character",
+            relationship_id="test-relationship",
+            situation="the mismatch was repaired",
+        )
+
+        self.assertEqual(result["status"], "recorded")
+        self.assertEqual(state["emotion_log"][-1]["appraisal"], "repair")
+        self.assertIn("repair-log-1", state["processed_event_ids"])
+
+    def test_cli_log_event_veto_and_pause_leave_state_file_byte_identical(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            state = self.start_session()
+            emotion_engine_utils.save_state(state_file, state)
+            before_task = state_file.read_bytes()
+            task = subprocess.run(
+                [
+                    sys.executable, str(SCRIPT), "log_event", str(state_file), "work_checkpoint",
+                    "--session-id", "test-session", "--event-id", "cli-task-log",
+                    "--subject", "task", "--memory-owner", "project",
+                    "--message", "implementation complete and tests pass",
+                    "--host-approved", "--character-id", "test-character",
+                    "--relationship-id", "test-relationship",
+                ],
+                text=True, capture_output=True, check=True,
+            )
+            self.assertEqual(json.loads(task.stdout)["status"], "not_recorded")
+            self.assertEqual(state_file.read_bytes(), before_task)
+
+            state["enabled"] = False
+            emotion_engine_utils.save_state(state_file, state)
+            before_paused = state_file.read_bytes()
+            paused = subprocess.run(
+                [
+                    sys.executable, str(SCRIPT), "log_event", str(state_file), "repair",
+                    "--session-id", "test-session", "--event-id", "cli-paused-log",
+                    "--message", "we repaired the mismatch", "--host-approved",
+                    "--character-id", "test-character", "--relationship-id", "test-relationship",
+                ],
+                text=True, capture_output=True, check=True,
+            )
+            self.assertEqual(json.loads(paused.stdout)["status"], "paused")
+            self.assertEqual(state_file.read_bytes(), before_paused)
+
+    def test_idempotency_retention_bounds_ledgers_and_prunes_session_bundle(self):
+        state = self.bound_state()
+        state["idempotency_retention"]["session_limit"] = 3
+        state["idempotency_retention"]["event_limit"] = 8
+
+        for index in range(6):
+            session_id = f"session-{index}"
+            state, started = emotion_engine_utils.session_start(
+                state, session_id, f"start-{index}",
+                character_id="test-character", relationship_id="test-relationship",
+            )
+            self.assertEqual(started["status"], "started")
+            state, recorded = emotion_engine_utils.record_turn(
+                state, 0.1, 0.3, 0.5,
+                session_id=session_id,
+                event_id=f"turn-{index}",
+                host_approved=True,
+                character_id="test-character",
+                relationship_id="test-relationship",
+                appraisal="repair",
+                semantic_event_type="repair",
+                trust_evidence={
+                    "evidence_id": f"evidence-{index}",
+                    "evidence_type": "conflict_repair",
+                    "eligible": True,
+                },
+            )
+            self.assertEqual(recorded["status"], "recorded")
+            state, closed = emotion_engine_utils.session_end(
+                state, session_id, f"end-{index}",
+                character_id="test-character", relationship_id="test-relationship",
+            )
+            self.assertEqual(closed["status"], "closed")
+            state, settled = emotion_engine_utils.settle_trust(
+                state, session_id, f"settle-{index}",
+                character_id="test-character", relationship_id="test-relationship",
+            )
+            self.assertEqual(settled["status"], "settled")
+
+        retained_sessions = {entry["session_id"] for entry in state["session_ledger"]}
+        self.assertEqual(len(state["session_ledger"]), 3)
+        self.assertLessEqual(len(state["processed_event_ids"]), 8)
+        self.assertEqual(retained_sessions, {"session-3", "session-4", "session-5"})
+        self.assertTrue(all(
+            entry["session_id"] in retained_sessions for entry in state["trust_evidence"]
+        ))
+        self.assertTrue(all(
+            entry["session_id"] in retained_sessions for entry in state["trust_settlements"]
+        ))
+        self.assertEqual(state["idempotency_retention"]["pruned_sessions"], 3)
+        self.assertGreater(state["idempotency_retention"]["pruned_events"], 0)
+
+    def test_activation_check_reports_migration_binding_and_ready_states(self):
+        legacy = deepcopy(emotion_engine_utils.DEFAULT_STATE)
+        legacy["_schema"] = emotion_engine_utils.LEGACY_STATE_SCHEMA
+        legacy.pop("identity", None)
+        migration = emotion_engine_utils.activation_check(legacy, "/tmp/state.json")
+        binding = emotion_engine_utils.activation_check(
+            emotion_engine_utils.default_state(), "/tmp/state.json"
+        )
+        ready = emotion_engine_utils.activation_check(self.bound_state(), "/tmp/state.json")
+
+        self.assertEqual(migration["status"], "migration_required")
+        self.assertIn("--apply", migration["next_steps"]["apply"])
+        self.assertEqual(binding["status"], "identity_binding_required")
+        self.assertEqual(ready["status"], "ready")
+        self.assertEqual(ready["engine_version"], "2.0.0-rc.2")
+
     def test_atomic_gate_records_relationship_signal_and_evidence(self):
         state = self.start_session()
         state, result = emotion_engine_utils.evaluate_and_record_turn(
@@ -873,10 +1120,54 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             "semantic_event_type": "work_checkpoint",
             "situation": "tests passed",
         })
+        state["session_ledger"][0]["turn_count"] = 1
         audit = emotion_engine_utils.audit_state_integrity(state)
         self.assertTrue(audit["ok"])
         self.assertEqual(audit["hard_errors"], [])
         self.assertEqual(audit["semantic_warnings"][0]["code"], "task_like_emotional_memory")
+
+    def test_audit_detects_lifecycle_trajectory_and_settlement_corruption(self):
+        state = self.collaborative_state()
+        state, settled = self.settle(state)
+        self.assertEqual(settled["status"], "settled")
+        duplicate_settlement = deepcopy(state["trust_settlements"][0])
+        duplicate_settlement["settlement_id"] = "another-settlement"
+        state["trust_settlements"].append(duplicate_settlement)
+        state["trust_evidence"][0]["eligible"] = False
+        state["session_ledger"][0]["turn_count"] = 0
+        state["emotion_trajectory"][0]["turn"] = 7
+        state["emotion_trajectory"][0]["session_id"] = "wrong-session"
+
+        audit = emotion_engine_utils.audit_state_integrity(state)
+        codes = {error["code"] for error in audit["hard_errors"]}
+
+        self.assertFalse(audit["ok"])
+        self.assertIn("multiple_settlements_for_session", codes)
+        self.assertIn("settlement_references_ineligible_evidence", codes)
+        self.assertIn("session_ledger_turn_count_too_small", codes)
+        self.assertIn("trajectory_turn_sequence", codes)
+        self.assertIn("trajectory_session_mismatch", codes)
+
+    def test_audit_reports_aggregate_task_memory_contamination(self):
+        state = self.start_session()
+        for index in range(3):
+            state["emotion_log"].append({
+                "timestamp": emotion_engine_utils.now_iso(),
+                "event_type": "turn",
+                "session_id": "test-session",
+                "event_id": f"task-{index}",
+                "subject": "task",
+                "semantic_event_type": "work_checkpoint",
+                "situation": "tests passed",
+            })
+        state["session_ledger"][0]["turn_count"] = 3
+
+        audit = emotion_engine_utils.audit_state_integrity(state)
+        warning_codes = {warning["code"] for warning in audit["semantic_warnings"]}
+
+        self.assertTrue(audit["ok"])
+        self.assertIn("high_task_like_memory_ratio", warning_codes)
+        self.assertEqual(audit["counts"]["task_like_turns"], 3)
 
     def test_direct_record_turn_cannot_bypass_semantic_ownership(self):
         state = self.start_session()
@@ -903,7 +1194,8 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         before = deepcopy(legacy)
         plan = emotion_engine_utils.repair_plan(legacy)
         self.assertTrue(plan["dry_run"])
-        self.assertEqual(plan["proposed_actions"][0]["action"], "migrate_state")
+        self.assertEqual(plan["proposed_actions"][0]["action"], "archive_state_before_repair")
+        self.assertEqual(plan["proposed_actions"][1]["action"], "migrate_state")
         self.assertEqual(legacy, before)
 
     def test_reconcile_trust_defaults_to_preview_and_apply_is_additive(self):

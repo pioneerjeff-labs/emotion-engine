@@ -54,16 +54,27 @@ else
   printf "Existing state file preserved: %s\n" "$STATE_FILE"
 fi
 
-if [ -t 0 ]; then
-  printf "Describe the vibe, or press Enter for default:\n> "
-  read -r STYLE || true
-  if [ "${STYLE:-}" ]; then
-    CLAUDE_EMOTION_STATE="$STATE_FILE" "$DEST/scripts/claude_emotion.sh" configure --style "$STYLE"
+if ACTIVATION_OUTPUT=$("$PYTHON" "$DEST/scripts/emotion_engine_utils.py" activation_check "$STATE_FILE" 2>&1); then
+  ACTIVATION_STATUS=0
+else
+  ACTIVATION_STATUS=$?
+fi
+printf "%s\n" "$ACTIVATION_OUTPUT"
+
+if [ "$ACTIVATION_STATUS" -eq 0 ]; then
+  if [ -t 0 ]; then
+    printf "Describe the vibe, or press Enter for default:\n> "
+    read -r STYLE || true
+    if [ "${STYLE:-}" ]; then
+      CLAUDE_EMOTION_STATE="$STATE_FILE" "$DEST/scripts/claude_emotion.sh" configure --style "$STYLE"
+    else
+      CLAUDE_EMOTION_STATE="$STATE_FILE" "$DEST/scripts/claude_emotion.sh" status
+    fi
   else
     CLAUDE_EMOTION_STATE="$STATE_FILE" "$DEST/scripts/claude_emotion.sh" status
   fi
 else
-  CLAUDE_EMOTION_STATE="$STATE_FILE" "$DEST/scripts/claude_emotion.sh" status
+  printf "Emotion Engine files installed; activation is pending the state step shown above.\n"
 fi
 
 printf "\nClaude Skill installed at: %s\n" "$DEST"

@@ -18,6 +18,8 @@ From this folder:
 ./install.sh
 ```
 
+Installation never migrates or binds state automatically. It runs a read-only activation check and prints the exact explicit migration or identity-binding command when state is not ready.
+
 By default, this installs to:
 
 ```text

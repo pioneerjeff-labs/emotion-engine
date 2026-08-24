@@ -1,7 +1,9 @@
 import importlib.util
 import argparse
 import io
+import json
 import sys
+import tempfile
 import unittest
 from contextlib import redirect_stdout
 from pathlib import Path
@@ -63,6 +65,31 @@ class SimulateStateLifecycleTest(unittest.TestCase):
         self.assertIn("会话总结", text)
         self.assertNotIn("User input", text)
         self.assertNotIn("Session Summary", text)
+
+    def test_resume_opens_a_new_session_instead_of_replaying_closed_ids(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = str(Path(tmpdir) / "emotion-state.json")
+            first = argparse.Namespace(
+                state=state_file, resume=False, session_id=None, style=None,
+                soul_file=None, turn=["Thanks for helping."], lang="en", json=False,
+            )
+            resumed = argparse.Namespace(
+                state=state_file, resume=True, session_id=None, style=None,
+                soul_file=None, turn=["Thanks for helping again."], lang="en", json=False,
+            )
+
+            with redirect_stdout(io.StringIO()):
+                simulator.run_simulation(first)
+                simulator.run_simulation(resumed)
+
+            state = json.loads(Path(state_file).read_text(encoding="utf-8"))
+            self.assertEqual(state["session_count"], 2)
+            self.assertEqual(state["total_turns"], 2)
+            self.assertEqual(len(state["session_ledger"]), 2)
+            self.assertNotEqual(
+                state["session_ledger"][0]["session_id"],
+                state["session_ledger"][1]["session_id"],
+            )
 
 
 if __name__ == "__main__":

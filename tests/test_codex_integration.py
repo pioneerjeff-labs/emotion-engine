@@ -97,7 +97,7 @@ class CodexIntegrationTest(unittest.TestCase):
             env["CODEX_EMOTION_STATE"] = str(state_file)
             env["PYTHONDONTWRITEBYTECODE"] = "1"
 
-            subprocess.run(
+            result = subprocess.run(
                 ["sh", str(CODEX_SKILL / "install.sh")],
                 cwd=str(CODEX_SKILL),
                 env=env,
@@ -115,6 +115,8 @@ class CodexIntegrationTest(unittest.TestCase):
             self.assertTrue((installed / "scripts" / "register_mcp_client.py").exists())
             self.assertTrue((installed / "spec" / "emotion-state.schema.json").exists())
             self.assertTrue(state_file.exists())
+            self.assertIn('"status": "identity_binding_required"', result.stdout)
+            self.assertIn("bind_identity", result.stdout)
 
             raw_status = subprocess.run(
                 [str(installed / "scripts" / "codex_emotion.sh"), "status", "--raw"],
@@ -173,6 +175,41 @@ class CodexIntegrationTest(unittest.TestCase):
                 check=True,
             ).stdout
             self.assertEqual(json.loads(raw_status)["_schema"], "emotion-engine-state/v3")
+
+    def test_installer_preserves_v2_state_and_prints_explicit_migration_flow(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            skills_dir = tmp_path / "skills"
+            state_file = tmp_path / "state" / "emotion-state.json"
+            state_file.parent.mkdir(parents=True)
+            legacy = {
+                "_schema": "emotion-engine-state/v2",
+                "enabled": True,
+                "runtime_mode": "light",
+                "boundary_state": {"last_boundary": "preserve me"},
+            }
+            state_file.write_text(json.dumps(legacy, indent=2) + "\n", encoding="utf-8")
+            before = state_file.read_bytes()
+            env = os.environ.copy()
+            env["CODEX_SKILLS_DIR"] = str(skills_dir)
+            env["CODEX_EMOTION_STATE"] = str(state_file)
+            env["PYTHONDONTWRITEBYTECODE"] = "1"
+
+            installed = subprocess.run(
+                ["sh", str(CODEX_SKILL / "install.sh")],
+                cwd=str(CODEX_SKILL),
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+
+            self.assertEqual(state_file.read_bytes(), before)
+            self.assertIn('"status": "migration_required"', installed.stdout)
+            self.assertIn("migrate_state", installed.stdout)
+            self.assertIn("--apply", installed.stdout)
+            self.assertIn("activation is pending", installed.stdout)
 
     def test_package_script_builds_self_contained_zip(self):
         output = CODEX_INTEGRATION / "emotion-engine-codex-skill.zip"

@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+## 2.0.0-rc.2 - 2026-08-24
+
+- Serialized same-process threads as well as processes around state-file transactions, closing a lost-write race caused by globally shared reentrancy state.
+- Preserved optional and host-owned top-level fields during explicit v2-to-v3 migration while keeping lifecycle and identity fields engine-controlled.
+- Routed `log_event` and pre-turn decay through the same paused, session, idempotency, identity, host-approval, and semantic gates as turn recording.
+- Added bounded, observable idempotency retention with bundled pruning of completed sessions, trust evidence, and settlements.
+- Made demo and simulator resumes open uniquely identified native sessions and fail clearly on rejected lifecycle events instead of half-replaying closed sessions.
+- Added runtime version observability and installer activation checks with non-destructive v2 migration and unbound-identity guidance.
+- Expanded lifecycle, trajectory, settlement, and semantic-contamination audits and made repair plans archive-first with explicit acceptance checks.
+
 ## 2.0.0-rc.1 - 2026-08-23
 
 - Added the identity-bound v3 state contract with explicit v2 migration, capability declarations, and read-only legacy handling.

@@ -27,6 +27,7 @@
     "session",
     "session_ledger",
     "processed_event_ids",
+    "idempotency_retention",
     "log_limit"
   ],
   "properties": {
@@ -132,6 +133,9 @@
       "items": {"type": "string"},
       "uniqueItems": true
     },
+    "idempotency_retention": {
+      "$ref": "#/$defs/idempotencyRetention"
+    },
     "log_limit": {
       "type": "integer",
       "minimum": 25
@@ -149,6 +153,22 @@
     }
   },
   "$defs": {
+    "idempotencyRetention": {
+      "description": "Bounded replay-protection window. Exact duplicate rejection applies to retained ids; pruning counters make older-window expiry observable.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["scope", "session_limit", "event_limit", "pruned_sessions", "pruned_events", "pruned_evidence", "pruned_settlements", "last_pruned_at"],
+      "properties": {
+        "scope": {"const": "retained_window"},
+        "session_limit": {"type": "integer", "minimum": 1},
+        "event_limit": {"type": "integer", "minimum": 4},
+        "pruned_sessions": {"type": "integer", "minimum": 0},
+        "pruned_events": {"type": "integer", "minimum": 0},
+        "pruned_evidence": {"type": "integer", "minimum": 0},
+        "pruned_settlements": {"type": "integer", "minimum": 0},
+        "last_pruned_at": {"$ref": "#/$defs/nullableIsoTimestamp"}
+      }
+    },
     "stateIdentity": {
       "type": "object",
       "additionalProperties": false,

@@ -12,7 +12,9 @@
     "session_idempotency/v1",
     "trust_evidence/v1",
     "behavior_audit/v1",
-    "repair_plan/v1"
+    "repair_plan/v1",
+    "migration_extensions/v1",
+    "bounded_idempotency/v1"
   ],
   "enabled": true,
   "runtime_mode": "light",
@@ -66,5 +68,15 @@
   },
   "session_ledger": [],
   "processed_event_ids": [],
+  "idempotency_retention": {
+    "scope": "retained_window",
+    "session_limit": 512,
+    "event_limit": 4096,
+    "pruned_sessions": 0,
+    "pruned_events": 0,
+    "pruned_evidence": 0,
+    "pruned_settlements": 0,
+    "last_pruned_at": null
+  },
   "log_limit": 200
 }

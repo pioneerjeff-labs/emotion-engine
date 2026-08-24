@@ -11,6 +11,7 @@ record_turn -> settle_trust.
 
 import argparse
 import json
+import uuid
 
 import emotion_engine_utils as engine
 
@@ -425,11 +426,14 @@ def run_simulation(args):
     else:
         print_human_header(state, args.lang)
 
-    session_id = "simulator-session"
-    state, _ = engine.session_start(
-        state, session_id, "simulator-session-start",
+    session_id = getattr(args, "session_id", None) or f"simulator-{uuid.uuid4().hex}"
+    event_prefix = session_id
+    state, started = engine.session_start(
+        state, session_id, f"{event_prefix}-start",
         character_id="simulator", relationship_id="simulator-demo",
     )
+    if started.get("status") != "started":
+        raise SystemExit(f"session_start failed: {json.dumps(started, ensure_ascii=False)}")
     if args.json:
         print_json("Session Start", {
             "emotion": state["emotion"],
@@ -438,11 +442,19 @@ def run_simulation(args):
         }, args.lang)
 
     for idx, message in enumerate(turns, 1):
-        state = engine.apply_in_session_decay(state)
+        state, decayed = engine.pre_turn_decay(
+            state,
+            session_id=session_id,
+            event_id=f"{event_prefix}-decay-{idx}",
+            character_id="simulator",
+            relationship_id="simulator-demo",
+        )
+        if decayed.get("status") != "applied":
+            raise SystemExit(f"pre_turn_decay failed: {json.dumps(decayed, ensure_ascii=False)}")
         appraisal = engine.appraise_message(state, message)
         suggested = appraisal["suggested"]
         before = state["emotion"].copy()
-        state, _ = engine.record_turn(
+        state, recorded = engine.record_turn(
             state,
             suggested["P"],
             suggested["A"],
@@ -454,13 +466,15 @@ def run_simulation(args):
             follow_up_bias=tone_preview(state, args.lang),
             salience=0.45,
             session_id=session_id,
-            event_id=f"simulator-turn-{idx}",
+            event_id=f"{event_prefix}-turn-{idx}",
             subject="relationship",
             semantic_event_type=appraisal["appraisal"],
             host_approved=True,
             character_id="simulator",
             relationship_id="simulator-demo",
         )
+        if recorded.get("status") not in {"recorded", "state_only"}:
+            raise SystemExit(f"record_turn failed: {json.dumps(recorded, ensure_ascii=False)}")
         if args.json:
             print_json(f"Turn {idx}", {
                 "user": message,
@@ -483,13 +497,17 @@ def run_simulation(args):
 
     trust_before = state["trust"]
     state, closed = engine.session_end(
-        state, session_id, "simulator-session-end",
+        state, session_id, f"{event_prefix}-end",
         character_id="simulator", relationship_id="simulator-demo",
     )
+    if closed.get("status") != "closed":
+        raise SystemExit(f"session_end failed: {json.dumps(closed, ensure_ascii=False)}")
     state, settlement = engine.settle_trust(
-        state, session_id, "simulator-trust-settlement",
+        state, session_id, f"{event_prefix}-settle",
         character_id="simulator", relationship_id="simulator-demo",
     )
+    if settlement.get("status") not in {"settled", "no_eligible_evidence"}:
+        raise SystemExit(f"settle_trust failed: {json.dumps(settlement, ensure_ascii=False)}")
     patterns = closed.get("patterns", {})
     trust_delta = settlement.get("raw_delta", 0.0)
 
@@ -513,6 +531,7 @@ def main():
     parser = argparse.ArgumentParser(description="Check the Emotion Engine state lifecycle locally.")
     parser.add_argument("--state", help="Optional state file to read/write. Omit for an ephemeral simulation.")
     parser.add_argument("--resume", action="store_true", help="Resume from --state instead of starting fresh.")
+    parser.add_argument("--session-id", help="Optional explicit session id; defaults to a unique id per run.")
     parser.add_argument("--style", help="Natural-language character vibe, e.g. warm but clearly bounded.")
     parser.add_argument("--soul-file", help="Path to SOUL.md-like character description.")
     parser.add_argument("--turn", action="append", help="User turn to simulate. Can be repeated.")
