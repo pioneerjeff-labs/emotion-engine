@@ -110,7 +110,7 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(state["trust"], 0.1)
         self.assertEqual(state["emotion_log"], [])
         self.assertEqual(
-            emotion_engine_utils.public_status(state)["engine_version"], "2.0.0-rc.2"
+            emotion_engine_utils.public_status(state)["engine_version"], "2.0.0-rc.3"
         )
 
     def test_configure_style_updates_baseline(self):
@@ -310,6 +310,95 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(paused["status"], "paused")
         self.assertEqual(state, paused_snapshot)
 
+    def test_paused_legacy_decay_and_manual_trust_update_are_exact_noops(self):
+        state = self.bound_state()
+        state["enabled"] = False
+        snapshot = deepcopy(state)
+
+        state, decay = emotion_engine_utils.apply_time_decay(
+            state,
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        self.assertEqual(decay["status"], "paused")
+        self.assertEqual(state, snapshot)
+
+        state, trust_update = emotion_engine_utils.apply_manual_trust_update(
+            state,
+            0.02,
+            "explicit host relationship judgment",
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        self.assertEqual(trust_update["status"], "paused")
+        self.assertEqual(state, snapshot)
+
+    def test_manual_trust_update_writes_its_own_reason_without_touching_previous_log(self):
+        state = self.bound_state()
+        state = emotion_engine_utils.add_emotion_log(
+            state,
+            "turn",
+            situation="previous unrelated event",
+            appraisal="repair",
+        )
+        previous_log = deepcopy(state["emotion_log"])
+
+        state, result = emotion_engine_utils.apply_manual_trust_update(
+            state,
+            0.02,
+            "explicit host relationship judgment",
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+
+        self.assertEqual(result["status"], "applied")
+        self.assertEqual(state["emotion_log"][:-1], previous_log)
+        self.assertEqual(state["emotion_log"][-1]["event_type"], "trust_update")
+        self.assertEqual(
+            state["emotion_log"][-1]["manual_override_reason"],
+            "explicit host relationship judgment",
+        )
+
+    def test_paused_decay_and_update_trust_cli_leave_state_file_byte_identical(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            state = self.bound_state()
+            state["enabled"] = False
+            emotion_engine_utils.save_state(state_file, state)
+            before = state_file.read_bytes()
+            identity_args = [
+                "--character-id", "test-character",
+                "--relationship-id", "test-relationship",
+            ]
+
+            decay = subprocess.run(
+                [sys.executable, str(SCRIPT), "decay", str(state_file), *identity_args],
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            self.assertEqual(json.loads(decay.stdout)["status"], "paused")
+            self.assertEqual(state_file.read_bytes(), before)
+
+            trust_update = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "update_trust",
+                    str(state_file),
+                    "0.02",
+                    "--host-approved",
+                    "--reason",
+                    "explicit host relationship judgment",
+                    *identity_args,
+                ],
+                text=True,
+                capture_output=True,
+                check=True,
+            )
+            self.assertEqual(json.loads(trust_update.stdout)["status"], "paused")
+            self.assertEqual(state_file.read_bytes(), before)
+
     def test_patterns_use_pulse_to_distinguish_visible_movement_from_flat_mood(self):
         state = self.start_session()
         state["volatility_profile"] = "expressive"
@@ -446,6 +535,37 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(result["status"], "settled")
         self.assertEqual(result["raw_delta"], 0.03)
         self.assertGreater(state["trust"], 0.1)
+
+    def test_settle_trust_requires_event_id_and_records_successful_event(self):
+        state = self.collaborative_state()
+        snapshot = deepcopy(state)
+
+        with self.assertRaisesRegex(ValueError, "session_id and event_id"):
+            emotion_engine_utils.settle_trust(
+                state,
+                "test-session",
+                character_id="test-character",
+                relationship_id="test-relationship",
+            )
+        self.assertEqual(state, snapshot)
+
+        state, result = emotion_engine_utils.settle_trust(
+            state,
+            "test-session",
+            "settlement-audit-event",
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        self.assertEqual(result["status"], "settled")
+        self.assertIn("settlement-audit-event", state["processed_event_ids"])
+        self.assertEqual(result["event_id"], "settlement-audit-event")
+        self.assertEqual(
+            state["trust_settlements"][-1]["event_id"], "settlement-audit-event"
+        )
+        self.assertEqual(
+            state["session_ledger"][-1]["settlement_event_id"],
+            "settlement-audit-event",
+        )
 
     def test_settle_trust_single_praise_alone_does_not_give_large_delta(self):
         state = self.start_session()
@@ -1083,7 +1203,7 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertIn("--apply", migration["next_steps"]["apply"])
         self.assertEqual(binding["status"], "identity_binding_required")
         self.assertEqual(ready["status"], "ready")
-        self.assertEqual(ready["engine_version"], "2.0.0-rc.2")
+        self.assertEqual(ready["engine_version"], "2.0.0-rc.3")
 
     def test_atomic_gate_records_relationship_signal_and_evidence(self):
         state = self.start_session()

@@ -31,11 +31,48 @@ class HermesIntegrationTest(unittest.TestCase):
         )
         return result.stdout
 
+    def assert_installer_preserves_v2_state(self, package_dir):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmp_path = Path(tmp)
+            state_file = tmp_path / "state" / "emotion-state.json"
+            state_file.parent.mkdir(parents=True)
+            legacy = {
+                "_schema": "emotion-engine-state/v2",
+                "enabled": True,
+                "runtime_mode": "light",
+                "boundary_state": {"last_boundary": "preserve me"},
+            }
+            state_file.write_text(json.dumps(legacy, indent=2) + "\n", encoding="utf-8")
+            before = state_file.read_bytes()
+            env = os.environ.copy()
+            env.update({
+                "HERMES_SKILL_DEST": str(tmp_path / "installed" / "emotion-engine"),
+                "HERMES_EMOTION_STATE": str(state_file),
+                "PYTHONDONTWRITEBYTECODE": "1",
+            })
+
+            installed = subprocess.run(
+                ["sh", str(package_dir / "install.sh")],
+                cwd=str(package_dir),
+                env=env,
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+
+            self.assertEqual(state_file.read_bytes(), before)
+            self.assertIn('"status": "migration_required"', installed.stdout)
+            self.assertIn("migrate_state", installed.stdout)
+            self.assertIn("--apply", installed.stdout)
+            self.assertIn("activation is pending", installed.stdout)
+
     def test_package_contains_required_files(self):
         self.assertTrue((HERMES_SKILL / "SKILL.md").exists())
         self.assertTrue((HERMES_SKILL / "README.md").exists())
         self.assertTrue((HERMES_SKILL / "install.sh").exists())
         self.assertTrue(WRAPPER.exists())
+        self.assertIn("activation_check", (HERMES_SKILL / "install.sh").read_text())
 
     def test_wrapper_initializes_and_reports_status(self):
         with tempfile.TemporaryDirectory() as tmp:
@@ -75,6 +112,19 @@ class HermesIntegrationTest(unittest.TestCase):
             self.assertIn("emotion-engine/spec/emotion-state.schema.json", names)
             self.assertIn("emotion-engine/emotion-state-template.json", names)
             self.assertIn("emotion-engine/LICENSE", names)
+            with tempfile.TemporaryDirectory() as tmp:
+                with zipfile.ZipFile(output) as package:
+                    package.extractall(tmp)
+                package_dir = Path(tmp) / "emotion-engine"
+                self.assertEqual(
+                    (package_dir / "install.sh").read_bytes(),
+                    (GITHUB_TAP_SKILL / "install.sh").read_bytes(),
+                )
+                self.assertEqual(
+                    (package_dir / "scripts" / "hermes_emotion.sh").read_bytes(),
+                    (GITHUB_TAP_SKILL / "scripts" / "hermes_emotion.sh").read_bytes(),
+                )
+                self.assert_installer_preserves_v2_state(package_dir)
         finally:
             if output.exists():
                 output.unlink()
@@ -102,8 +152,17 @@ class HermesIntegrationTest(unittest.TestCase):
             self.assertTrue((output / "spec" / "emotion-state.schema.json").exists())
             self.assertTrue((output / "emotion-state-template.json").exists())
             self.assertTrue((output / "LICENSE").exists())
+            self.assertEqual(
+                (output / "install.sh").read_bytes(),
+                (GITHUB_TAP_SKILL / "install.sh").read_bytes(),
+            )
+            self.assertEqual(
+                (output / "scripts" / "hermes_emotion.sh").read_bytes(),
+                (GITHUB_TAP_SKILL / "scripts" / "hermes_emotion.sh").read_bytes(),
+            )
             self.assertNotIn("../../..", (output / "install.sh").read_text())
             self.assertNotIn("../../..", (output / "scripts" / "hermes_emotion.sh").read_text())
+            self.assert_installer_preserves_v2_state(output)
 
             with tempfile.TemporaryDirectory() as tmp:
                 state_file = Path(tmp) / "emotion-state.json"

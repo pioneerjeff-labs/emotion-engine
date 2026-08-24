@@ -46,7 +46,7 @@ class EmotionEngineMcpTest(unittest.TestCase):
         initialized = emotion_engine_mcp.handle_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
 
         self.assertEqual(initialized["result"]["serverInfo"]["name"], "emotion-engine")
-        self.assertEqual(initialized["result"]["serverInfo"]["version"], "2.0.0-rc.2")
+        self.assertEqual(initialized["result"]["serverInfo"]["version"], "2.0.0-rc.3")
         self.assertIn("tools", initialized["result"]["capabilities"])
 
         listed = emotion_engine_mcp.handle_request({"jsonrpc": "2.0", "id": 2, "method": "tools/list"})

@@ -215,7 +215,8 @@
         "closed_at": {"$ref": "#/$defs/nullableIsoTimestamp"},
         "settled_at": {"$ref": "#/$defs/nullableIsoTimestamp"},
         "turn_count": {"type": "integer", "minimum": 0},
-        "settlement_id": {"type": ["string", "null"]}
+        "settlement_id": {"type": ["string", "null"]},
+        "settlement_event_id": {"type": ["string", "null"]}
       }
     },
     "trustEvidence": {
@@ -252,6 +253,7 @@
       "required": ["settlement_id", "session_id", "raw_delta", "evidence_ids", "status"],
       "properties": {
         "settlement_id": {"type": "string", "minLength": 1},
+        "event_id": {"type": "string", "minLength": 1},
         "session_id": {"type": "string", "minLength": 1},
         "raw_delta": {"type": "number", "minimum": -0.2, "maximum": 0.05},
         "evidence_ids": {"type": "array", "items": {"type": "string"}, "uniqueItems": true},
