@@ -1,0 +1,30 @@
+name: unittest
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        python-version: ["3.9", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+      - name: Compile runtime entry points
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -m py_compile scripts/emotion_engine_utils.py scripts/emotion_engine_mcp.py
+      - name: Run unit and integration tests
+        env:
+          PYTHONDONTWRITEBYTECODE: "1"
+        run: python -m unittest discover -s tests -p 'test_*.py'

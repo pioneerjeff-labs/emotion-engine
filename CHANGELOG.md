@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+## 2.0.0-rc.3 - 2026-08-24
+
+- Required settlement event ids so successful trust settlement always joins the processed-event audit ledger.
+- Made legacy time decay and explicit manual trust overrides exact no-ops while paused, and attached override reasons only to their own new trust records.
+- Updated both Hermes package builders to emit the v3 activation check and non-destructive v2 migration guidance.
+- Aligned Hermes package metadata with the runtime release and added repository-level unittest CI.
+
 ## 2.0.0-rc.2 - 2026-08-24
 
 - Serialized same-process threads as well as processes around state-file transactions, closing a lost-write race caused by globally shared reentrancy state.

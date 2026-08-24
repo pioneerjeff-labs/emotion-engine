@@ -93,7 +93,7 @@ VOLATILITY_PROFILES = {
     },
 }
 
-ENGINE_VERSION = "2.0.0-rc.2"
+ENGINE_VERSION = "2.0.0-rc.3"
 STATE_SCHEMA = "emotion-engine-state/v3"
 LEGACY_STATE_SCHEMA = "emotion-engine-state/v2"
 STATE_CAPABILITIES = [
@@ -1649,6 +1649,38 @@ def compute_trust_time_decay(state):
     return state
 
 
+def apply_time_decay(state, character_id=None, relationship_id=None):
+    """Apply the legacy time-decay command while respecting paused state."""
+    state = require_expected_state_identity(state, character_id, relationship_id)
+    if not state.get("enabled", True):
+        return state, {
+            "status": "paused",
+            "emotion": deepcopy(state["emotion"]),
+            "affective_pulse": deepcopy(state["affective_pulse"]),
+            "trust": state["trust"],
+        }
+    before = state["emotion"].copy()
+    trust_before = state["trust"]
+    state = compute_mood_time_decay(state)
+    state = compute_trust_time_decay(state)
+    state = add_emotion_log(
+        state,
+        "time_decay",
+        cue="time-based drift applied",
+        before=before,
+        after=state["emotion"],
+        delta=emotion_delta(before, state["emotion"]),
+        tags=["decay"],
+        extra={"trust_before": round(trust_before, 4), "trust_after": state["trust"]},
+    )
+    return state, {
+        "status": "applied",
+        "emotion": deepcopy(state["emotion"]),
+        "affective_pulse": deepcopy(state["affective_pulse"]),
+        "trust": state["trust"],
+    }
+
+
 def apply_in_session_decay(state):
     """Apply the small between-turn drift toward personality baseline."""
     state = ensure_state_shape(state)
@@ -2402,10 +2434,11 @@ def settle_trust(
     session_id = normalize_identifier(
         session_id or state.get("session", {}).get("last_session_id"), "session_id"
     )
+    event_id = normalize_identifier(event_id, "event_id")
+    if not session_id or not event_id:
+        raise ValueError("settle_trust requires session_id and event_id")
     if not state.get("enabled", True):
         return state, {"status": "paused", "session_id": session_id, "raw_delta": 0.0}
-    if not session_id:
-        return state, {"status": "no_closed_session", "raw_delta": 0.0}
     record = session_record(state, session_id)
     if not record or record.get("status") not in {"closed", "settled"}:
         return state, {"status": "session_not_closed", "session_id": session_id, "raw_delta": 0.0}
@@ -2424,7 +2457,7 @@ def settle_trust(
             "settlement_id": record["settlement_id"],
             "raw_delta": 0.0,
         }
-    if event_id and event_already_processed(state, event_id):
+    if event_already_processed(state, event_id):
         return state, {"status": "duplicate_event", "session_id": session_id, "raw_delta": 0.0}
     raw_delta, reason_code, reason, evidence = assess_trust_settlement(state, session_id)
     if not evidence:
@@ -2453,10 +2486,12 @@ def settle_trust(
     record["status"] = "settled"
     record["settled_at"] = now_iso()
     record["settlement_id"] = settlement_id
+    record["settlement_event_id"] = event_id
     if state["session"].get("last_session_id") == session_id:
         state["session"]["settled_at"] = record["settled_at"]
     settlement = settlement_record(settlement_id, state, raw_delta, "settled", session_id=session_id)
     settlement.update({
+        "event_id": event_id,
         "session_id": session_id,
         "trust_before": trust_before,
         "trust_after": trust_after,
@@ -2464,10 +2499,10 @@ def settle_trust(
         "evidence_ids": evidence_ids,
     })
     state.setdefault("trust_settlements", []).append(settlement)
-    if event_id:
-        mark_event_processed(state, event_id)
+    mark_event_processed(state, event_id)
     return state, {
         "status": "settled",
+        "event_id": event_id,
         "session_id": session_id,
         "settlement_id": settlement_id,
         "raw_delta": raw_delta,
@@ -2478,7 +2513,14 @@ def settle_trust(
         "evidence_ids": evidence_ids,
     }
 
-def apply_trust_delta(state, raw_delta, settlement_id=None, evidence_ids=None, session_id=None):
+def apply_trust_delta(
+    state,
+    raw_delta,
+    settlement_id=None,
+    evidence_ids=None,
+    session_id=None,
+    manual_override_reason=None,
+):
     """Apply trust change with diminishing returns for positive deltas."""
     state = require_v3_state(state)
     if not state.get("enabled", True):
@@ -2508,22 +2550,56 @@ def apply_trust_delta(state, raw_delta, settlement_id=None, evidence_ids=None, s
         "settlement_id": settlement_id,
         "evidence_ids": list(evidence_ids or []),
     }
+    manual_override_reason = truncate_text(manual_override_reason, 220)
     append_limited(state, "trust_history", entry, 50)
 
+    log_extra = {
+        "trust_before": round(trust, 4),
+        "trust_after": round(new_trust, 4),
+        "session_id": session_id,
+        "settlement_id": settlement_id,
+        "evidence_ids": list(evidence_ids or []),
+    }
+    if manual_override_reason:
+        log_extra["manual_override_reason"] = manual_override_reason
     state = add_emotion_log(
         state,
         "trust_update",
-        cue="relationship trust recalibrated from session evidence",
+        cue=(
+            "relationship trust adjusted by explicit host override"
+            if manual_override_reason
+            else "relationship trust recalibrated from session evidence"
+        ),
         tags=["trust"],
-        extra={
-            "trust_before": round(trust, 4),
-            "trust_after": round(new_trust, 4),
-            "session_id": session_id,
-            "settlement_id": settlement_id,
-            "evidence_ids": list(evidence_ids or []),
-        },
+        extra=log_extra,
     )
     return state
+
+
+def apply_manual_trust_update(
+    state,
+    raw_delta,
+    reason,
+    character_id=None,
+    relationship_id=None,
+):
+    """Apply an explicit host trust override without mutating unrelated logs."""
+    state = require_expected_state_identity(state, character_id, relationship_id)
+    reason = truncate_text(reason, 220)
+    if not reason:
+        raise ValueError("manual trust update requires a reason")
+    if not state.get("enabled", True):
+        return state, {
+            "status": "paused",
+            "trust": state["trust"],
+            "trust_anchor": state["trust_anchor"],
+        }
+    state = apply_trust_delta(state, raw_delta, manual_override_reason=reason)
+    return state, {
+        "status": "applied",
+        "trust": state["trust"],
+        "trust_anchor": state["trust_anchor"],
+    }
 
 
 # ── Session Lifecycle ────────────────────────────────────────────────
@@ -3664,27 +3740,14 @@ def run_command(command, state_file, state):
 
     elif command == "decay":
         args = sys.argv[3:]
-        state = require_expected_state_identity(
+        state, result = apply_time_decay(
             state,
-            cli_option(args, "--character-id"),
-            cli_option(args, "--relationship-id"),
+            character_id=cli_option(args, "--character-id"),
+            relationship_id=cli_option(args, "--relationship-id"),
         )
-        before = state["emotion"].copy()
-        trust_before = state["trust"]
-        state = compute_mood_time_decay(state)
-        state = compute_trust_time_decay(state)
-        state = add_emotion_log(
-            state,
-            "time_decay",
-            cue="time-based drift applied",
-            before=before,
-            after=state["emotion"],
-            delta=emotion_delta(before, state["emotion"]),
-            tags=["decay"],
-            extra={"trust_before": round(trust_before, 4), "trust_after": state["trust"]},
-        )
-        save_state(state_file, state)
-        print_json({"emotion": state["emotion"], "affective_pulse": state["affective_pulse"], "trust": state["trust"]})
+        if result["status"] == "applied":
+            save_state(state_file, state)
+        print_json(result)
 
     elif command == "pre_turn_decay":
         args = sys.argv[3:]
@@ -3746,15 +3809,16 @@ def run_command(command, state_file, state):
         args = sys.argv[4:]
         if "--host-approved" not in args or not cli_option(args, "--reason"):
             raise ValueError("update_trust requires --host-approved and --reason")
-        state = require_expected_state_identity(
+        state, result = apply_manual_trust_update(
             state,
-            cli_option(args, "--character-id"),
-            cli_option(args, "--relationship-id"),
+            sys.argv[3],
+            cli_option(args, "--reason"),
+            character_id=cli_option(args, "--character-id"),
+            relationship_id=cli_option(args, "--relationship-id"),
         )
-        state = apply_trust_delta(state, sys.argv[3])
-        state["emotion_log"][-1]["manual_override_reason"] = truncate_text(cli_option(args, "--reason"), 220)
-        save_state(state_file, state)
-        print_json({"trust": state["trust"], "trust_anchor": state["trust_anchor"]})
+        if result["status"] == "applied":
+            save_state(state_file, state)
+        print_json(result)
 
     elif command == "record_turn":
         if len(sys.argv) < 6:

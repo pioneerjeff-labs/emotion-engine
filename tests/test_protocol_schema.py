@@ -91,6 +91,11 @@ class ProtocolSchemaTest(unittest.TestCase):
         self.assertEqual(
             self.template["idempotency_retention"]["scope"], "retained_window"
         )
+        self.assertIn("event_id", self.schema["$defs"]["trustSettlement"]["properties"])
+        self.assertIn(
+            "settlement_event_id",
+            self.schema["$defs"]["sessionLedgerEntry"]["properties"],
+        )
         self.assertIn("bounded_idempotency/v1", self.template["capabilities"])
         self.assertEqual(
             self.schema["$defs"]["trustEvidenceInput"]["properties"]["eligible"]["const"],
