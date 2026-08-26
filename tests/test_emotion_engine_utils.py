@@ -110,7 +110,7 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(state["trust"], 0.1)
         self.assertEqual(state["emotion_log"], [])
         self.assertEqual(
-            emotion_engine_utils.public_status(state)["engine_version"], "2.0.0-rc.3"
+            emotion_engine_utils.public_status(state)["engine_version"], "2.0.0-rc.4"
         )
 
     def test_configure_style_updates_baseline(self):
@@ -332,6 +332,43 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         )
         self.assertEqual(trust_update["status"], "paused")
         self.assertEqual(state, snapshot)
+
+    def test_pause_and_resume_keep_runtime_mode_in_sync(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "state.json"
+            state = self.bound_state()
+            state["runtime_mode"] = "always"
+            emotion_engine_utils.save_state(state_file, state)
+
+            paused = subprocess.run(
+                [sys.executable, str(SCRIPT), "pause", str(state_file)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(json.loads(paused.stdout)["runtime_mode"], "paused")
+            paused_state = emotion_engine_utils.load_state(state_file)
+            self.assertFalse(paused_state["enabled"])
+            self.assertEqual(paused_state["runtime_mode"], "paused")
+
+            resumed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "resume",
+                    str(state_file),
+                    "--mode",
+                    "light",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(json.loads(resumed.stdout)["runtime_mode"], "light")
+            resumed_state = emotion_engine_utils.load_state(state_file)
+            self.assertTrue(resumed_state["enabled"])
+            self.assertEqual(resumed_state["runtime_mode"], "light")
+            self.assertNotIn("runtime_mode_before_pause", resumed_state)
 
     def test_manual_trust_update_writes_its_own_reason_without_touching_previous_log(self):
         state = self.bound_state()
@@ -1189,6 +1226,92 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(state["idempotency_retention"]["pruned_sessions"], 3)
         self.assertGreater(state["idempotency_retention"]["pruned_events"], 0)
 
+    def test_active_session_retention_bounds_detail_without_changing_patterns_or_trust(self):
+        bounded = self.start_session()
+        control = deepcopy(bounded)
+        bounded["active_session_retention"]["trajectory_limit"] = 16
+        bounded["active_session_retention"]["evidence_limit"] = 8
+        control["active_session_retention"]["trajectory_limit"] = 512
+        control["active_session_retention"]["evidence_limit"] = 256
+
+        for index in range(80):
+            pleasure = -0.5 if index == 5 else (0.45 if index == 65 else ((index % 7) - 3) / 10)
+            evidence_type = "explicit_trust" if index % 2 == 0 else "hostility"
+            arguments = {
+                "session_id": "test-session",
+                "event_id": f"long-turn-{index}",
+                "host_approved": True,
+                "persist_log": False,
+                "character_id": "test-character",
+                "relationship_id": "test-relationship",
+                "semantic_event_type": "relationship_calibration",
+                "trust_evidence": {
+                    "evidence_id": f"long-evidence-{index}",
+                    "evidence_type": evidence_type,
+                    "weight": 0.03,
+                    "eligible": True,
+                },
+            }
+            bounded, bounded_result = emotion_engine_utils.record_turn(
+                bounded, pleasure, 0.4, 0.5, **arguments
+            )
+            control, control_result = emotion_engine_utils.record_turn(
+                control, pleasure, 0.4, 0.5, **arguments
+            )
+            self.assertEqual(bounded_result["status"], "state_only")
+            self.assertEqual(control_result["status"], "state_only")
+
+        retention = bounded["active_session_retention"]
+        self.assertEqual(len(bounded["emotion_trajectory"]), 16)
+        self.assertEqual(len(bounded["trust_evidence"]), 8)
+        self.assertEqual(retention["trajectory_summary"]["count"], 64)
+        self.assertEqual(retention["evidence_summaries"][0]["count"], 72)
+        self.assertEqual(
+            emotion_engine_utils.extract_patterns(bounded),
+            emotion_engine_utils.extract_patterns(control),
+        )
+
+        bounded, bounded_closed = emotion_engine_utils.session_end(
+            bounded,
+            "test-session",
+            "long-end",
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        control, control_closed = emotion_engine_utils.session_end(
+            control,
+            "test-session",
+            "long-end",
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        self.assertEqual(bounded_closed["patterns"], control_closed["patterns"])
+        bounded, bounded_settled = emotion_engine_utils.settle_trust(
+            bounded,
+            "test-session",
+            "long-settle",
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        control, control_settled = emotion_engine_utils.settle_trust(
+            control,
+            "test-session",
+            "long-settle",
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        self.assertEqual(bounded_settled["raw_delta"], control_settled["raw_delta"])
+        self.assertEqual(bounded["trust"], control["trust"])
+        self.assertTrue(
+            bounded["active_session_retention"]["evidence_summaries"][0][
+                "consumed_by_settlement_id"
+            ]
+        )
+        audit = emotion_engine_utils.audit_state_integrity(bounded)
+        self.assertTrue(audit["ok"], audit)
+        self.assertEqual(audit["counts"]["summarized_trajectory"], 64)
+        self.assertEqual(audit["counts"]["summarized_trust_evidence"], 72)
+
     def test_activation_check_reports_migration_binding_and_ready_states(self):
         legacy = deepcopy(emotion_engine_utils.DEFAULT_STATE)
         legacy["_schema"] = emotion_engine_utils.LEGACY_STATE_SCHEMA
@@ -1203,7 +1326,7 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertIn("--apply", migration["next_steps"]["apply"])
         self.assertEqual(binding["status"], "identity_binding_required")
         self.assertEqual(ready["status"], "ready")
-        self.assertEqual(ready["engine_version"], "2.0.0-rc.3")
+        self.assertEqual(ready["engine_version"], "2.0.0-rc.4")
 
     def test_atomic_gate_records_relationship_signal_and_evidence(self):
         state = self.start_session()

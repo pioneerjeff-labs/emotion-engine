@@ -1,6 +1,6 @@
 # Emotion Engine State Protocol
 
-Status: v3 contract for the `2.0.0-rc.3` release candidate
+Status: v3 contract for the `2.0.0-rc.4` release candidate
 
 Emotion Engine is a compact emotional-continuity state layer for LLM-powered agents. This document describes the state packet shape and integration contract so adapters can read, write, and map Emotion Engine state without reverse-engineering the helper script.
 
@@ -109,7 +109,8 @@ A minimal unbound v3 packet looks like this. It can be inspected and configured,
     "behavior_audit/v1",
     "repair_plan/v1",
     "migration_extensions/v1",
-    "bounded_idempotency/v1"
+    "bounded_idempotency/v1",
+    "bounded_active_session/v1"
   ],
   "enabled": true,
   "runtime_mode": "light",
@@ -168,6 +169,15 @@ A minimal unbound v3 packet looks like this. It can be inspected and configured,
     "pruned_evidence": 0,
     "pruned_settlements": 0,
     "last_pruned_at": null
+  },
+  "active_session_retention": {
+    "trajectory_limit": 512,
+    "evidence_limit": 256,
+    "pruned_trajectory_entries": 0,
+    "summarized_evidence_entries": 0,
+    "last_compacted_at": null,
+    "trajectory_summary": null,
+    "evidence_summaries": []
   },
   "log_limit": 200
 }
@@ -378,6 +388,19 @@ Each `record_turn` appends a compact entry:
 ```
 
 `session_start` clears this list for the new session. Long-term compact memory belongs in `emotion_log`, not in `emotion_trajectory`.
+
+The helper keeps at most `active_session_retention.trajectory_limit` detailed trajectory entries for one live session (default `512`). Older entries are folded into an exact numeric summary used by pattern extraction, so a long session does not grow this list without bound or change session-end patterns.
+
+### `active_session_retention`
+
+Bounded-detail policy for a single live session. It is separate from `idempotency_retention`, which bounds completed lifecycle and event replay ledgers.
+
+- `trajectory_limit` and `evidence_limit` declare how many recent detailed entries remain in the packet.
+- `trajectory_summary` keeps sufficient aggregate statistics for exact pattern extraction without retaining old turn text.
+- `evidence_summaries` keep per-session settlement aggregates and a digest chain for compact audit continuity. They do not reconstruct discarded evidence prose.
+- `pruned_trajectory_entries`, `summarized_evidence_entries`, and `last_compacted_at` make compaction observable.
+
+The default limits are `512` trajectory entries and `256` trust-evidence entries. Trust settlement combines the compact summary with the retained evidence tail and consumes both once. A host that requires individual old evidence ids must archive them externally before they leave the declared retained window.
 
 ### `emotion_log`
 

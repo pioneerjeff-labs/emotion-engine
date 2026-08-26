@@ -18,7 +18,7 @@ Emotion Engine 给大模型智能体提供一个小而可检查的连续性层�
 
 Emotion Engine 是 PioneerJeff Labs 的第一个开源项目。PioneerJeff Labs 关注面向创意 AI 应用的可复用底层基础设施层。
 
-状态：v3 / `2.0.0-rc.3` 候选发布版。最新稳定标签仍是 [v1.1.0](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v1.1.0)，使用 v2 状态契约。
+状态：v3 / `2.0.0-rc.4` 候选发布版。最新稳定标签仍是 [v1.1.0](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v1.1.0)，使用 v2 状态契约。
 
 ## 从这里开始
 

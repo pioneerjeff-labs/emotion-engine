@@ -2,6 +2,12 @@
 
 ## Unreleased
 
+## 2.0.0-rc.4 - 2026-08-26
+
+- Bounded live-session trajectory and trust-evidence detail while preserving exact aggregate pattern extraction and trust settlement semantics.
+- Added observable compaction counters, digest summaries, and the `bounded_active_session/v1` capability so long-running hosts can verify retained-window behavior.
+- Kept `enabled` and `runtime_mode` synchronized through pause/resume, with an explicit resume mode for host projections.
+
 ## 2.0.0-rc.3 - 2026-08-24
 
 - Required settlement event ids so successful trust settlement always joins the processed-event audit ledger.

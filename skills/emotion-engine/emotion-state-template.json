@@ -14,7 +14,8 @@
     "behavior_audit/v1",
     "repair_plan/v1",
     "migration_extensions/v1",
-    "bounded_idempotency/v1"
+    "bounded_idempotency/v1",
+    "bounded_active_session/v1"
   ],
   "enabled": true,
   "runtime_mode": "light",
@@ -77,6 +78,15 @@
     "pruned_evidence": 0,
     "pruned_settlements": 0,
     "last_pruned_at": null
+  },
+  "active_session_retention": {
+    "trajectory_limit": 512,
+    "evidence_limit": 256,
+    "pruned_trajectory_entries": 0,
+    "summarized_evidence_entries": 0,
+    "last_compacted_at": null,
+    "trajectory_summary": null,
+    "evidence_summaries": []
   },
   "log_limit": 200
 }
