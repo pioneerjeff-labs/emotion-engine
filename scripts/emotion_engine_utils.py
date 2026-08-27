@@ -6,6 +6,7 @@ for Emotion Engine.
 Usage:
   python3 emotion_engine_utils.py init <state_file> [--character-id <id> --relationship-id <id>]
   python3 emotion_engine_utils.py migrate_state <state_file> --character-id <id> --relationship-id <id> [--apply]
+  python3 emotion_engine_utils.py upgrade_state <state_file> [--apply]
   python3 emotion_engine_utils.py bind_identity <state_file> --character-id <id> --relationship-id <id>
   python3 emotion_engine_utils.py activation_check <state_file>
   python3 emotion_engine_utils.py validate <state_file>
@@ -883,6 +884,54 @@ def migrate_state_v2(state, character_id, relationship_id, state_id=None):
         "identity": deepcopy(migrated["identity"]),
         "archived_legacy_trajectory_entries": len(source.get("emotion_trajectory", [])),
         "archived_legacy_settlements": len(source.get("trust_settlements", [])),
+    }
+
+
+def upgrade_state_v3(state):
+    """Normalize an older v3 packet to the current capability contract.
+
+    This is intentionally separate from ordinary loads so installers can
+    preview, back up, journal, and verify the upgrade before publishing it.
+    """
+    if not isinstance(state, dict) or state.get("_schema") != STATE_SCHEMA:
+        raise ValueError("upgrade_state requires an existing v3 state packet")
+    source = deepcopy(state)
+    source_capabilities = (
+        list(source.get("capabilities"))
+        if isinstance(source.get("capabilities"), list)
+        else []
+    )
+    missing_capabilities = [
+        capability for capability in STATE_CAPABILITIES
+        if capability not in source_capabilities
+    ]
+    initialized_fields = [
+        field for field in ("runtime_mode", "active_session_retention")
+        if field not in source
+    ]
+    upgraded = ensure_state_shape(source)
+    active_session_id = upgraded.get("session", {}).get("active_session_id")
+    if not active_session_id and upgraded.get("emotion_trajectory"):
+        active_session_id = "upgrade:legacy-v3"
+    if active_session_id:
+        upgraded = enforce_active_session_retention(upgraded, active_session_id)
+    upgraded = enforce_idempotency_retention(upgraded)
+    changed = upgraded != source
+    retention = upgraded.get("active_session_retention", {})
+    return upgraded, {
+        "status": "upgrade_ready" if changed else "already_current",
+        "from_schema": STATE_SCHEMA,
+        "to_schema": STATE_SCHEMA,
+        "engine_version": ENGINE_VERSION,
+        "missing_capabilities": missing_capabilities,
+        "initialized_fields": initialized_fields,
+        "trajectory_entries_summarized": int(
+            retention.get("pruned_trajectory_entries", 0) or 0
+        ),
+        "trust_evidence_entries_summarized": int(
+            retention.get("summarized_evidence_entries", 0) or 0
+        ),
+        "changed": changed,
     }
 
 
@@ -3961,6 +4010,7 @@ def strip_cli_options(args, option_names, flag_names=None):
 STATE_MUTATING_COMMANDS = {
     "bind_identity",
     "migrate_state",
+    "upgrade_state",
     "configure",
     "tune",
     "pause",
@@ -4405,6 +4455,22 @@ def main():
             "identity_status": state["identity"]["status"],
             "capabilities": state["capabilities"],
         })
+        return
+
+    if command == "upgrade_state":
+        args = sys.argv[3:]
+        with state_file_lock(state_file):
+            if not os.path.exists(state_file):
+                raise ValueError("upgrade_state requires an existing state file")
+            source = read_json_file(state_file)
+            upgraded, result = upgrade_state_v3(source)
+            apply = "--apply" in args
+            result["dry_run"] = not apply
+            if apply and result["changed"]:
+                save_state_unlocked(state_file, upgraded)
+                result["status"] = "upgraded"
+                result["backup_path"] = state_backup_path(state_file)
+        print_json(result)
         return
 
     if command in STATE_MUTATING_COMMANDS:

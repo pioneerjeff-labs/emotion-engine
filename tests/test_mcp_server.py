@@ -64,6 +64,94 @@ class EmotionEngineMcpTest(unittest.TestCase):
         self.assertNotIn("emotion_engine_doctor", tool_names)
         self.assertNotIn("emotion_engine_repair", tool_names)
 
+    def test_locked_managed_runtime_hides_state_override_and_admin_tools(self):
+        listed = emotion_engine_mcp.handle_request(
+            {"jsonrpc": "2.0", "id": 2, "method": "tools/list"},
+            default_state_file="/tmp/owned-state.json",
+            locked_state=True,
+            managed_runtime=True,
+        )
+        tools = {tool["name"]: tool for tool in listed["result"]["tools"]}
+
+        self.assertNotIn("emotion_engine_bind_identity", tools)
+        self.assertNotIn("emotion_engine_migrate_state", tools)
+        self.assertNotIn(
+            "state_file",
+            tools["emotion_engine_record_turn"]["inputSchema"]["properties"],
+        )
+
+    def test_locked_runtime_rejects_state_file_override(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            owned = Path(tmpdir) / "owned.json"
+            foreign = Path(tmpdir) / "foreign.json"
+            self.create_active_state(owned)
+            self.create_active_state(foreign, session_id="foreign-session")
+            before = foreign.read_bytes()
+
+            with self.assertRaisesRegex(
+                emotion_engine_mcp.JsonRpcError,
+                "cannot be overridden",
+            ):
+                emotion_engine_mcp.handle_request(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 3,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "emotion_engine_record_turn",
+                            "arguments": {
+                                "state_file": str(foreign),
+                                "session_id": "foreign-session",
+                                "event_id": "foreign-turn",
+                                "pleasure": 0.2,
+                                "arousal": 0.3,
+                                "dominance": 0.5,
+                                "host_approved": True,
+                                "character_id": "mcp-character",
+                                "relationship_id": "mcp-relationship",
+                            },
+                        },
+                    },
+                    default_state_file=str(owned),
+                    locked_state=True,
+                )
+
+            self.assertEqual(foreign.read_bytes(), before)
+
+    def test_managed_runtime_rejects_migration_apply(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "legacy.json"
+            legacy = emotion_engine_mcp.engine.default_state()
+            legacy["_schema"] = emotion_engine_mcp.engine.LEGACY_STATE_SCHEMA
+            legacy.pop("identity", None)
+            state_file.write_text(json.dumps(legacy), encoding="utf-8")
+            before = state_file.read_bytes()
+
+            with self.assertRaisesRegex(
+                emotion_engine_mcp.JsonRpcError,
+                "owning installer transaction",
+            ):
+                emotion_engine_mcp.handle_request(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 4,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "emotion_engine_migrate_state",
+                            "arguments": {
+                                "character_id": "mcp-character",
+                                "relationship_id": "mcp-relationship",
+                                "apply": True,
+                            },
+                        },
+                    },
+                    default_state_file=str(state_file),
+                    locked_state=True,
+                    managed_runtime=True,
+                )
+
+            self.assertEqual(state_file.read_bytes(), before)
+
     def test_record_policy_is_side_effect_free(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             state_file = Path(tmpdir) / "emotion-state.json"

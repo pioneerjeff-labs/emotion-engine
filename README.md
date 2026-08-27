@@ -402,6 +402,7 @@ See [Integration Guide](docs/INTEGRATION.md) for the full sequence.
 ```bash
 python3 scripts/emotion_engine_utils.py init <state_file> --character-id <id> --relationship-id <id>
 python3 scripts/emotion_engine_utils.py migrate_state <state_file> --character-id <id> --relationship-id <id> --dry-run
+python3 scripts/emotion_engine_utils.py upgrade_state <state_file>
 python3 scripts/emotion_engine_utils.py bind_identity <state_file> --character-id <id> --relationship-id <id>
 python3 scripts/emotion_engine_utils.py activation_check <state_file>
 python3 scripts/emotion_engine_utils.py validate <state_file>

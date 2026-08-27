@@ -17,6 +17,10 @@ import emotion_engine_utils as engine
 SERVER_NAME = "emotion-engine"
 SERVER_VERSION = engine.ENGINE_VERSION
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
+MANAGED_RUNTIME_BLOCKED_TOOLS = {
+    "emotion_engine_bind_identity",
+    "emotion_engine_migrate_state",
+}
 
 
 class JsonRpcError(Exception):
@@ -392,8 +396,8 @@ def call_tool(name, arguments=None, default_state_file=None):
     raise JsonRpcError(-32601, f"Unknown tool: {name}")
 
 
-def tool_schema():
-    state_arg = {
+def tool_schema(locked_state=False, managed_runtime=False):
+    state_arg = {} if locked_state else {
         "state_file": {
             "type": "string",
             "description": (
@@ -434,7 +438,7 @@ def tool_schema():
         ],
         "description": "Explicit host-approved evidence with evidence_id, evidence_type, and eligible=true.",
     }
-    return [
+    tools = [
         {
             "name": "emotion_engine_status",
             "description": "Read public Emotion Engine status; raw state is for debugging only.",
@@ -633,6 +637,12 @@ def tool_schema():
             },
         },
     ]
+    if managed_runtime:
+        tools = [
+            tool for tool in tools
+            if tool.get("name") not in MANAGED_RUNTIME_BLOCKED_TOOLS
+        ]
+    return tools
 
 
 def jsonrpc_result(request_id, result):
@@ -654,7 +664,12 @@ def tool_result(value):
     }
 
 
-def handle_request(message, default_state_file=None):
+def handle_request(
+    message,
+    default_state_file=None,
+    locked_state=False,
+    managed_runtime=False,
+):
     if not isinstance(message, dict):
         raise JsonRpcError(-32600, "Request must be a JSON object")
     request_id = message.get("id")
@@ -675,20 +690,44 @@ def handle_request(message, default_state_file=None):
     if method == "ping":
         return jsonrpc_result(request_id, {})
     if method == "tools/list":
-        return jsonrpc_result(request_id, {"tools": tool_schema()})
+        return jsonrpc_result(request_id, {
+            "tools": tool_schema(
+                locked_state=locked_state,
+                managed_runtime=managed_runtime,
+            )
+        })
     if method == "tools/call":
         name = params.get("name")
         if not isinstance(name, str) or not name:
             raise JsonRpcError(-32602, "tools/call requires a tool name")
+        arguments = params.get("arguments") or {}
+        if not isinstance(arguments, dict):
+            raise JsonRpcError(-32602, "Tool arguments must be an object")
+        if locked_state and "state_file" in arguments:
+            raise JsonRpcError(
+                -32602,
+                "state_file is fixed by the locked MCP server and cannot be overridden",
+            )
+        if managed_runtime and name in MANAGED_RUNTIME_BLOCKED_TOOLS:
+            raise JsonRpcError(
+                -32601,
+                "tool is disabled in managed runtime mode; use the owning installer transaction",
+            )
         try:
-            result = call_tool(name, params.get("arguments") or {}, default_state_file)
+            result = call_tool(name, arguments, default_state_file)
         except ValueError as exc:
             raise JsonRpcError(-32602, str(exc)) from exc
         return jsonrpc_result(request_id, tool_result(result))
     raise JsonRpcError(-32601, f"Method not found: {method}")
 
 
-def serve_stdio(default_state_file=None, input_stream=None, output_stream=None):
+def serve_stdio(
+    default_state_file=None,
+    input_stream=None,
+    output_stream=None,
+    locked_state=False,
+    managed_runtime=False,
+):
     input_stream = input_stream or sys.stdin
     output_stream = output_stream or sys.stdout
     for line in input_stream:
@@ -699,7 +738,12 @@ def serve_stdio(default_state_file=None, input_stream=None, output_stream=None):
         try:
             message = json.loads(line)
             request_id = message.get("id") if isinstance(message, dict) else None
-            response = handle_request(message, default_state_file)
+            response = handle_request(
+                message,
+                default_state_file,
+                locked_state=locked_state,
+                managed_runtime=managed_runtime,
+            )
         except json.JSONDecodeError as exc:
             response = jsonrpc_error(None, JsonRpcError(-32700, "Parse error", str(exc)))
         except JsonRpcError as exc:
@@ -714,8 +758,24 @@ def serve_stdio(default_state_file=None, input_stream=None, output_stream=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run the local Emotion Engine stdio MCP server.")
     parser.add_argument("--state", help="default state file for MCP tool calls")
+    parser.add_argument(
+        "--locked-state",
+        action="store_true",
+        help="require --state and reject request-level state_file overrides",
+    )
+    parser.add_argument(
+        "--managed-runtime",
+        action="store_true",
+        help="hide identity binding and migration tools owned by the installer transaction",
+    )
     args = parser.parse_args(argv)
-    serve_stdio(default_state_file=args.state)
+    if args.locked_state and not args.state:
+        parser.error("--locked-state requires --state")
+    serve_stdio(
+        default_state_file=args.state,
+        locked_state=args.locked_state,
+        managed_runtime=args.managed_runtime,
+    )
 
 
 if __name__ == "__main__":

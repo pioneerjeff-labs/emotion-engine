@@ -998,6 +998,73 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(migrated["boundary_state"], legacy["boundary_state"])
         self.assertEqual(migrated["host_extension"], legacy["host_extension"])
 
+    def test_v3_upgrade_adds_capability_bounds_active_session_and_preserves_extensions(self):
+        state = self.start_session()
+        state["capabilities"].remove("bounded_active_session/v1")
+        state.pop("active_session_retention")
+        state["host_extension"] = {"nested": [1, {"preserve": True}]}
+        state["emotion_trajectory"] = [
+            {"P": ((index % 7) - 3) / 10, "D": 0.5}
+            for index in range(600)
+        ]
+
+        upgraded, report = emotion_engine_utils.upgrade_state_v3(state)
+
+        self.assertEqual(report["status"], "upgrade_ready")
+        self.assertEqual(report["missing_capabilities"], ["bounded_active_session/v1"])
+        self.assertIn("active_session_retention", report["initialized_fields"])
+        self.assertEqual(report["trajectory_entries_summarized"], 88)
+        self.assertEqual(upgraded["host_extension"], state["host_extension"])
+        self.assertIn("bounded_active_session/v1", upgraded["capabilities"])
+        self.assertEqual(len(upgraded["emotion_trajectory"]), 512)
+        self.assertEqual(
+            upgraded["active_session_retention"]["trajectory_summary"]["count"],
+            88,
+        )
+
+    def test_cli_upgrade_state_dry_run_and_apply_backup(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            state = self.start_session()
+            state["capabilities"].remove("bounded_active_session/v1")
+            state.pop("active_session_retention")
+            state["host_extension"] = {"preserve": True}
+            state_file.write_text(json.dumps(state), encoding="utf-8")
+            before = state_file.read_bytes()
+
+            dry_run = subprocess.run(
+                [sys.executable, str(SCRIPT), "upgrade_state", str(state_file)],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            self.assertTrue(json.loads(dry_run.stdout)["dry_run"])
+            self.assertEqual(state_file.read_bytes(), before)
+
+            applied = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "upgrade_state",
+                    str(state_file),
+                    "--apply",
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            report = json.loads(applied.stdout)
+            self.assertEqual(report["status"], "upgraded")
+            self.assertFalse(report["dry_run"])
+            self.assertTrue(Path(report["backup_path"]).exists())
+            upgraded = json.loads(state_file.read_text(encoding="utf-8"))
+            backup = json.loads(Path(report["backup_path"]).read_text(encoding="utf-8"))
+            self.assertIn("bounded_active_session/v1", upgraded["capabilities"])
+            self.assertEqual(upgraded["host_extension"], state["host_extension"])
+            self.assertNotIn("bounded_active_session/v1", backup["capabilities"])
+
     def test_bound_identity_cannot_be_rebound(self):
         state = self.bound_state()
         with self.assertRaisesRegex(ValueError, "identity mismatch"):

@@ -2,6 +2,9 @@
 
 ## Unreleased
 
+- Added locked-state and managed-runtime MCP modes so installer-owned targets cannot override their fixed state path or bypass identity/migration transactions.
+- Added an explicit dry-run/apply v3 capability upgrade that preserves host extensions, creates the normal backup, and enforces current active-session and idempotency retention before publication.
+
 ## 2.0.0-rc.4 - 2026-08-26
 
 - Bounded live-session trajectory and trust-evidence detail while preserving exact aggregate pattern extraction and trust settlement semantics.
