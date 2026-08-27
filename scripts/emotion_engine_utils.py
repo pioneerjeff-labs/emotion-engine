@@ -490,6 +490,7 @@ def load_state(path):
 
 def save_state_unlocked(path, state):
     state = ensure_state_shape(state)
+    require_current_state_capabilities(state)
     backup_current_state(path)
     write_json_file_atomic(path, state)
 
@@ -725,7 +726,12 @@ def ensure_state_shape(state):
 
     merged["_schema"] = schema
     merged["identity"] = normalize_identity(merged.get("identity"))
-    merged["capabilities"] = list(STATE_CAPABILITIES) if schema == STATE_SCHEMA else []
+    source_capabilities = state.get("capabilities") if isinstance(state, dict) else None
+    merged["capabilities"] = (
+        list(source_capabilities)
+        if schema == STATE_SCHEMA and isinstance(source_capabilities, list)
+        else []
+    )
     merged["enabled"] = bool(merged.get("enabled", True))
     runtime_mode = str(merged.get("runtime_mode") or "light").strip().lower()
     merged["runtime_mode"] = runtime_mode if runtime_mode in {"light", "always", "paused"} else "light"
@@ -773,6 +779,32 @@ def ensure_state_shape(state):
 
     merged["log_limit"] = max(25, int(merged.get("log_limit", 200) or 200))
     return merged
+
+
+def missing_state_capabilities(state):
+    """Return required capabilities absent from the stored v3 packet.
+
+    Ordinary loads must preserve the packet's declaration exactly. Adding a
+    capability is a state migration owned exclusively by ``upgrade_state``.
+    """
+    if not isinstance(state, dict) or state.get("_schema") != STATE_SCHEMA:
+        return []
+    capabilities = state.get("capabilities")
+    return [
+        capability
+        for capability in STATE_CAPABILITIES
+        if not isinstance(capabilities, list) or capability not in capabilities
+    ]
+
+
+def require_current_state_capabilities(state):
+    missing = missing_state_capabilities(state)
+    if missing:
+        raise ValueError(
+            "state capability upgrade required before writing: "
+            + ", ".join(missing)
+        )
+    return state
 
 
 def state_is_v3(state):
@@ -910,6 +942,7 @@ def upgrade_state_v3(state):
         if field not in source
     ]
     upgraded = ensure_state_shape(source)
+    upgraded["capabilities"] = list(STATE_CAPABILITIES)
     active_session_id = upgraded.get("session", {}).get("active_session_id")
     if not active_session_id and upgraded.get("emotion_trajectory"):
         active_session_id = "upgrade:legacy-v3"
@@ -1287,6 +1320,7 @@ def public_status(state):
         "schema": state.get("_schema"),
         "identity_status": state.get("identity", {}).get("status"),
         "migration_required": state.get("_schema") != STATE_SCHEMA,
+        "capability_upgrade_required": bool(missing_state_capabilities(state)),
         "capabilities": list(state.get("capabilities", [])),
         "session_status": state.get("session", {}).get("status"),
         "idempotency_retention": deepcopy(state.get("idempotency_retention")),
@@ -1320,6 +1354,19 @@ def activation_check(state, state_file, helper_path="emotion_engine_utils.py"):
                     f"{command_prefix} migrate_state {quoted_state_file} "
                     "--character-id <character-id> --relationship-id <relationship-id> --apply"
                 ),
+            },
+        }
+    missing_capabilities = missing_state_capabilities(state)
+    if missing_capabilities:
+        return {
+            **base,
+            "ok": False,
+            "status": "capability_upgrade_required",
+            "message": "Runtime installed; explicitly upgrade the older v3 capability contract before activation.",
+            "missing_capabilities": missing_capabilities,
+            "next_steps": {
+                "dry_run": f"{command_prefix} upgrade_state {quoted_state_file}",
+                "apply": f"{command_prefix} upgrade_state {quoted_state_file} --apply",
             },
         }
     if state.get("identity", {}).get("status") != "bound":
@@ -3469,6 +3516,13 @@ def audit_state_integrity(state):
     elif state.get("identity", {}).get("status") != "bound":
         hard_errors.append({"code": "identity_unbound"})
 
+    missing_capabilities = missing_state_capabilities(state)
+    if missing_capabilities:
+        hard_errors.append({
+            "code": "missing_required_capabilities",
+            "capabilities": missing_capabilities,
+        })
+
     session_ids = [entry.get("session_id") for entry in state.get("session_ledger", [])]
     duplicate_session_ids = sorted({value for value in session_ids if value and session_ids.count(value) > 1})
     if duplicate_session_ids:
@@ -4483,6 +4537,17 @@ def main():
                     "status": "migration_required",
                     "schema": state.get("_schema"),
                     "message": "v2 state is read-only; run migrate_state with explicit owner identity",
+                })
+                sys.exit(2)
+            missing_capabilities = missing_state_capabilities(state)
+            if command != "migrate_state" and missing_capabilities:
+                print_json({
+                    "ok": False,
+                    "engine_version": ENGINE_VERSION,
+                    "status": "capability_upgrade_required",
+                    "schema": state.get("_schema"),
+                    "missing_capabilities": missing_capabilities,
+                    "message": "v3 state is read-only until upgrade_state is explicitly applied",
                 })
                 sys.exit(2)
             run_command(command, state_file, state)

@@ -4,6 +4,8 @@
 
 - Added locked-state and managed-runtime MCP modes so installer-owned targets cannot override their fixed state path or bypass identity/migration transactions.
 - Added an explicit dry-run/apply v3 capability upgrade that preserves host extensions, creates the normal backup, and enforces current active-session and idempotency retention before publication.
+- Preserved stored v3 capability declarations on ordinary loads and made every normal writer fail closed until an incomplete packet is explicitly upgraded; activation and integrity audit now report the missing capability set without mutating it.
+- Rejected `tools/call` notifications without a non-null JSON-RPC id and malformed non-object params so writes cannot execute without a matched response.
 
 ## 2.0.0-rc.4 - 2026-08-26
 

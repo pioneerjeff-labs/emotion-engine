@@ -396,6 +396,74 @@ class EmotionEngineMcpTest(unittest.TestCase):
             self.assertEqual(result["decision"], "route_host_memory")
             self.assertEqual(state_file.read_text(encoding="utf-8"), before)
 
+    def test_tools_call_requires_id_and_object_params_without_mutating_state(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            self.create_active_state(state_file)
+            before = state_file.read_bytes()
+            arguments = {
+                "state_file": str(state_file),
+                "session_id": "mcp-session",
+                "event_id": "notification-write",
+                "character_id": "mcp-character",
+                "relationship_id": "mcp-relationship",
+            }
+
+            with self.assertRaisesRegex(
+                emotion_engine_mcp.JsonRpcError,
+                "non-null request id",
+            ):
+                emotion_engine_mcp.handle_request({
+                    "jsonrpc": "2.0",
+                    "method": "tools/call",
+                    "params": {
+                        "name": "emotion_engine_session_end",
+                        "arguments": arguments,
+                    },
+                })
+            self.assertEqual(state_file.read_bytes(), before)
+
+            with self.assertRaisesRegex(
+                emotion_engine_mcp.JsonRpcError,
+                "params must be an object",
+            ):
+                emotion_engine_mcp.handle_request({
+                    "jsonrpc": "2.0",
+                    "id": 9,
+                    "method": "tools/call",
+                    "params": [],
+                })
+
+    def test_mcp_writer_rejects_older_v3_until_upgrade(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            state = emotion_engine_mcp.engine.default_state(
+                "mcp-character",
+                "mcp-relationship",
+            )
+            state["capabilities"].remove("bounded_active_session/v1")
+            state_file.write_text(
+                json.dumps(state, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            before = state_file.read_bytes()
+
+            with self.assertRaisesRegex(
+                emotion_engine_mcp.JsonRpcError,
+                "capability upgrade required",
+            ):
+                emotion_engine_mcp.call_tool(
+                    "emotion_engine_session_start",
+                    {
+                        "state_file": str(state_file),
+                        "session_id": "mcp-session",
+                        "event_id": "mcp-session-start",
+                        "character_id": "mcp-character",
+                        "relationship_id": "mcp-relationship",
+                    },
+                )
+            self.assertEqual(state_file.read_bytes(), before)
+
 
 if __name__ == "__main__":
     unittest.main()

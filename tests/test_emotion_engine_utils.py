@@ -1065,6 +1065,46 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             self.assertEqual(upgraded["host_extension"], state["host_extension"])
             self.assertNotIn("bounded_active_session/v1", backup["capabilities"])
 
+    def test_older_v3_is_read_only_until_explicit_capability_upgrade(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            state = self.bound_state()
+            state["capabilities"].remove("bounded_active_session/v1")
+            state.pop("active_session_retention")
+            state_file.write_text(
+                json.dumps(state, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            before = state_file.read_bytes()
+
+            loaded = emotion_engine_utils.load_state(state_file)
+            self.assertNotIn("bounded_active_session/v1", loaded["capabilities"])
+            activation = emotion_engine_utils.activation_check(loaded, state_file)
+            self.assertEqual(activation["status"], "capability_upgrade_required")
+            audit = emotion_engine_utils.audit_state_integrity(loaded)
+            self.assertFalse(audit["ok"])
+            self.assertIn(
+                "missing_required_capabilities",
+                {item["code"] for item in audit["hard_errors"]},
+            )
+
+            paused = subprocess.run(
+                [sys.executable, str(SCRIPT), "pause", str(state_file)],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(paused.returncode, 2)
+            self.assertEqual(
+                json.loads(paused.stdout)["status"],
+                "capability_upgrade_required",
+            )
+            self.assertEqual(state_file.read_bytes(), before)
+            with self.assertRaisesRegex(ValueError, "capability upgrade required"):
+                emotion_engine_utils.save_state(state_file, loaded)
+            self.assertEqual(state_file.read_bytes(), before)
+
     def test_bound_identity_cannot_be_rebound(self):
         state = self.bound_state()
         with self.assertRaisesRegex(ValueError, "identity mismatch"):

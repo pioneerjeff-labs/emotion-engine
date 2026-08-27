@@ -397,6 +397,10 @@ The typical integration loop is:
 
 See [Integration Guide](docs/INTEGRATION.md) for the full sequence.
 
+Older v3 packets keep their stored capability declaration unchanged. If a
+required capability is missing, activation, audit, CLI writers, and MCP
+writers fail closed until `upgrade_state` is explicitly reviewed and applied.
+
 ## CLI
 
 ```bash
@@ -426,6 +430,9 @@ python3 scripts/emotion_engine_utils.py repair_plan <state_file>
 python3 scripts/emotion_engine_utils.py compact_log <state_file> --dry-run
 python3 scripts/emotion_engine_utils.py compact_log <state_file> --apply
 ```
+
+Run `upgrade_state` without `--apply` for a non-mutating preview. Ordinary
+commands never add capabilities implicitly.
 
 `audit_log` and `compact_log` are retention tools for long-running agents, especially `always` mode companions. They keep `emotion_log` focused on compact continuity signals by suppressing or rolling up low-value drift and ordinary neutral turns. They do not decide where factual memory should live; host runtimes own facts, task memory, vector stores, documents, and project-specific routing.
 

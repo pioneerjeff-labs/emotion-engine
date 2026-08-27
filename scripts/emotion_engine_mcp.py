@@ -66,6 +66,13 @@ def mutate_state_for_tool(arguments, default_state_file, mutator, allow_legacy=F
         state = engine.load_state_unlocked(state_file)
         if not allow_legacy and state.get("_schema") != engine.STATE_SCHEMA:
             raise JsonRpcError(-32602, "state migration required: v2 packets are read-only")
+        missing_capabilities = engine.missing_state_capabilities(state)
+        if not allow_legacy and missing_capabilities:
+            raise JsonRpcError(
+                -32042,
+                "state capability upgrade required before writing",
+                {"missing_capabilities": missing_capabilities},
+            )
         state, result = mutator(state)
         changed = bool(result.pop("_changed", True))
         if changed:
@@ -672,9 +679,15 @@ def handle_request(
 ):
     if not isinstance(message, dict):
         raise JsonRpcError(-32600, "Request must be a JSON object")
+    if message.get("jsonrpc") != "2.0":
+        raise JsonRpcError(-32600, "Request must declare jsonrpc 2.0")
     request_id = message.get("id")
     method = message.get("method")
-    params = message.get("params") or {}
+    params = message.get("params")
+    if params is None:
+        params = {}
+    if not isinstance(params, dict):
+        raise JsonRpcError(-32602, "Request params must be an object")
 
     if method == "notifications/initialized" or (
         request_id is None and str(method).startswith("notifications/")
@@ -697,6 +710,8 @@ def handle_request(
             )
         })
     if method == "tools/call":
+        if "id" not in message or request_id is None:
+            raise JsonRpcError(-32600, "tools/call requires a non-null request id")
         name = params.get("name")
         if not isinstance(name, str) or not name:
             raise JsonRpcError(-32602, "tools/call requires a tool name")
