@@ -1,4 +1,5 @@
 import importlib.util
+import io
 import json
 import os
 import sys
@@ -41,6 +42,18 @@ class EmotionEngineMcpTest(unittest.TestCase):
                 "relationship_id": "mcp-relationship",
             },
         )
+
+    def write_hard_corrupt_state(self, state_file):
+        state = emotion_engine_mcp.engine.default_state(
+            "mcp-character",
+            "mcp-relationship",
+        )
+        state["processed_event_ids"] = ["duplicate-event", "duplicate-event"]
+        state_file.write_text(
+            json.dumps(state, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return state_file.read_bytes()
 
     def test_initialize_and_tool_list(self):
         initialized = emotion_engine_mcp.handle_request({"jsonrpc": "2.0", "id": 1, "method": "initialize"})
@@ -433,6 +446,163 @@ class EmotionEngineMcpTest(unittest.TestCase):
                     "method": "tools/call",
                     "params": [],
                 })
+
+            with self.assertRaisesRegex(
+                emotion_engine_mcp.JsonRpcError,
+                "arguments must be an object",
+            ):
+                emotion_engine_mcp.handle_request({
+                    "jsonrpc": "2.0",
+                    "id": 10,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "emotion_engine_session_end",
+                        "arguments": [],
+                    },
+                })
+            self.assertEqual(state_file.read_bytes(), before)
+
+    def test_stdio_rejects_array_tool_arguments_with_matching_response_id(self):
+        request = {
+            "jsonrpc": "2.0",
+            "id": "array-arguments",
+            "method": "tools/call",
+            "params": {
+                "name": "emotion_engine_status",
+                "arguments": [],
+            },
+        }
+        output = io.StringIO()
+
+        emotion_engine_mcp.serve_stdio(
+            input_stream=io.StringIO(json.dumps(request) + "\n"),
+            output_stream=output,
+        )
+
+        response = json.loads(output.getvalue())
+        self.assertEqual(response["id"], "array-arguments")
+        self.assertEqual(response["error"]["code"], -32602)
+        self.assertNotIn("result", response)
+
+    def test_managed_mcp_missing_primary_fails_closed_for_reads_and_writes(self):
+        calls = [
+            ("emotion_engine_status", {}),
+            ("emotion_engine_compact_log", {"apply": True}),
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "missing.json"
+            for index, (tool_name, arguments) in enumerate(calls, start=1):
+                with self.subTest(tool_name=tool_name):
+                    with self.assertRaises(emotion_engine_mcp.JsonRpcError) as raised:
+                        emotion_engine_mcp.handle_request(
+                            {
+                                "jsonrpc": "2.0",
+                                "id": index,
+                                "method": "tools/call",
+                                "params": {"name": tool_name, "arguments": arguments},
+                            },
+                            default_state_file=str(state_file),
+                            locked_state=True,
+                            managed_runtime=True,
+                        )
+                    self.assertEqual(raised.exception.code, -32043)
+                    self.assertEqual(raised.exception.data["status"], "state_file_missing")
+                    self.assertFalse(state_file.exists())
+                    self.assertFalse(Path(f"{state_file}.bak").exists())
+
+    def test_managed_mcp_writer_rejects_hard_corruption_before_mutator(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "hard-corrupt.json"
+            before = self.write_hard_corrupt_state(state_file)
+            backup_file = Path(f"{state_file}.bak")
+            backup_before = b'{"sentinel":"keep"}\n'
+            backup_file.write_bytes(backup_before)
+            mutator_called = False
+
+            def mutator(state):
+                nonlocal mutator_called
+                mutator_called = True
+                state["enabled"] = False
+                return state, {"status": "mutated"}
+
+            with self.assertRaises(emotion_engine_mcp.engine.ManagedStateError) as raised:
+                emotion_engine_mcp.mutate_state_for_tool(
+                    {},
+                    str(state_file),
+                    mutator,
+                    managed_runtime=True,
+                )
+
+            self.assertEqual(raised.exception.status, "state_integrity_failed")
+            self.assertFalse(mutator_called)
+            self.assertEqual(state_file.read_bytes(), before)
+            self.assertEqual(backup_file.read_bytes(), backup_before)
+
+    def test_managed_mcp_writer_reports_hard_corruption_over_jsonrpc(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "hard-corrupt.json"
+            before = self.write_hard_corrupt_state(state_file)
+            backup_file = Path(f"{state_file}.bak")
+            backup_before = b'{"sentinel":"keep"}\n'
+            backup_file.write_bytes(backup_before)
+
+            with self.assertRaises(emotion_engine_mcp.JsonRpcError) as raised:
+                emotion_engine_mcp.handle_request(
+                    {
+                        "jsonrpc": "2.0",
+                        "id": 12,
+                        "method": "tools/call",
+                        "params": {
+                            "name": "emotion_engine_session_start",
+                            "arguments": {
+                                "session_id": "mcp-session",
+                                "event_id": "mcp-session-start",
+                                "character_id": "mcp-character",
+                                "relationship_id": "mcp-relationship",
+                            },
+                        },
+                    },
+                    default_state_file=str(state_file),
+                    locked_state=True,
+                    managed_runtime=True,
+                )
+
+            self.assertEqual(raised.exception.code, -32043)
+            self.assertEqual(raised.exception.data["status"], "state_integrity_failed")
+            self.assertIn(
+                "duplicate_processed_event_ids",
+                {item["code"] for item in raised.exception.data["hard_errors"]},
+            )
+            self.assertEqual(state_file.read_bytes(), before)
+            self.assertEqual(backup_file.read_bytes(), backup_before)
+
+    def test_managed_mcp_audit_reads_hard_corruption_without_mutation(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "hard-corrupt.json"
+            before = self.write_hard_corrupt_state(state_file)
+
+            response = emotion_engine_mcp.handle_request(
+                {
+                    "jsonrpc": "2.0",
+                    "id": 11,
+                    "method": "tools/call",
+                    "params": {
+                        "name": "emotion_engine_audit_state",
+                        "arguments": {},
+                    },
+                },
+                default_state_file=str(state_file),
+                locked_state=True,
+                managed_runtime=True,
+            )
+
+            audit = response["result"]["structuredContent"]["audit"]
+            self.assertFalse(audit["ok"])
+            self.assertIn(
+                "duplicate_processed_event_ids",
+                {item["code"] for item in audit["hard_errors"]},
+            )
+            self.assertEqual(state_file.read_bytes(), before)
 
     def test_mcp_writer_rejects_older_v3_until_upgrade(self):
         with tempfile.TemporaryDirectory() as tmpdir:

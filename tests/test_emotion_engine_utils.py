@@ -27,6 +27,15 @@ class EmotionEngineUtilsTest(unittest.TestCase):
     def bound_state(self):
         return emotion_engine_utils.default_state("test-character", "test-relationship")
 
+    def write_hard_corrupt_state(self, state_file):
+        state = self.bound_state()
+        state["processed_event_ids"] = ["duplicate-event", "duplicate-event"]
+        state_file.write_text(
+            json.dumps(state, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return state_file.read_bytes()
+
     def next_event_id(self, prefix="event"):
         self.event_counter += 1
         return f"{prefix}-{self.event_counter}"
@@ -929,6 +938,134 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             after = json.loads(state_file.read_text(encoding="utf-8"))
             self.assertEqual(after["emotion_log"][-1]["event_type"], "log_compaction")
 
+    def test_managed_cli_writer_rejects_missing_state_without_initializing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "missing-state.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--managed-runtime",
+                    "pause",
+                    str(state_file),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 2, completed.stderr)
+            self.assertEqual(json.loads(completed.stdout)["status"], "state_file_missing")
+            self.assertFalse(state_file.exists())
+            self.assertFalse(Path(f"{state_file}.bak").exists())
+
+    def test_managed_cli_writers_reject_hard_corruption_byte_identically(self):
+        commands = [
+            ["pause"],
+            [
+                "session_start",
+                "--session-id", "managed-session",
+                "--event-id", "managed-start",
+                "--character-id", "test-character",
+                "--relationship-id", "test-relationship",
+            ],
+            ["compact_log", "--apply"],
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "hard-corrupt.json"
+            backup_file = Path(f"{state_file}.bak")
+            for command in commands:
+                with self.subTest(command=command[0]):
+                    before = self.write_hard_corrupt_state(state_file)
+                    backup_before = b'{"sentinel":"keep"}\n'
+                    backup_file.write_bytes(backup_before)
+                    completed = subprocess.run(
+                        [
+                            sys.executable,
+                            str(SCRIPT),
+                            "--managed-runtime",
+                            command[0],
+                            str(state_file),
+                            *command[1:],
+                        ],
+                        text=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        check=False,
+                    )
+                    payload = json.loads(completed.stdout)
+                    self.assertEqual(completed.returncode, 2, completed.stderr)
+                    self.assertEqual(payload["status"], "state_integrity_failed")
+                    self.assertIn(
+                        "duplicate_processed_event_ids",
+                        {item["code"] for item in payload["hard_errors"]},
+                    )
+                    self.assertEqual(state_file.read_bytes(), before)
+                    self.assertEqual(backup_file.read_bytes(), backup_before)
+
+    def test_managed_cli_audit_remains_readable_on_hard_corruption(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "hard-corrupt.json"
+            before = self.write_hard_corrupt_state(state_file)
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--managed-runtime",
+                    "audit_state",
+                    str(state_file),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertFalse(payload["ok"])
+            self.assertIn(
+                "duplicate_processed_event_ids",
+                {item["code"] for item in payload["hard_errors"]},
+            )
+            self.assertEqual(state_file.read_bytes(), before)
+
+    def test_managed_cli_writer_allows_semantic_warnings_only(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "warning-only.json"
+            state = self.start_session()
+            state["emotion_log"].append({
+                "timestamp": emotion_engine_utils.now_iso(),
+                "event_type": "turn",
+                "session_id": "test-session",
+                "event_id": "task-warning",
+                "subject": "task",
+                "semantic_event_type": "work_checkpoint",
+                "situation": "tests passed",
+            })
+            state["session_ledger"][0]["turn_count"] = 1
+            audit = emotion_engine_utils.audit_state_integrity(state)
+            self.assertTrue(audit["ok"], audit)
+            self.assertTrue(audit["semantic_warnings"])
+            emotion_engine_utils.save_state(state_file, state)
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--managed-runtime",
+                    "pause",
+                    str(state_file),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(json.loads(completed.stdout)["runtime_mode"], "paused")
+            self.assertFalse(json.loads(state_file.read_text(encoding="utf-8"))["enabled"])
+
     def test_low_value_compaction_does_not_absorb_salient_previous_turn(self):
         state = self.start_session()
 
@@ -1104,6 +1241,57 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             with self.assertRaisesRegex(ValueError, "capability upgrade required"):
                 emotion_engine_utils.save_state(state_file, loaded)
             self.assertEqual(state_file.read_bytes(), before)
+
+    def test_activation_check_cli_uses_distinct_capability_upgrade_exit_code(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            state = self.bound_state()
+            state["capabilities"].remove("bounded_active_session/v1")
+            state.pop("active_session_retention")
+            state_file.write_text(
+                json.dumps(state, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT), "activation_check", str(state_file)],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 4, completed.stderr)
+            self.assertEqual(
+                json.loads(completed.stdout)["status"],
+                "capability_upgrade_required",
+            )
+
+    def test_managed_cli_blocks_installer_owned_admin_commands(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            commands = ["init", "bind_identity", "migrate_state", "upgrade_state", "reset"]
+            for command in commands:
+                with self.subTest(command=command):
+                    completed = subprocess.run(
+                        [
+                            sys.executable,
+                            str(SCRIPT),
+                            "--managed-runtime",
+                            command,
+                            str(state_file),
+                        ],
+                        text=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        check=False,
+                    )
+                    self.assertEqual(completed.returncode, 2, completed.stderr)
+                    self.assertEqual(
+                        json.loads(completed.stdout)["status"],
+                        "installer_transaction_required",
+                    )
+                    self.assertFalse(state_file.exists())
 
     def test_bound_identity_cannot_be_rebound(self):
         state = self.bound_state()

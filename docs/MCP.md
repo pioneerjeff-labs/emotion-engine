@@ -48,7 +48,9 @@ python3 .codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py \
   --managed-runtime
 ```
 
-`--locked-state` requires `--state`, removes `state_file` from every tool schema, and rejects request-level path overrides. `--managed-runtime` additionally removes identity binding and migration tools so the owning installer can enforce its confirmation, backup, journal, and manifest transaction. Use both flags for installer-managed targets.
+`--locked-state` requires `--state`, removes `state_file` from every tool schema, and rejects request-level path overrides. `--managed-runtime` additionally removes identity binding and migration tools so the owning installer can enforce its confirmation, backup, journal, and manifest transaction. It also requires the fixed primary state to already exist and makes ordinary writers fail closed on structural integrity errors before mutation. Diagnostic audit and repair-plan reads remain available on an existing damaged packet, and semantic warnings alone do not block writes. Use both flags for installer-managed targets.
+
+Standalone wrappers keep their existing bootstrap behavior and may explicitly initialize a missing state. An installer-managed target must instead create, bind, migrate, upgrade, or reset state inside its owning transaction; runtime tools do not recreate the primary packet or perform those administrative changes.
 
 Every `tools/call` must carry a non-null JSON-RPC `id`; tool notifications are
 rejected and never execute. `params` and `arguments` must be JSON objects.

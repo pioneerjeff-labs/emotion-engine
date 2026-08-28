@@ -48,6 +48,7 @@ import tempfile
 import threading
 import uuid
 import warnings
+from collections import Counter
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -108,6 +109,30 @@ STATE_CAPABILITIES = [
     "bounded_idempotency/v1",
     "bounded_active_session/v1",
 ]
+
+
+class ManagedStateError(ValueError):
+    """Stable fail-closed error for an explicitly owner-managed runtime."""
+
+    def __init__(self, status, message, *, hard_errors=None, details=None):
+        super().__init__(message)
+        self.status = status
+        self.message = message
+        self.hard_errors = list(hard_errors or [])
+        self.details = dict(details or {})
+
+    def as_dict(self, state_file):
+        payload = {
+            "ok": False,
+            "engine_version": ENGINE_VERSION,
+            "status": self.status,
+            "state_file": os.path.abspath(os.fspath(state_file)),
+            "message": self.message,
+        }
+        if self.hard_errors:
+            payload["hard_errors"] = self.hard_errors
+        payload.update(self.details)
+        return payload
 
 DEFAULT_IDEMPOTENCY_RETENTION = {
     "scope": "retained_window",
@@ -805,6 +830,46 @@ def require_current_state_capabilities(state):
             + ", ".join(missing)
         )
     return state
+
+
+def require_managed_state_file(state_file):
+    """Require the installer-owned primary packet without creating a default."""
+    if not os.path.isfile(state_file):
+        raise ManagedStateError(
+            "state_file_missing",
+            "Managed Emotion Engine state file is missing; use the owning installer transaction.",
+        )
+
+
+def require_managed_runtime_writable(state_file, state):
+    """Reject an unsafe managed packet before any business mutator runs."""
+    require_managed_state_file(state_file)
+    if state.get("_schema") != STATE_SCHEMA:
+        raise ManagedStateError(
+            "migration_required",
+            "Managed Emotion Engine state requires an explicit migration transaction.",
+            details={"schema": state.get("_schema")},
+        )
+    missing = missing_state_capabilities(state)
+    if missing:
+        raise ManagedStateError(
+            "capability_upgrade_required",
+            "Managed Emotion Engine state requires an explicit capability upgrade transaction.",
+            details={"missing_capabilities": missing},
+        )
+    if state.get("identity", {}).get("status") != "bound":
+        raise ManagedStateError(
+            "identity_binding_required",
+            "Managed Emotion Engine state requires explicit owner identity binding.",
+        )
+    audit = audit_state_integrity(state)
+    if audit["hard_errors"]:
+        raise ManagedStateError(
+            "state_integrity_failed",
+            "Managed Emotion Engine state failed integrity checks; no mutation was applied.",
+            hard_errors=audit["hard_errors"],
+        )
+    return audit
 
 
 def state_is_v3(state):
@@ -3524,12 +3589,17 @@ def audit_state_integrity(state):
         })
 
     session_ids = [entry.get("session_id") for entry in state.get("session_ledger", [])]
-    duplicate_session_ids = sorted({value for value in session_ids if value and session_ids.count(value) > 1})
+    duplicate_session_ids = sorted(
+        value for value, count in Counter(session_ids).items() if value and count > 1
+    )
     if duplicate_session_ids:
         hard_errors.append({"code": "duplicate_session_ids", "ids": duplicate_session_ids})
 
     processed_ids = [str(value) for value in state.get("processed_event_ids", []) if value]
-    duplicate_event_ids = sorted({value for value in processed_ids if processed_ids.count(value) > 1})
+    processed_id_set = set(processed_ids)
+    duplicate_event_ids = sorted(
+        value for value, count in Counter(processed_ids).items() if value and count > 1
+    )
     if duplicate_event_ids:
         hard_errors.append({"code": "duplicate_processed_event_ids", "ids": duplicate_event_ids})
 
@@ -3543,12 +3613,16 @@ def audit_state_integrity(state):
         if item.get("digest") == summary.get("digest")
     ]
     archived_evidence_ids = [item.get("evidence_id") for item in archived_evidence]
-    duplicate_evidence_ids = sorted({value for value in evidence_ids if value and evidence_ids.count(value) > 1})
+    duplicate_evidence_ids = sorted(
+        value for value, count in Counter(evidence_ids).items() if value and count > 1
+    )
     if duplicate_evidence_ids:
         hard_errors.append({"code": "duplicate_evidence_ids", "ids": duplicate_evidence_ids})
 
     settlement_ids = [entry.get("settlement_id") for entry in state.get("trust_settlements", [])]
-    duplicate_settlement_ids = sorted({value for value in settlement_ids if value and settlement_ids.count(value) > 1})
+    duplicate_settlement_ids = sorted(
+        value for value, count in Counter(settlement_ids).items() if value and count > 1
+    )
     if duplicate_settlement_ids:
         hard_errors.append({"code": "duplicate_settlement_ids", "ids": duplicate_settlement_ids})
 
@@ -3786,16 +3860,17 @@ def audit_state_integrity(state):
     if trajectory_turns != list(range(archived_turns + 1, archived_turns + len(trajectory) + 1)):
         hard_errors.append({"code": "trajectory_turn_sequence", "turns": trajectory_turns})
     trajectory_event_ids = [entry.get("event_id") for entry in trajectory if entry.get("event_id")]
-    duplicate_trajectory_events = sorted({
-        value for value in trajectory_event_ids if trajectory_event_ids.count(value) > 1
-    })
+    duplicate_trajectory_events = sorted(
+        value for value, count in Counter(trajectory_event_ids).items()
+        if value and count > 1
+    )
     if duplicate_trajectory_events:
         hard_errors.append({
             "code": "duplicate_trajectory_event_ids", "ids": duplicate_trajectory_events,
         })
     if not state.get("idempotency_retention", {}).get("pruned_events"):
         missing_trajectory_events = [
-            value for value in trajectory_event_ids if value not in set(processed_ids)
+            value for value in trajectory_event_ids if value not in processed_id_set
         ]
         if missing_trajectory_events:
             hard_errors.append({
@@ -4084,6 +4159,31 @@ STATE_MUTATING_COMMANDS = {
     "reconcile_trust",
 }
 
+MANAGED_RUNTIME_BLOCKED_COMMANDS = {
+    "init",
+    "bind_identity",
+    "migrate_state",
+    "upgrade_state",
+    "reset",
+}
+
+
+def command_will_write(command, args):
+    if command in {"compact_log", "reconcile_trust"}:
+        return "--apply" in args
+    return command in STATE_MUTATING_COMMANDS
+
+
+def parse_runtime_argv(argv):
+    args = list(argv)
+    managed_runtime = False
+    if args and args[0] == "--managed-runtime":
+        managed_runtime = True
+        args = args[1:]
+    if len(args) < 2:
+        raise ValueError("expected <command> <state_file>")
+    return managed_runtime, args
+
 
 def run_command(command, state_file, state):
 
@@ -4143,6 +4243,8 @@ def run_command(command, state_file, state):
             sys.exit(2)
         if result["status"] == "identity_binding_required":
             sys.exit(3)
+        if result["status"] == "capability_upgrade_required":
+            sys.exit(4)
 
     elif command == "configure":
         args = sys.argv[3:]
@@ -4484,13 +4586,22 @@ def run_command(command, state_file, state):
         sys.exit(1)
 
 
-def main():
-    if len(sys.argv) < 3:
+def _main():
+    try:
+        managed_runtime, args = parse_runtime_argv(sys.argv[1:])
+    except ValueError:
         print(__doc__)
         sys.exit(1)
+    sys.argv = [sys.argv[0], *args]
 
-    command = sys.argv[1]
-    state_file = sys.argv[2]
+    command = args[0]
+    state_file = args[1]
+
+    if managed_runtime and command in MANAGED_RUNTIME_BLOCKED_COMMANDS:
+        raise ManagedStateError(
+            "installer_transaction_required",
+            f"{command} is owned by the installer transaction in managed runtime mode.",
+        )
 
     if command == "init":
         args = sys.argv[3:]
@@ -4529,6 +4640,8 @@ def main():
 
     if command in STATE_MUTATING_COMMANDS:
         with state_file_lock(state_file):
+            if managed_runtime:
+                require_managed_state_file(state_file)
             state = load_state_unlocked(state_file)
             if command != "migrate_state" and state.get("_schema") != STATE_SCHEMA:
                 print_json({
@@ -4550,11 +4663,29 @@ def main():
                     "message": "v3 state is read-only until upgrade_state is explicitly applied",
                 })
                 sys.exit(2)
+            if managed_runtime and command_will_write(command, sys.argv[3:]):
+                require_managed_runtime_writable(state_file, state)
+            run_command(command, state_file, state)
+        return
+
+    if managed_runtime:
+        with state_file_lock(state_file):
+            require_managed_state_file(state_file)
+            state = load_state_unlocked(state_file)
             run_command(command, state_file, state)
         return
 
     state = load_state(state_file)
     run_command(command, state_file, state)
+
+
+def main():
+    try:
+        return _main()
+    except ManagedStateError as exc:
+        state_file = sys.argv[2] if len(sys.argv) >= 3 else ""
+        print_json(exc.as_dict(state_file))
+        sys.exit(2)
 
 
 if __name__ == "__main__":

@@ -2,16 +2,19 @@
 
 ## Unreleased
 
+## 2.0.0-rc.4 - 2026-08-28
+
 - Added locked-state and managed-runtime MCP modes so installer-owned targets cannot override their fixed state path or bypass identity/migration transactions.
 - Added an explicit dry-run/apply v3 capability upgrade that preserves host extensions, creates the normal backup, and enforces current active-session and idempotency retention before publication.
 - Preserved stored v3 capability declarations on ordinary loads and made every normal writer fail closed until an incomplete packet is explicitly upgraded; activation and integrity audit now report the missing capability set without mutating it.
 - Rejected `tools/call` notifications without a non-null JSON-RPC id and malformed non-object params so writes cannot execute without a matched response.
-
-## 2.0.0-rc.4 - 2026-08-26
-
 - Bounded live-session trajectory and trust-evidence detail while preserving exact aggregate pattern extraction and trust settlement semantics.
 - Added observable compaction counters, digest summaries, and the `bounded_active_session/v1` capability so long-running hosts can verify retained-window behavior.
 - Kept `enabled` and `runtime_mode` synchronized through pause/resume, with an explicit resume mode for host projections.
+- Added an explicit managed CLI mode that refuses to synthesize missing owner-managed state and blocks installer-owned identity, migration, upgrade, initialization, and reset commands.
+- Made managed CLI and MCP writers fail closed before their mutator when state integrity has structural hard errors, while keeping diagnostic reads and semantic-warning-only writes available.
+- Made all managed MCP state-bearing tools reject a missing primary state instead of exposing a synthesized default packet.
+- Made capability-upgrade activation exit nonzero and rejected non-object JSON-RPC tool arguments even when the invalid value is an empty array.
 
 ## 2.0.0-rc.3 - 2026-08-24
 

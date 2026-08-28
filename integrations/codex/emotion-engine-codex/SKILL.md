@@ -43,7 +43,7 @@ For local client setup, prefer the registration helper:
 python3 .codex/skills/emotion-engine-codex/scripts/register_mcp_client.py codex --project-dir . --state-profile codex
 ```
 
-The MCP server exposes runtime/protocol tools only. `--locked-state` prevents request-level state path overrides, and `--managed-runtime` reserves identity binding and migration for Agent Harness. Agent Harness owns install refresh, doctor, repair, manifest checks, and sidecar drift checks.
+The MCP server exposes runtime/protocol tools only. `--locked-state` prevents request-level state path overrides, and `--managed-runtime` requires an existing fixed primary state, fails closed on structural integrity errors, and reserves initialization, identity binding, migration, capability upgrade, and reset for Agent Harness. Agent Harness owns install refresh, doctor, repair, manifest checks, and sidecar drift checks.
 
 The wrapper automatically initializes an unbound v3 state file if missing. Before the first emotional mutation, bind it explicitly:
 

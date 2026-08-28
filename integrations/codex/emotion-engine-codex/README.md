@@ -105,7 +105,7 @@ codex mcp add emotion-engine -- \
   --managed-runtime
 ```
 
-Use that exact `--state` in MCP client registration. `--locked-state` prevents tool calls from overriding it, and `--managed-runtime` reserves identity binding and migration for Agent Harness. The server also honors `CODEX_EMOTION_STATE` and will prefer `.emotion-engine/codex-state.json` inside a Codex project, but explicit locked registration is the safest way to avoid shell-wrapper and MCP state files diverging.
+Use that exact `--state` in MCP client registration. `--locked-state` prevents tool calls from overriding it, and `--managed-runtime` reserves state initialization, identity binding, migration, capability upgrade, and reset for Agent Harness. Managed runtime calls require the fixed primary state to exist and ordinary writers reject structural integrity failures before mutation; use Agent Harness for recovery instead of running administrative helper commands directly. The server also honors `CODEX_EMOTION_STATE` and will prefer `.emotion-engine/codex-state.json` inside a Codex project, but explicit locked registration is the safest way to avoid shell-wrapper and MCP state files diverging.
 
 The MCP server exposes runtime/protocol tools only. Agent Harness owns target refresh, doctor, repair, manifest checks, and sidecar projection drift checks.
 
