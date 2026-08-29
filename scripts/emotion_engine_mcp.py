@@ -68,7 +68,10 @@ def load_state_for_tool(
         ensure_state_parent(state_file)
         with engine.state_file_lock(state_file):
             engine.require_managed_state_file(state_file)
-            return state_file, engine.load_state_unlocked(state_file)
+            return state_file, engine.load_state_unlocked(
+                state_file,
+                validate_raw_shape=True,
+            )
     return state_file, engine.load_state(state_file)
 
 
@@ -85,7 +88,10 @@ def mutate_state_for_tool(
     with engine.state_file_lock(state_file):
         if managed_runtime:
             engine.require_managed_state_file(state_file)
-        state = engine.load_state_unlocked(state_file)
+        state = engine.load_state_unlocked(
+            state_file,
+            validate_raw_shape=True,
+        )
         if not allow_legacy and state.get("_schema") != engine.STATE_SCHEMA:
             raise JsonRpcError(-32602, "state migration required: v2 packets are read-only")
         missing_capabilities = engine.missing_state_capabilities(state)

@@ -538,6 +538,56 @@ class EmotionEngineMcpTest(unittest.TestCase):
             self.assertEqual(state_file.read_bytes(), before)
             self.assertEqual(backup_file.read_bytes(), backup_before)
 
+    def test_managed_mcp_rejects_raw_shape_without_mutating_state_or_backup(self):
+        calls = [
+            ("emotion_engine_audit_state", {}),
+            ("emotion_engine_session_start", {
+                "session_id": "mcp-session",
+                "event_id": "mcp-session-start",
+                "character_id": "mcp-character",
+                "relationship_id": "mcp-relationship",
+            }),
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "raw-shape-corrupt.json"
+            backup_file = Path(f"{state_file}.bak")
+            for index, (tool_name, arguments) in enumerate(calls, start=1):
+                with self.subTest(tool_name=tool_name):
+                    state = emotion_engine_mcp.engine.default_state(
+                        "mcp-character",
+                        "mcp-relationship",
+                    )
+                    state["session_ledger"] = {"latest": "must not be erased"}
+                    state_file.write_text(
+                        json.dumps(state, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                    before = state_file.read_bytes()
+                    backup_before = b'{"sentinel":"keep"}\n'
+                    backup_file.write_bytes(backup_before)
+
+                    with self.assertRaises(emotion_engine_mcp.JsonRpcError) as raised:
+                        emotion_engine_mcp.handle_request(
+                            {
+                                "jsonrpc": "2.0",
+                                "id": index,
+                                "method": "tools/call",
+                                "params": {"name": tool_name, "arguments": arguments},
+                            },
+                            default_state_file=str(state_file),
+                            locked_state=True,
+                            managed_runtime=True,
+                        )
+
+                    self.assertEqual(raised.exception.code, -32043)
+                    self.assertEqual(raised.exception.data["status"], "state_integrity_failed")
+                    self.assertEqual(
+                        raised.exception.data["hard_errors"][0]["field"],
+                        "session_ledger",
+                    )
+                    self.assertEqual(state_file.read_bytes(), before)
+                    self.assertEqual(backup_file.read_bytes(), backup_before)
+
     def test_managed_mcp_writer_reports_hard_corruption_over_jsonrpc(self):
         with tempfile.TemporaryDirectory() as tmpdir:
             state_file = Path(tmpdir) / "hard-corrupt.json"

@@ -36,6 +36,16 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         )
         return state_file.read_bytes()
 
+    def write_raw_shape_corrupt_state(self, state_file):
+        state = self.bound_state()
+        state["session_ledger"] = {"latest": "would be erased by normalization"}
+        state["processed_event_ids"] = {"latest": "would be erased by normalization"}
+        state_file.write_text(
+            json.dumps(state, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return state_file.read_bytes()
+
     def next_event_id(self, prefix="event"):
         self.event_counter += 1
         return f"{prefix}-{self.event_counter}"
@@ -1003,6 +1013,91 @@ class EmotionEngineUtilsTest(unittest.TestCase):
                     )
                     self.assertEqual(state_file.read_bytes(), before)
                     self.assertEqual(backup_file.read_bytes(), backup_before)
+
+    def test_managed_cli_rejects_raw_shape_before_probe_or_writer(self):
+        commands = [
+            ["pause"],
+            [
+                "session_start",
+                "--session-id", "managed-session",
+                "--event-id", "managed-start",
+                "--character-id", "test-character",
+                "--relationship-id", "test-relationship",
+            ],
+            ["activation_check"],
+            ["audit_state"],
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "raw-shape-corrupt.json"
+            backup_file = Path(f"{state_file}.bak")
+            for command in commands:
+                with self.subTest(command=command[0]):
+                    before = self.write_raw_shape_corrupt_state(state_file)
+                    backup_before = b'{"sentinel":"keep"}\n'
+                    backup_file.write_bytes(backup_before)
+                    completed = subprocess.run(
+                        [
+                            sys.executable,
+                            str(SCRIPT),
+                            "--managed-runtime",
+                            command[0],
+                            str(state_file),
+                            *command[1:],
+                        ],
+                        text=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        check=False,
+                    )
+                    payload = json.loads(completed.stdout)
+                    self.assertEqual(completed.returncode, 2, completed.stderr)
+                    self.assertEqual(payload["status"], "state_integrity_failed")
+                    self.assertEqual(
+                        {item.get("field") for item in payload["hard_errors"]},
+                        {"session_ledger", "processed_event_ids"},
+                    )
+                    self.assertEqual(state_file.read_bytes(), before)
+                    self.assertEqual(backup_file.read_bytes(), backup_before)
+
+    def test_explicit_migration_rejects_raw_shape_without_rewriting_backup(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "raw-v2.json"
+            state = self.bound_state()
+            state["_schema"] = emotion_engine_utils.LEGACY_STATE_SCHEMA
+            state.pop("identity", None)
+            state.pop("capabilities", None)
+            state["emotion_trajectory"] = {"legacy": "must not be erased"}
+            state_file.write_text(
+                json.dumps(state, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            before = state_file.read_bytes()
+            backup_file = Path(f"{state_file}.bak")
+            backup_before = b'{"sentinel":"keep"}\n'
+            backup_file.write_bytes(backup_before)
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "migrate_state",
+                    str(state_file),
+                    "--character-id", "test-character",
+                    "--relationship-id", "test-relationship",
+                    "--apply",
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(completed.returncode, 2, completed.stderr)
+            self.assertEqual(payload["status"], "state_integrity_failed")
+            self.assertEqual(payload["hard_errors"][0]["field"], "emotion_trajectory")
+            self.assertEqual(state_file.read_bytes(), before)
+            self.assertEqual(backup_file.read_bytes(), backup_before)
 
     def test_managed_cli_audit_remains_readable_on_hard_corruption(self):
         with tempfile.TemporaryDirectory() as tmpdir:

@@ -467,8 +467,145 @@ def write_json_file_atomic(path, value):
         raise
 
 
-def load_state_from_path(path):
-    return ensure_state_shape(read_json_file(path))
+_RAW_MANAGED_OBJECT_FIELDS = (
+    "identity",
+    "session",
+    "idempotency_retention",
+    "active_session_retention",
+    "emotion",
+    "affective_pulse",
+    "personality_baseline",
+    "character_profile",
+)
+
+_RAW_MANAGED_OBJECT_LIST_FIELDS = (
+    "emotion_trajectory",
+    "emotion_log",
+    "trust_history",
+    "trust_evidence",
+    "trust_settlements",
+    "session_ledger",
+    "trust_reconciliations",
+)
+
+
+def raw_managed_shape_errors(raw):
+    """Return loss-prevention errors before defaults or normalization run."""
+    if not isinstance(raw, dict):
+        return [{
+            "code": "invalid_raw_state_type",
+            "expected": "object",
+            "actual": type(raw).__name__,
+        }]
+
+    errors = []
+
+    def invalid_type(field, expected, value):
+        errors.append({
+            "code": "invalid_raw_field_type",
+            "field": field,
+            "expected": expected,
+            "actual": type(value).__name__,
+        })
+
+    for field in _RAW_MANAGED_OBJECT_FIELDS:
+        if field in raw and not isinstance(raw[field], dict):
+            invalid_type(field, "object", raw[field])
+
+    if "capabilities" in raw:
+        capabilities = raw["capabilities"]
+        if not isinstance(capabilities, list):
+            invalid_type("capabilities", "array", capabilities)
+        else:
+            for index, value in enumerate(capabilities):
+                if not isinstance(value, str):
+                    errors.append({
+                        "code": "invalid_raw_array_entry",
+                        "field": "capabilities",
+                        "index": index,
+                        "expected": "string",
+                        "actual": type(value).__name__,
+                    })
+
+    for field in _RAW_MANAGED_OBJECT_LIST_FIELDS:
+        if field not in raw:
+            continue
+        value = raw[field]
+        if not isinstance(value, list):
+            invalid_type(field, "array", value)
+            continue
+        for index, entry in enumerate(value):
+            if not isinstance(entry, dict):
+                errors.append({
+                    "code": "invalid_raw_array_entry",
+                    "field": field,
+                    "index": index,
+                    "expected": "object",
+                    "actual": type(entry).__name__,
+                })
+
+    if "processed_event_ids" in raw:
+        processed = raw["processed_event_ids"]
+        if not isinstance(processed, list):
+            invalid_type("processed_event_ids", "array", processed)
+        else:
+            for index, value in enumerate(processed):
+                if not isinstance(value, str):
+                    errors.append({
+                        "code": "invalid_raw_array_entry",
+                        "field": "processed_event_ids",
+                        "index": index,
+                        "expected": "string",
+                        "actual": type(value).__name__,
+                    })
+
+    active_retention = raw.get("active_session_retention")
+    if isinstance(active_retention, dict):
+        evidence_summaries = active_retention.get("evidence_summaries")
+        if evidence_summaries is not None:
+            if not isinstance(evidence_summaries, list):
+                invalid_type(
+                    "active_session_retention.evidence_summaries",
+                    "array",
+                    evidence_summaries,
+                )
+            else:
+                for index, entry in enumerate(evidence_summaries):
+                    if not isinstance(entry, dict):
+                        errors.append({
+                            "code": "invalid_raw_array_entry",
+                            "field": "active_session_retention.evidence_summaries",
+                            "index": index,
+                            "expected": "object",
+                            "actual": type(entry).__name__,
+                        })
+        trajectory_summary = active_retention.get("trajectory_summary")
+        if trajectory_summary is not None and not isinstance(trajectory_summary, dict):
+            invalid_type(
+                "active_session_retention.trajectory_summary",
+                "object_or_null",
+                trajectory_summary,
+            )
+
+    return errors
+
+
+def validate_raw_managed_shape(raw):
+    errors = raw_managed_shape_errors(raw)
+    if errors:
+        raise ManagedStateError(
+            "state_integrity_failed",
+            "Emotion Engine state has an invalid raw shape; no normalization or mutation was applied.",
+            hard_errors=errors,
+        )
+    return raw
+
+
+def load_state_from_path(path, *, validate_raw_shape=False):
+    raw = read_json_file(path)
+    if validate_raw_shape:
+        validate_raw_managed_shape(raw)
+    return ensure_state_shape(raw)
 
 
 def backup_current_state(path):
@@ -497,9 +634,11 @@ def recover_state_from_backup(path, error):
     return recovered
 
 
-def load_state_unlocked(path):
+def load_state_unlocked(path, *, validate_raw_shape=False):
     if not os.path.exists(path):
         return default_state()
+    if validate_raw_shape:
+        return load_state_from_path(path, validate_raw_shape=True)
     try:
         return load_state_from_path(path)
     except (json.JSONDecodeError, OSError, TypeError, ValueError) as error:
@@ -936,6 +1075,7 @@ def bind_state_identity(state, character_id, relationship_id):
 
 def migrate_state_v2(state, character_id, relationship_id, state_id=None):
     """Build a v3 packet from v2 without guessing ownership."""
+    validate_raw_managed_shape(state)
     source = ensure_state_shape(state)
     if source.get("_schema") == STATE_SCHEMA:
         assert_state_identity(source, character_id, relationship_id)
@@ -990,6 +1130,7 @@ def upgrade_state_v3(state):
     This is intentionally separate from ordinary loads so installers can
     preview, back up, journal, and verify the upgrade before publishing it.
     """
+    validate_raw_managed_shape(state)
     if not isinstance(state, dict) or state.get("_schema") != STATE_SCHEMA:
         raise ValueError("upgrade_state requires an existing v3 state packet")
     source = deepcopy(state)
@@ -3572,6 +3713,28 @@ _legacy_audit_emotion_log = audit_emotion_log
 
 def audit_state_integrity(state):
     """Check hard state invariants separately from heuristic semantic warnings."""
+    raw_shape_errors = raw_managed_shape_errors(state)
+    if raw_shape_errors:
+        identity = state.get("identity") if isinstance(state, dict) else None
+        return {
+            "ok": False,
+            "schema": state.get("_schema") if isinstance(state, dict) else None,
+            "identity_status": identity.get("status") if isinstance(identity, dict) else None,
+            "hard_errors": raw_shape_errors,
+            "semantic_warnings": [],
+            "counts": {
+                "sessions": 0,
+                "processed_events": 0,
+                "trust_evidence": 0,
+                "summarized_trust_evidence": 0,
+                "retained_trajectory": 0,
+                "summarized_trajectory": 0,
+                "trust_settlements": 0,
+                "turns": 0,
+                "task_like_turns": 0,
+                "lifecycle_housekeeping": 0,
+            },
+        }
     state = ensure_state_shape(state)
     hard_errors = []
     semantic_warnings = []
@@ -4642,7 +4805,7 @@ def _main():
         with state_file_lock(state_file):
             if managed_runtime:
                 require_managed_state_file(state_file)
-            state = load_state_unlocked(state_file)
+            state = load_state_unlocked(state_file, validate_raw_shape=True)
             if command != "migrate_state" and state.get("_schema") != STATE_SCHEMA:
                 print_json({
                     "ok": False,
@@ -4671,7 +4834,7 @@ def _main():
     if managed_runtime:
         with state_file_lock(state_file):
             require_managed_state_file(state_file)
-            state = load_state_unlocked(state_file)
+            state = load_state_unlocked(state_file, validate_raw_shape=True)
             run_command(command, state_file, state)
         return
 
