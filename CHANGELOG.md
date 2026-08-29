@@ -2,7 +2,7 @@
 
 ## Unreleased
 
-## 2.0.0-rc.4 - 2026-08-28
+## 2.0.0-rc.4 - 2026-08-29
 
 - Added locked-state and managed-runtime MCP modes so installer-owned targets cannot override their fixed state path or bypass identity/migration transactions.
 - Added an explicit dry-run/apply v3 capability upgrade that preserves host extensions, creates the normal backup, and enforces current active-session and idempotency retention before publication.
@@ -15,6 +15,7 @@
 - Made managed CLI and MCP writers fail closed before their mutator when state integrity has structural hard errors, while keeping diagnostic reads and semantic-warning-only writes available.
 - Made all managed MCP state-bearing tools reject a missing primary state instead of exposing a synthesized default packet.
 - Made capability-upgrade activation exit nonzero and rejected non-object JSON-RPC tool arguments even when the invalid value is an empty array.
+- Rejected malformed raw ledger, retention, identity, and capability shapes before normalization, backup, activation/audit probes, migration, or mutation so both the primary packet and existing backup remain byte-identical on failure.
 
 ## 2.0.0-rc.3 - 2026-08-24
 
