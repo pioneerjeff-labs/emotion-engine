@@ -67,6 +67,11 @@ class HermesIntegrationTest(unittest.TestCase):
             self.assertIn("--apply", installed.stdout)
             self.assertIn("activation is pending", installed.stdout)
 
+    def test_github_tap_core_matches_canonical_runtime(self):
+        canonical = ROOT / "scripts" / "emotion_engine_utils.py"
+        packaged = GITHUB_TAP_SKILL / "scripts" / "emotion_engine_utils.py"
+        self.assertEqual(packaged.read_bytes(), canonical.read_bytes())
+
     def test_package_contains_required_files(self):
         self.assertTrue((HERMES_SKILL / "SKILL.md").exists())
         self.assertTrue((HERMES_SKILL / "README.md").exists())

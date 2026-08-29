@@ -27,6 +27,25 @@ class EmotionEngineUtilsTest(unittest.TestCase):
     def bound_state(self):
         return emotion_engine_utils.default_state("test-character", "test-relationship")
 
+    def write_hard_corrupt_state(self, state_file):
+        state = self.bound_state()
+        state["processed_event_ids"] = ["duplicate-event", "duplicate-event"]
+        state_file.write_text(
+            json.dumps(state, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return state_file.read_bytes()
+
+    def write_raw_shape_corrupt_state(self, state_file):
+        state = self.bound_state()
+        state["session_ledger"] = {"latest": "would be erased by normalization"}
+        state["processed_event_ids"] = {"latest": "would be erased by normalization"}
+        state_file.write_text(
+            json.dumps(state, indent=2, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        return state_file.read_bytes()
+
     def next_event_id(self, prefix="event"):
         self.event_counter += 1
         return f"{prefix}-{self.event_counter}"
@@ -110,7 +129,7 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(state["trust"], 0.1)
         self.assertEqual(state["emotion_log"], [])
         self.assertEqual(
-            emotion_engine_utils.public_status(state)["engine_version"], "2.0.0-rc.3"
+            emotion_engine_utils.public_status(state)["engine_version"], "2.0.0-rc.4"
         )
 
     def test_configure_style_updates_baseline(self):
@@ -332,6 +351,43 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         )
         self.assertEqual(trust_update["status"], "paused")
         self.assertEqual(state, snapshot)
+
+    def test_pause_and_resume_keep_runtime_mode_in_sync(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "state.json"
+            state = self.bound_state()
+            state["runtime_mode"] = "always"
+            emotion_engine_utils.save_state(state_file, state)
+
+            paused = subprocess.run(
+                [sys.executable, str(SCRIPT), "pause", str(state_file)],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(json.loads(paused.stdout)["runtime_mode"], "paused")
+            paused_state = emotion_engine_utils.load_state(state_file)
+            self.assertFalse(paused_state["enabled"])
+            self.assertEqual(paused_state["runtime_mode"], "paused")
+
+            resumed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "resume",
+                    str(state_file),
+                    "--mode",
+                    "light",
+                ],
+                check=True,
+                capture_output=True,
+                text=True,
+            )
+            self.assertEqual(json.loads(resumed.stdout)["runtime_mode"], "light")
+            resumed_state = emotion_engine_utils.load_state(state_file)
+            self.assertTrue(resumed_state["enabled"])
+            self.assertEqual(resumed_state["runtime_mode"], "light")
+            self.assertNotIn("runtime_mode_before_pause", resumed_state)
 
     def test_manual_trust_update_writes_its_own_reason_without_touching_previous_log(self):
         state = self.bound_state()
@@ -892,6 +948,219 @@ class EmotionEngineUtilsTest(unittest.TestCase):
             after = json.loads(state_file.read_text(encoding="utf-8"))
             self.assertEqual(after["emotion_log"][-1]["event_type"], "log_compaction")
 
+    def test_managed_cli_writer_rejects_missing_state_without_initializing(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "missing-state.json"
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--managed-runtime",
+                    "pause",
+                    str(state_file),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 2, completed.stderr)
+            self.assertEqual(json.loads(completed.stdout)["status"], "state_file_missing")
+            self.assertFalse(state_file.exists())
+            self.assertFalse(Path(f"{state_file}.bak").exists())
+
+    def test_managed_cli_writers_reject_hard_corruption_byte_identically(self):
+        commands = [
+            ["pause"],
+            [
+                "session_start",
+                "--session-id", "managed-session",
+                "--event-id", "managed-start",
+                "--character-id", "test-character",
+                "--relationship-id", "test-relationship",
+            ],
+            ["compact_log", "--apply"],
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "hard-corrupt.json"
+            backup_file = Path(f"{state_file}.bak")
+            for command in commands:
+                with self.subTest(command=command[0]):
+                    before = self.write_hard_corrupt_state(state_file)
+                    backup_before = b'{"sentinel":"keep"}\n'
+                    backup_file.write_bytes(backup_before)
+                    completed = subprocess.run(
+                        [
+                            sys.executable,
+                            str(SCRIPT),
+                            "--managed-runtime",
+                            command[0],
+                            str(state_file),
+                            *command[1:],
+                        ],
+                        text=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        check=False,
+                    )
+                    payload = json.loads(completed.stdout)
+                    self.assertEqual(completed.returncode, 2, completed.stderr)
+                    self.assertEqual(payload["status"], "state_integrity_failed")
+                    self.assertIn(
+                        "duplicate_processed_event_ids",
+                        {item["code"] for item in payload["hard_errors"]},
+                    )
+                    self.assertEqual(state_file.read_bytes(), before)
+                    self.assertEqual(backup_file.read_bytes(), backup_before)
+
+    def test_managed_cli_rejects_raw_shape_before_probe_or_writer(self):
+        commands = [
+            ["pause"],
+            [
+                "session_start",
+                "--session-id", "managed-session",
+                "--event-id", "managed-start",
+                "--character-id", "test-character",
+                "--relationship-id", "test-relationship",
+            ],
+            ["activation_check"],
+            ["audit_state"],
+        ]
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "raw-shape-corrupt.json"
+            backup_file = Path(f"{state_file}.bak")
+            for command in commands:
+                with self.subTest(command=command[0]):
+                    before = self.write_raw_shape_corrupt_state(state_file)
+                    backup_before = b'{"sentinel":"keep"}\n'
+                    backup_file.write_bytes(backup_before)
+                    completed = subprocess.run(
+                        [
+                            sys.executable,
+                            str(SCRIPT),
+                            "--managed-runtime",
+                            command[0],
+                            str(state_file),
+                            *command[1:],
+                        ],
+                        text=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        check=False,
+                    )
+                    payload = json.loads(completed.stdout)
+                    self.assertEqual(completed.returncode, 2, completed.stderr)
+                    self.assertEqual(payload["status"], "state_integrity_failed")
+                    self.assertEqual(
+                        {item.get("field") for item in payload["hard_errors"]},
+                        {"session_ledger", "processed_event_ids"},
+                    )
+                    self.assertEqual(state_file.read_bytes(), before)
+                    self.assertEqual(backup_file.read_bytes(), backup_before)
+
+    def test_explicit_migration_rejects_raw_shape_without_rewriting_backup(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "raw-v2.json"
+            state = self.bound_state()
+            state["_schema"] = emotion_engine_utils.LEGACY_STATE_SCHEMA
+            state.pop("identity", None)
+            state.pop("capabilities", None)
+            state["emotion_trajectory"] = {"legacy": "must not be erased"}
+            state_file.write_text(
+                json.dumps(state, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            before = state_file.read_bytes()
+            backup_file = Path(f"{state_file}.bak")
+            backup_before = b'{"sentinel":"keep"}\n'
+            backup_file.write_bytes(backup_before)
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "migrate_state",
+                    str(state_file),
+                    "--character-id", "test-character",
+                    "--relationship-id", "test-relationship",
+                    "--apply",
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            payload = json.loads(completed.stdout)
+            self.assertEqual(completed.returncode, 2, completed.stderr)
+            self.assertEqual(payload["status"], "state_integrity_failed")
+            self.assertEqual(payload["hard_errors"][0]["field"], "emotion_trajectory")
+            self.assertEqual(state_file.read_bytes(), before)
+            self.assertEqual(backup_file.read_bytes(), backup_before)
+
+    def test_managed_cli_audit_remains_readable_on_hard_corruption(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "hard-corrupt.json"
+            before = self.write_hard_corrupt_state(state_file)
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--managed-runtime",
+                    "audit_state",
+                    str(state_file),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            payload = json.loads(completed.stdout)
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertFalse(payload["ok"])
+            self.assertIn(
+                "duplicate_processed_event_ids",
+                {item["code"] for item in payload["hard_errors"]},
+            )
+            self.assertEqual(state_file.read_bytes(), before)
+
+    def test_managed_cli_writer_allows_semantic_warnings_only(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "warning-only.json"
+            state = self.start_session()
+            state["emotion_log"].append({
+                "timestamp": emotion_engine_utils.now_iso(),
+                "event_type": "turn",
+                "session_id": "test-session",
+                "event_id": "task-warning",
+                "subject": "task",
+                "semantic_event_type": "work_checkpoint",
+                "situation": "tests passed",
+            })
+            state["session_ledger"][0]["turn_count"] = 1
+            audit = emotion_engine_utils.audit_state_integrity(state)
+            self.assertTrue(audit["ok"], audit)
+            self.assertTrue(audit["semantic_warnings"])
+            emotion_engine_utils.save_state(state_file, state)
+
+            completed = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "--managed-runtime",
+                    "pause",
+                    str(state_file),
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(completed.returncode, 0, completed.stderr)
+            self.assertEqual(json.loads(completed.stdout)["runtime_mode"], "paused")
+            self.assertFalse(json.loads(state_file.read_text(encoding="utf-8"))["enabled"])
+
     def test_low_value_compaction_does_not_absorb_salient_previous_turn(self):
         state = self.start_session()
 
@@ -960,6 +1229,164 @@ class EmotionEngineUtilsTest(unittest.TestCase):
 
         self.assertEqual(migrated["boundary_state"], legacy["boundary_state"])
         self.assertEqual(migrated["host_extension"], legacy["host_extension"])
+
+    def test_v3_upgrade_adds_capability_bounds_active_session_and_preserves_extensions(self):
+        state = self.start_session()
+        state["capabilities"].remove("bounded_active_session/v1")
+        state.pop("active_session_retention")
+        state["host_extension"] = {"nested": [1, {"preserve": True}]}
+        state["emotion_trajectory"] = [
+            {"P": ((index % 7) - 3) / 10, "D": 0.5}
+            for index in range(600)
+        ]
+
+        upgraded, report = emotion_engine_utils.upgrade_state_v3(state)
+
+        self.assertEqual(report["status"], "upgrade_ready")
+        self.assertEqual(report["missing_capabilities"], ["bounded_active_session/v1"])
+        self.assertIn("active_session_retention", report["initialized_fields"])
+        self.assertEqual(report["trajectory_entries_summarized"], 88)
+        self.assertEqual(upgraded["host_extension"], state["host_extension"])
+        self.assertIn("bounded_active_session/v1", upgraded["capabilities"])
+        self.assertEqual(len(upgraded["emotion_trajectory"]), 512)
+        self.assertEqual(
+            upgraded["active_session_retention"]["trajectory_summary"]["count"],
+            88,
+        )
+
+    def test_cli_upgrade_state_dry_run_and_apply_backup(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            state = self.start_session()
+            state["capabilities"].remove("bounded_active_session/v1")
+            state.pop("active_session_retention")
+            state["host_extension"] = {"preserve": True}
+            state_file.write_text(json.dumps(state), encoding="utf-8")
+            before = state_file.read_bytes()
+
+            dry_run = subprocess.run(
+                [sys.executable, str(SCRIPT), "upgrade_state", str(state_file)],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            self.assertTrue(json.loads(dry_run.stdout)["dry_run"])
+            self.assertEqual(state_file.read_bytes(), before)
+
+            applied = subprocess.run(
+                [
+                    sys.executable,
+                    str(SCRIPT),
+                    "upgrade_state",
+                    str(state_file),
+                    "--apply",
+                ],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=True,
+            )
+            report = json.loads(applied.stdout)
+            self.assertEqual(report["status"], "upgraded")
+            self.assertFalse(report["dry_run"])
+            self.assertTrue(Path(report["backup_path"]).exists())
+            upgraded = json.loads(state_file.read_text(encoding="utf-8"))
+            backup = json.loads(Path(report["backup_path"]).read_text(encoding="utf-8"))
+            self.assertIn("bounded_active_session/v1", upgraded["capabilities"])
+            self.assertEqual(upgraded["host_extension"], state["host_extension"])
+            self.assertNotIn("bounded_active_session/v1", backup["capabilities"])
+
+    def test_older_v3_is_read_only_until_explicit_capability_upgrade(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            state = self.bound_state()
+            state["capabilities"].remove("bounded_active_session/v1")
+            state.pop("active_session_retention")
+            state_file.write_text(
+                json.dumps(state, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+            before = state_file.read_bytes()
+
+            loaded = emotion_engine_utils.load_state(state_file)
+            self.assertNotIn("bounded_active_session/v1", loaded["capabilities"])
+            activation = emotion_engine_utils.activation_check(loaded, state_file)
+            self.assertEqual(activation["status"], "capability_upgrade_required")
+            audit = emotion_engine_utils.audit_state_integrity(loaded)
+            self.assertFalse(audit["ok"])
+            self.assertIn(
+                "missing_required_capabilities",
+                {item["code"] for item in audit["hard_errors"]},
+            )
+
+            paused = subprocess.run(
+                [sys.executable, str(SCRIPT), "pause", str(state_file)],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+            self.assertEqual(paused.returncode, 2)
+            self.assertEqual(
+                json.loads(paused.stdout)["status"],
+                "capability_upgrade_required",
+            )
+            self.assertEqual(state_file.read_bytes(), before)
+            with self.assertRaisesRegex(ValueError, "capability upgrade required"):
+                emotion_engine_utils.save_state(state_file, loaded)
+            self.assertEqual(state_file.read_bytes(), before)
+
+    def test_activation_check_cli_uses_distinct_capability_upgrade_exit_code(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            state = self.bound_state()
+            state["capabilities"].remove("bounded_active_session/v1")
+            state.pop("active_session_retention")
+            state_file.write_text(
+                json.dumps(state, indent=2, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+
+            completed = subprocess.run(
+                [sys.executable, str(SCRIPT), "activation_check", str(state_file)],
+                text=True,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                check=False,
+            )
+
+            self.assertEqual(completed.returncode, 4, completed.stderr)
+            self.assertEqual(
+                json.loads(completed.stdout)["status"],
+                "capability_upgrade_required",
+            )
+
+    def test_managed_cli_blocks_installer_owned_admin_commands(self):
+        with tempfile.TemporaryDirectory() as tmpdir:
+            state_file = Path(tmpdir) / "emotion-state.json"
+            commands = ["init", "bind_identity", "migrate_state", "upgrade_state", "reset"]
+            for command in commands:
+                with self.subTest(command=command):
+                    completed = subprocess.run(
+                        [
+                            sys.executable,
+                            str(SCRIPT),
+                            "--managed-runtime",
+                            command,
+                            str(state_file),
+                        ],
+                        text=True,
+                        stdout=subprocess.PIPE,
+                        stderr=subprocess.PIPE,
+                        check=False,
+                    )
+                    self.assertEqual(completed.returncode, 2, completed.stderr)
+                    self.assertEqual(
+                        json.loads(completed.stdout)["status"],
+                        "installer_transaction_required",
+                    )
+                    self.assertFalse(state_file.exists())
 
     def test_bound_identity_cannot_be_rebound(self):
         state = self.bound_state()
@@ -1189,6 +1616,92 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertEqual(state["idempotency_retention"]["pruned_sessions"], 3)
         self.assertGreater(state["idempotency_retention"]["pruned_events"], 0)
 
+    def test_active_session_retention_bounds_detail_without_changing_patterns_or_trust(self):
+        bounded = self.start_session()
+        control = deepcopy(bounded)
+        bounded["active_session_retention"]["trajectory_limit"] = 16
+        bounded["active_session_retention"]["evidence_limit"] = 8
+        control["active_session_retention"]["trajectory_limit"] = 512
+        control["active_session_retention"]["evidence_limit"] = 256
+
+        for index in range(80):
+            pleasure = -0.5 if index == 5 else (0.45 if index == 65 else ((index % 7) - 3) / 10)
+            evidence_type = "explicit_trust" if index % 2 == 0 else "hostility"
+            arguments = {
+                "session_id": "test-session",
+                "event_id": f"long-turn-{index}",
+                "host_approved": True,
+                "persist_log": False,
+                "character_id": "test-character",
+                "relationship_id": "test-relationship",
+                "semantic_event_type": "relationship_calibration",
+                "trust_evidence": {
+                    "evidence_id": f"long-evidence-{index}",
+                    "evidence_type": evidence_type,
+                    "weight": 0.03,
+                    "eligible": True,
+                },
+            }
+            bounded, bounded_result = emotion_engine_utils.record_turn(
+                bounded, pleasure, 0.4, 0.5, **arguments
+            )
+            control, control_result = emotion_engine_utils.record_turn(
+                control, pleasure, 0.4, 0.5, **arguments
+            )
+            self.assertEqual(bounded_result["status"], "state_only")
+            self.assertEqual(control_result["status"], "state_only")
+
+        retention = bounded["active_session_retention"]
+        self.assertEqual(len(bounded["emotion_trajectory"]), 16)
+        self.assertEqual(len(bounded["trust_evidence"]), 8)
+        self.assertEqual(retention["trajectory_summary"]["count"], 64)
+        self.assertEqual(retention["evidence_summaries"][0]["count"], 72)
+        self.assertEqual(
+            emotion_engine_utils.extract_patterns(bounded),
+            emotion_engine_utils.extract_patterns(control),
+        )
+
+        bounded, bounded_closed = emotion_engine_utils.session_end(
+            bounded,
+            "test-session",
+            "long-end",
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        control, control_closed = emotion_engine_utils.session_end(
+            control,
+            "test-session",
+            "long-end",
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        self.assertEqual(bounded_closed["patterns"], control_closed["patterns"])
+        bounded, bounded_settled = emotion_engine_utils.settle_trust(
+            bounded,
+            "test-session",
+            "long-settle",
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        control, control_settled = emotion_engine_utils.settle_trust(
+            control,
+            "test-session",
+            "long-settle",
+            character_id="test-character",
+            relationship_id="test-relationship",
+        )
+        self.assertEqual(bounded_settled["raw_delta"], control_settled["raw_delta"])
+        self.assertEqual(bounded["trust"], control["trust"])
+        self.assertTrue(
+            bounded["active_session_retention"]["evidence_summaries"][0][
+                "consumed_by_settlement_id"
+            ]
+        )
+        audit = emotion_engine_utils.audit_state_integrity(bounded)
+        self.assertTrue(audit["ok"], audit)
+        self.assertEqual(audit["counts"]["summarized_trajectory"], 64)
+        self.assertEqual(audit["counts"]["summarized_trust_evidence"], 72)
+
     def test_activation_check_reports_migration_binding_and_ready_states(self):
         legacy = deepcopy(emotion_engine_utils.DEFAULT_STATE)
         legacy["_schema"] = emotion_engine_utils.LEGACY_STATE_SCHEMA
@@ -1203,7 +1716,7 @@ class EmotionEngineUtilsTest(unittest.TestCase):
         self.assertIn("--apply", migration["next_steps"]["apply"])
         self.assertEqual(binding["status"], "identity_binding_required")
         self.assertEqual(ready["status"], "ready")
-        self.assertEqual(ready["engine_version"], "2.0.0-rc.3")
+        self.assertEqual(ready["engine_version"], "2.0.0-rc.4")
 
     def test_atomic_gate_records_relationship_signal_and_evidence(self):
         state = self.start_session()

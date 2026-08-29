@@ -82,7 +82,9 @@ MCP is optional. Use it when a local MCP-capable client should expose Emotion En
 
 ```bash
 python3 .codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py \
-  --state .emotion-engine/codex-state.json
+  --state .emotion-engine/codex-state.json \
+  --locked-state \
+  --managed-runtime
 ```
 
 Or let the helper register it:
@@ -98,10 +100,12 @@ For Codex CLI registration:
 ```bash
 codex mcp add emotion-engine -- \
   python3 /path/to/project/.codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py \
-  --state /path/to/project/.emotion-engine/codex-state.json
+  --state /path/to/project/.emotion-engine/codex-state.json \
+  --locked-state \
+  --managed-runtime
 ```
 
-Use that exact `--state` in MCP client registration. The server also honors `CODEX_EMOTION_STATE` and will prefer `.emotion-engine/codex-state.json` inside a Codex project, but explicit registration is the safest way to avoid shell-wrapper and MCP state files diverging.
+Use that exact `--state` in MCP client registration. `--locked-state` prevents tool calls from overriding it, and `--managed-runtime` reserves state initialization, identity binding, migration, capability upgrade, and reset for Agent Harness. Managed runtime calls require the fixed primary state to exist and ordinary writers reject structural integrity failures before mutation; use Agent Harness for recovery instead of running administrative helper commands directly. The server also honors `CODEX_EMOTION_STATE` and will prefer `.emotion-engine/codex-state.json` inside a Codex project, but explicit locked registration is the safest way to avoid shell-wrapper and MCP state files diverging.
 
 The MCP server exposes runtime/protocol tools only. Agent Harness owns target refresh, doctor, repair, manifest checks, and sidecar projection drift checks.
 

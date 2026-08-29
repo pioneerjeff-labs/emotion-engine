@@ -17,6 +17,10 @@ import emotion_engine_utils as engine
 SERVER_NAME = "emotion-engine"
 SERVER_VERSION = engine.ENGINE_VERSION
 DEFAULT_PROTOCOL_VERSION = "2024-11-05"
+MANAGED_RUNTIME_BLOCKED_TOOLS = {
+    "emotion_engine_bind_identity",
+    "emotion_engine_migrate_state",
+}
 
 
 class JsonRpcError(Exception):
@@ -28,7 +32,10 @@ class JsonRpcError(Exception):
 
 
 def resolve_state_file(arguments=None, default_state_file=None):
-    arguments = arguments or {}
+    if arguments is None:
+        arguments = {}
+    if not isinstance(arguments, dict):
+        raise JsonRpcError(-32602, "Tool arguments must be an object")
     raw = (
         arguments.get("state_file")
         or default_state_file
@@ -50,18 +57,52 @@ def ensure_state_parent(state_file):
         os.makedirs(directory, exist_ok=True)
 
 
-def load_state_for_tool(arguments=None, default_state_file=None):
+def load_state_for_tool(
+    arguments=None,
+    default_state_file=None,
+    *,
+    managed_runtime=False,
+):
     state_file = resolve_state_file(arguments, default_state_file)
+    if managed_runtime:
+        ensure_state_parent(state_file)
+        with engine.state_file_lock(state_file):
+            engine.require_managed_state_file(state_file)
+            return state_file, engine.load_state_unlocked(
+                state_file,
+                validate_raw_shape=True,
+            )
     return state_file, engine.load_state(state_file)
 
 
-def mutate_state_for_tool(arguments, default_state_file, mutator, allow_legacy=False):
+def mutate_state_for_tool(
+    arguments,
+    default_state_file,
+    mutator,
+    allow_legacy=False,
+    *,
+    managed_runtime=False,
+):
     state_file = resolve_state_file(arguments, default_state_file)
     ensure_state_parent(state_file)
     with engine.state_file_lock(state_file):
-        state = engine.load_state_unlocked(state_file)
+        if managed_runtime:
+            engine.require_managed_state_file(state_file)
+        state = engine.load_state_unlocked(
+            state_file,
+            validate_raw_shape=True,
+        )
         if not allow_legacy and state.get("_schema") != engine.STATE_SCHEMA:
             raise JsonRpcError(-32602, "state migration required: v2 packets are read-only")
+        missing_capabilities = engine.missing_state_capabilities(state)
+        if not allow_legacy and missing_capabilities:
+            raise JsonRpcError(
+                -32042,
+                "state capability upgrade required before writing",
+                {"missing_capabilities": missing_capabilities},
+            )
+        if managed_runtime:
+            engine.require_managed_runtime_writable(state_file, state)
         state, result = mutator(state)
         changed = bool(result.pop("_changed", True))
         if changed:
@@ -154,22 +195,39 @@ def memory_arguments(arguments):
     }
 
 
-def call_tool(name, arguments=None, default_state_file=None):
-    arguments = arguments or {}
+def call_tool(name, arguments=None, default_state_file=None, *, managed_runtime=False):
+    if arguments is None:
+        arguments = {}
     if not isinstance(arguments, dict):
         raise JsonRpcError(-32602, "Tool arguments must be an object")
 
+    def load_tool_state():
+        return load_state_for_tool(
+            arguments,
+            default_state_file,
+            managed_runtime=managed_runtime,
+        )
+
+    def mutate_tool_state(mutator, allow_legacy=False):
+        return mutate_state_for_tool(
+            arguments,
+            default_state_file,
+            mutator,
+            allow_legacy=allow_legacy,
+            managed_runtime=managed_runtime,
+        )
+
     if name == "emotion_engine_status":
-        state_file, state = load_state_for_tool(arguments, default_state_file)
+        state_file, state = load_tool_state()
         return {"state_file": state_file, "state": state if arguments.get("raw") else engine.public_status(state)}
 
     if name == "emotion_engine_summary":
-        state_file, state = load_state_for_tool(arguments, default_state_file)
+        state_file, state = load_tool_state()
         limit = int(arguments.get("limit", 5) or 5)
         return {"state_file": state_file, "summary": compact_summary(state, limit=limit)}
 
     if name == "emotion_engine_capabilities":
-        state_file, state = load_state_for_tool(arguments, default_state_file)
+        state_file, state = load_tool_state()
         return {
             "state_file": state_file,
             "engine_version": engine.ENGINE_VERSION,
@@ -189,7 +247,7 @@ def call_tool(name, arguments=None, default_state_file=None):
             result["_changed"] = result["status"] == "bound"
             return state, result
 
-        return mutate_state_for_tool(arguments, default_state_file, mutator)
+        return mutate_tool_state(mutator)
 
     if name == "emotion_engine_migrate_state":
         apply = arguments.get("apply") is True
@@ -207,11 +265,11 @@ def call_tool(name, arguments=None, default_state_file=None):
                 result["status"] = "migrated"
             return migrated if apply else state, result
 
-        return mutate_state_for_tool(arguments, default_state_file, mutator, allow_legacy=True)
+        return mutate_tool_state(mutator, allow_legacy=True)
 
     if name == "emotion_engine_record_policy":
         message = require_text(arguments, "message")
-        state_file, state = load_state_for_tool(arguments, default_state_file)
+        state_file, state = load_tool_state()
         policy = engine.record_policy(
             state,
             message,
@@ -227,7 +285,7 @@ def call_tool(name, arguments=None, default_state_file=None):
 
     if name == "emotion_engine_appraise":
         message = require_text(arguments, "message")
-        state_file, state = load_state_for_tool(arguments, default_state_file)
+        state_file, state = load_tool_state()
         return {"state_file": state_file, "appraisal": engine.appraise_message(state, message)}
 
     if name == "emotion_engine_session_start":
@@ -243,7 +301,7 @@ def call_tool(name, arguments=None, default_state_file=None):
             result["_changed"] = result["status"] == "started"
             return state, result
 
-        return mutate_state_for_tool(arguments, default_state_file, mutator)
+        return mutate_tool_state(mutator)
 
     if name == "emotion_engine_session_end":
         def mutator(state):
@@ -258,7 +316,7 @@ def call_tool(name, arguments=None, default_state_file=None):
             result["_changed"] = result["status"] == "closed"
             return state, result
 
-        return mutate_state_for_tool(arguments, default_state_file, mutator)
+        return mutate_tool_state(mutator)
 
     if name == "emotion_engine_pre_turn_decay":
         def mutator(state):
@@ -274,7 +332,7 @@ def call_tool(name, arguments=None, default_state_file=None):
             result["affective_pulse"] = state["affective_pulse"]
             return state, result
 
-        return mutate_state_for_tool(arguments, default_state_file, mutator)
+        return mutate_tool_state(mutator)
 
     if name == "emotion_engine_record_turn":
         pleasure = optional_float(arguments, "pleasure", "P", required=True)
@@ -304,7 +362,7 @@ def call_tool(name, arguments=None, default_state_file=None):
             result["status_summary"] = engine.public_status(state)
             return state, result
 
-        return mutate_state_for_tool(arguments, default_state_file, mutator)
+        return mutate_tool_state(mutator)
 
     if name == "emotion_engine_settle_trust":
         def mutator(state):
@@ -318,7 +376,7 @@ def call_tool(name, arguments=None, default_state_file=None):
             result["_changed"] = result["status"] == "settled"
             return state, result
 
-        return mutate_state_for_tool(arguments, default_state_file, mutator)
+        return mutate_tool_state(mutator)
 
     if name == "emotion_engine_evaluate_and_record_turn":
         event = arguments.get("event")
@@ -340,23 +398,23 @@ def call_tool(name, arguments=None, default_state_file=None):
             result["_changed"] = result["status"] in {"recorded", "state_only"}
             return state, result
 
-        return mutate_state_for_tool(arguments, default_state_file, mutator)
+        return mutate_tool_state(mutator)
 
     if name == "emotion_engine_recent_log":
-        state_file, state = load_state_for_tool(arguments, default_state_file)
+        state_file, state = load_tool_state()
         limit = int(arguments.get("limit", 5) or 5)
         return {"state_file": state_file, "events": state.get("emotion_log", [])[-limit:]}
 
     if name == "emotion_engine_audit_log":
-        state_file, state = load_state_for_tool(arguments, default_state_file)
+        state_file, state = load_tool_state()
         return {"state_file": state_file, "audit": engine.audit_emotion_log(state)}
 
     if name == "emotion_engine_audit_state":
-        state_file, state = load_state_for_tool(arguments, default_state_file)
+        state_file, state = load_tool_state()
         return {"state_file": state_file, "audit": engine.audit_state_integrity(state)}
 
     if name == "emotion_engine_repair_plan":
-        state_file, state = load_state_for_tool(arguments, default_state_file)
+        state_file, state = load_tool_state()
         return {"state_file": state_file, "plan": engine.repair_plan(state)}
 
     if name == "emotion_engine_reconcile_trust":
@@ -371,12 +429,12 @@ def call_tool(name, arguments=None, default_state_file=None):
             result["_changed"] = result["status"] == "reconciled"
             return state, result
 
-        return mutate_state_for_tool(arguments, default_state_file, mutator)
+        return mutate_tool_state(mutator)
 
     if name == "emotion_engine_compact_log":
         apply = bool(arguments.get("apply", False))
         if not apply:
-            state_file, state = load_state_for_tool(arguments, default_state_file)
+            state_file, state = load_tool_state()
             _, report = engine.compact_emotion_log(state)
             report["applied"] = False
             return {"state_file": state_file, "report": report}
@@ -387,13 +445,13 @@ def call_tool(name, arguments=None, default_state_file=None):
             report["status"] = engine.public_status(state)
             return state, {"report": report}
 
-        return mutate_state_for_tool(arguments, default_state_file, mutator)
+        return mutate_tool_state(mutator)
 
     raise JsonRpcError(-32601, f"Unknown tool: {name}")
 
 
-def tool_schema():
-    state_arg = {
+def tool_schema(locked_state=False, managed_runtime=False):
+    state_arg = {} if locked_state else {
         "state_file": {
             "type": "string",
             "description": (
@@ -434,7 +492,7 @@ def tool_schema():
         ],
         "description": "Explicit host-approved evidence with evidence_id, evidence_type, and eligible=true.",
     }
-    return [
+    tools = [
         {
             "name": "emotion_engine_status",
             "description": "Read public Emotion Engine status; raw state is for debugging only.",
@@ -633,6 +691,12 @@ def tool_schema():
             },
         },
     ]
+    if managed_runtime:
+        tools = [
+            tool for tool in tools
+            if tool.get("name") not in MANAGED_RUNTIME_BLOCKED_TOOLS
+        ]
+    return tools
 
 
 def jsonrpc_result(request_id, result):
@@ -654,12 +718,23 @@ def tool_result(value):
     }
 
 
-def handle_request(message, default_state_file=None):
+def handle_request(
+    message,
+    default_state_file=None,
+    locked_state=False,
+    managed_runtime=False,
+):
     if not isinstance(message, dict):
         raise JsonRpcError(-32600, "Request must be a JSON object")
+    if message.get("jsonrpc") != "2.0":
+        raise JsonRpcError(-32600, "Request must declare jsonrpc 2.0")
     request_id = message.get("id")
     method = message.get("method")
-    params = message.get("params") or {}
+    params = message.get("params")
+    if params is None:
+        params = {}
+    if not isinstance(params, dict):
+        raise JsonRpcError(-32602, "Request params must be an object")
 
     if method == "notifications/initialized" or (
         request_id is None and str(method).startswith("notifications/")
@@ -675,20 +750,60 @@ def handle_request(message, default_state_file=None):
     if method == "ping":
         return jsonrpc_result(request_id, {})
     if method == "tools/list":
-        return jsonrpc_result(request_id, {"tools": tool_schema()})
+        return jsonrpc_result(request_id, {
+            "tools": tool_schema(
+                locked_state=locked_state,
+                managed_runtime=managed_runtime,
+            )
+        })
     if method == "tools/call":
+        if "id" not in message or request_id is None:
+            raise JsonRpcError(-32600, "tools/call requires a non-null request id")
         name = params.get("name")
         if not isinstance(name, str) or not name:
             raise JsonRpcError(-32602, "tools/call requires a tool name")
+        arguments = params.get("arguments")
+        if arguments is None:
+            arguments = {}
+        if not isinstance(arguments, dict):
+            raise JsonRpcError(-32602, "Tool arguments must be an object")
+        if locked_state and "state_file" in arguments:
+            raise JsonRpcError(
+                -32602,
+                "state_file is fixed by the locked MCP server and cannot be overridden",
+            )
+        if managed_runtime and name in MANAGED_RUNTIME_BLOCKED_TOOLS:
+            raise JsonRpcError(
+                -32601,
+                "tool is disabled in managed runtime mode; use the owning installer transaction",
+            )
         try:
-            result = call_tool(name, params.get("arguments") or {}, default_state_file)
+            result = call_tool(
+                name,
+                arguments,
+                default_state_file,
+                managed_runtime=managed_runtime,
+            )
+        except engine.ManagedStateError as exc:
+            state_file = resolve_state_file(arguments, default_state_file)
+            raise JsonRpcError(
+                -32043,
+                "Managed Emotion Engine state is not writable",
+                exc.as_dict(state_file),
+            ) from exc
         except ValueError as exc:
             raise JsonRpcError(-32602, str(exc)) from exc
         return jsonrpc_result(request_id, tool_result(result))
     raise JsonRpcError(-32601, f"Method not found: {method}")
 
 
-def serve_stdio(default_state_file=None, input_stream=None, output_stream=None):
+def serve_stdio(
+    default_state_file=None,
+    input_stream=None,
+    output_stream=None,
+    locked_state=False,
+    managed_runtime=False,
+):
     input_stream = input_stream or sys.stdin
     output_stream = output_stream or sys.stdout
     for line in input_stream:
@@ -699,7 +814,12 @@ def serve_stdio(default_state_file=None, input_stream=None, output_stream=None):
         try:
             message = json.loads(line)
             request_id = message.get("id") if isinstance(message, dict) else None
-            response = handle_request(message, default_state_file)
+            response = handle_request(
+                message,
+                default_state_file,
+                locked_state=locked_state,
+                managed_runtime=managed_runtime,
+            )
         except json.JSONDecodeError as exc:
             response = jsonrpc_error(None, JsonRpcError(-32700, "Parse error", str(exc)))
         except JsonRpcError as exc:
@@ -714,8 +834,26 @@ def serve_stdio(default_state_file=None, input_stream=None, output_stream=None):
 def main(argv=None):
     parser = argparse.ArgumentParser(description="Run the local Emotion Engine stdio MCP server.")
     parser.add_argument("--state", help="default state file for MCP tool calls")
+    parser.add_argument(
+        "--locked-state",
+        action="store_true",
+        help="require --state and reject request-level state_file overrides",
+    )
+    parser.add_argument(
+        "--managed-runtime",
+        action="store_true",
+        help="hide identity binding and migration tools owned by the installer transaction",
+    )
     args = parser.parse_args(argv)
-    serve_stdio(default_state_file=args.state)
+    if args.locked_state and not args.state:
+        parser.error("--locked-state requires --state")
+    if args.managed_runtime and (not args.locked_state or not args.state):
+        parser.error("--managed-runtime requires --locked-state and --state")
+    serve_stdio(
+        default_state_file=args.state,
+        locked_state=args.locked_state,
+        managed_runtime=args.managed_runtime,
+    )
 
 
 if __name__ == "__main__":

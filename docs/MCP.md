@@ -43,8 +43,17 @@ For Codex/Agent Harness project installs, point the server at the same state fil
 
 ```bash
 python3 .codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py \
-  --state .emotion-engine/codex-state.json
+  --state .emotion-engine/codex-state.json \
+  --locked-state \
+  --managed-runtime
 ```
+
+`--locked-state` requires `--state`, removes `state_file` from every tool schema, and rejects request-level path overrides. `--managed-runtime` additionally removes identity binding and migration tools so the owning installer can enforce its confirmation, backup, journal, and manifest transaction. It also requires the fixed primary state to already exist and makes ordinary writers fail closed on structural integrity errors before mutation. Diagnostic audit and repair-plan reads remain available on an existing damaged packet, and semantic warnings alone do not block writes. Use both flags for installer-managed targets.
+
+Standalone wrappers keep their existing bootstrap behavior and may explicitly initialize a missing state. An installer-managed target must instead create, bind, migrate, upgrade, or reset state inside its owning transaction; runtime tools do not recreate the primary packet or perform those administrative changes.
+
+Every `tools/call` must carry a non-null JSON-RPC `id`; tool notifications are
+rejected and never execute. `params` and `arguments` must be JSON objects.
 
 If `--state` is omitted, the server resolves state in this order:
 
@@ -77,7 +86,9 @@ For Codex or Agent Harness project installs, register the bundled server against
 ```bash
 codex mcp add emotion-engine -- \
   python3 /path/to/project/.codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py \
-  --state /path/to/project/.emotion-engine/codex-state.json
+  --state /path/to/project/.emotion-engine/codex-state.json \
+  --locked-state \
+  --managed-runtime
 ```
 
 Then verify:
@@ -91,7 +102,9 @@ For Claude Code, add the same local stdio server:
 ```bash
 claude mcp add --transport stdio emotion-engine -- \
   python3 /path/to/project/.codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py \
-  --state /path/to/project/.emotion-engine/codex-state.json
+  --state /path/to/project/.emotion-engine/codex-state.json \
+  --locked-state \
+  --managed-runtime
 ```
 
 For Claude Desktop or a checked-in `.mcp.json`, use the standard `mcpServers` shape:
@@ -104,7 +117,9 @@ For Claude Desktop or a checked-in `.mcp.json`, use the standard `mcpServers` sh
       "args": [
         "/path/to/project/.codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py",
         "--state",
-        "/path/to/project/.emotion-engine/codex-state.json"
+        "/path/to/project/.emotion-engine/codex-state.json",
+        "--locked-state",
+        "--managed-runtime"
       ]
     }
   }
@@ -170,7 +185,7 @@ The `record_policy` call is side-effect free. This milestone example returns `re
 
 Recommended loop for an MCP-capable local agent:
 
-1. Call `emotion_engine_capabilities`; migrate v2 explicitly and bind v3 identity before mutation.
+1. Call `emotion_engine_capabilities`; migrate v2 or upgrade incomplete v3 capabilities explicitly, then bind identity before mutation. In a managed target, perform those actions through the owning installer instead of MCP.
 2. Open the native session with unique `session_id` and `event_id`.
 3. Call `emotion_engine_evaluate_and_record_turn` with `subject`, semantic `event_type`, and the host's explicit approval. Task checkpoints route to host memory.
 4. Supply trust evidence only as an explicit, uniquely identified host-approved object.

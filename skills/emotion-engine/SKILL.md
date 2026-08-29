@@ -1,7 +1,7 @@
 ---
 name: emotion-engine
 description: Persistent PAD emotion state, trust, decay, and compact emotional memories for Hermes Agent conversations.
-version: 2.0.0-rc.3
+version: 2.0.0-rc.4
 author: PioneerJeff Labs
 license: MIT
 platforms: [macos, linux]

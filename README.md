@@ -21,7 +21,7 @@ It is not a memory stack. It is a portable emotional-continuity state layer that
 
 Emotion Engine is part of PioneerJeff Labs, an open-source lab building reusable infrastructure layers for creative AI applications.
 
-Status: v3 / `2.0.0-rc.3` release candidate. The latest tagged stable release remains [v1.1.0](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v1.1.0) and uses the v2 state contract.
+Status: v3 / `2.0.0-rc.4` release candidate. The latest tagged stable release remains [v1.1.0](https://github.com/pioneerjeff-labs/emotion-engine/releases/tag/v1.1.0) and uses the v2 state contract.
 
 ## Start Here
 
@@ -397,11 +397,16 @@ The typical integration loop is:
 
 See [Integration Guide](docs/INTEGRATION.md) for the full sequence.
 
+Older v3 packets keep their stored capability declaration unchanged. If a
+required capability is missing, activation, audit, CLI writers, and MCP
+writers fail closed until `upgrade_state` is explicitly reviewed and applied.
+
 ## CLI
 
 ```bash
 python3 scripts/emotion_engine_utils.py init <state_file> --character-id <id> --relationship-id <id>
 python3 scripts/emotion_engine_utils.py migrate_state <state_file> --character-id <id> --relationship-id <id> --dry-run
+python3 scripts/emotion_engine_utils.py upgrade_state <state_file>
 python3 scripts/emotion_engine_utils.py bind_identity <state_file> --character-id <id> --relationship-id <id>
 python3 scripts/emotion_engine_utils.py activation_check <state_file>
 python3 scripts/emotion_engine_utils.py validate <state_file>
@@ -425,6 +430,9 @@ python3 scripts/emotion_engine_utils.py repair_plan <state_file>
 python3 scripts/emotion_engine_utils.py compact_log <state_file> --dry-run
 python3 scripts/emotion_engine_utils.py compact_log <state_file> --apply
 ```
+
+Run `upgrade_state` without `--apply` for a non-mutating preview. Ordinary
+commands never add capabilities implicitly.
 
 `audit_log` and `compact_log` are retention tools for long-running agents, especially `always` mode companions. They keep `emotion_log` focused on compact continuity signals by suppressing or rolling up low-value drift and ordinary neutral turns. They do not decide where factual memory should live; host runtimes own facts, task memory, vector stores, documents, and project-specific routing.
 

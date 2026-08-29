@@ -28,6 +28,7 @@
     "session_ledger",
     "processed_event_ids",
     "idempotency_retention",
+    "active_session_retention",
     "log_limit"
   ],
   "properties": {
@@ -136,6 +137,9 @@
     "idempotency_retention": {
       "$ref": "#/$defs/idempotencyRetention"
     },
+    "active_session_retention": {
+      "$ref": "#/$defs/activeSessionRetention"
+    },
     "log_limit": {
       "type": "integer",
       "minimum": 25
@@ -153,6 +157,63 @@
     }
   },
   "$defs": {
+    "activeSessionRetention": {
+      "description": "Bounded live-session detail. Pruned trajectory entries retain exact aggregate pattern statistics; summarized trust evidence retains a digest and signed settlement weight.",
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["trajectory_limit", "evidence_limit", "pruned_trajectory_entries", "summarized_evidence_entries", "last_compacted_at", "trajectory_summary", "evidence_summaries"],
+      "properties": {
+        "trajectory_limit": {"type": "integer", "minimum": 16},
+        "evidence_limit": {"type": "integer", "minimum": 8},
+        "pruned_trajectory_entries": {"type": "integer", "minimum": 0},
+        "summarized_evidence_entries": {"type": "integer", "minimum": 0},
+        "last_compacted_at": {"$ref": "#/$defs/nullableIsoTimestamp"},
+        "trajectory_summary": {
+          "oneOf": [
+            {"type": "null"},
+            {"$ref": "#/$defs/trajectorySummary"}
+          ]
+        },
+        "evidence_summaries": {
+          "type": "array",
+          "items": {"$ref": "#/$defs/evidenceSummary"}
+        }
+      }
+    },
+    "trajectorySummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "count", "first_pleasure", "last_pleasure", "sum_pleasure", "sum_square_pleasure", "sum_dominance", "negative_count", "min_pleasure", "max_after_min", "pulse_sum", "pulse_max"],
+      "properties": {
+        "session_id": {"type": "string", "minLength": 1},
+        "count": {"type": "integer", "minimum": 1},
+        "first_pleasure": {"type": "number"},
+        "last_pleasure": {"type": "number"},
+        "sum_pleasure": {"type": "number"},
+        "sum_square_pleasure": {"type": "number", "minimum": 0},
+        "sum_dominance": {"type": "number"},
+        "negative_count": {"type": "integer", "minimum": 0},
+        "min_pleasure": {"type": "number"},
+        "max_after_min": {"type": ["number", "null"]},
+        "pulse_sum": {"type": "number", "minimum": 0},
+        "pulse_max": {"type": "number", "minimum": 0, "maximum": 1}
+      }
+    },
+    "evidenceSummary": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": ["session_id", "count", "eligible_count", "signed_weight", "digest", "first_created_at", "last_created_at", "consumed_by_settlement_id"],
+      "properties": {
+        "session_id": {"type": "string", "minLength": 1},
+        "count": {"type": "integer", "minimum": 1},
+        "eligible_count": {"type": "integer", "minimum": 0},
+        "signed_weight": {"type": "number"},
+        "digest": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "first_created_at": {"$ref": "#/$defs/nullableIsoTimestamp"},
+        "last_created_at": {"$ref": "#/$defs/nullableIsoTimestamp"},
+        "consumed_by_settlement_id": {"type": ["string", "null"]}
+      }
+    },
     "idempotencyRetention": {
       "description": "Bounded replay-protection window. Exact duplicate rejection applies to retained ids; pruning counters make older-window expiry observable.",
       "type": "object",

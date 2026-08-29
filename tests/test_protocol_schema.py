@@ -84,7 +84,8 @@ class ProtocolSchemaTest(unittest.TestCase):
     def test_schema_exposes_identity_session_and_evidence_ledgers(self):
         for field in [
             "identity", "capabilities", "session", "session_ledger",
-            "processed_event_ids", "idempotency_retention", "trust_evidence", "trust_settlements",
+            "processed_event_ids", "idempotency_retention", "active_session_retention",
+            "trust_evidence", "trust_settlements",
         ]:
             self.assertIn(field, self.schema["required"])
         self.assertTrue(self.schema["properties"]["processed_event_ids"]["uniqueItems"])
@@ -97,6 +98,10 @@ class ProtocolSchemaTest(unittest.TestCase):
             self.schema["$defs"]["sessionLedgerEntry"]["properties"],
         )
         self.assertIn("bounded_idempotency/v1", self.template["capabilities"])
+        self.assertIn("bounded_active_session/v1", self.template["capabilities"])
+        self.assertEqual(
+            self.template["active_session_retention"]["trajectory_limit"], 512
+        )
         self.assertEqual(
             self.schema["$defs"]["trustEvidenceInput"]["properties"]["eligible"]["const"],
             True,

@@ -6,6 +6,7 @@ for Emotion Engine.
 Usage:
   python3 emotion_engine_utils.py init <state_file> [--character-id <id> --relationship-id <id>]
   python3 emotion_engine_utils.py migrate_state <state_file> --character-id <id> --relationship-id <id> [--apply]
+  python3 emotion_engine_utils.py upgrade_state <state_file> [--apply]
   python3 emotion_engine_utils.py bind_identity <state_file> --character-id <id> --relationship-id <id>
   python3 emotion_engine_utils.py activation_check <state_file>
   python3 emotion_engine_utils.py validate <state_file>
@@ -30,7 +31,7 @@ Usage:
   python3 emotion_engine_utils.py tune <state_file> <natural-language adjustment...>
   python3 emotion_engine_utils.py status <state_file> [--raw]
   python3 emotion_engine_utils.py pause <state_file>
-  python3 emotion_engine_utils.py resume <state_file>
+  python3 emotion_engine_utils.py resume <state_file> [--mode light|always]
   python3 emotion_engine_utils.py clear_log <state_file>
   python3 emotion_engine_utils.py reset <state_file> [--factory]
   python3 emotion_engine_utils.py session_start <state_file> --session-id <id> --event-id <id> --character-id <id> --relationship-id <id>
@@ -47,6 +48,7 @@ import tempfile
 import threading
 import uuid
 import warnings
+from collections import Counter
 from contextlib import contextmanager
 from copy import deepcopy
 from datetime import datetime, timezone
@@ -93,7 +95,7 @@ VOLATILITY_PROFILES = {
     },
 }
 
-ENGINE_VERSION = "2.0.0-rc.3"
+ENGINE_VERSION = "2.0.0-rc.4"
 STATE_SCHEMA = "emotion-engine-state/v3"
 LEGACY_STATE_SCHEMA = "emotion-engine-state/v2"
 STATE_CAPABILITIES = [
@@ -105,7 +107,32 @@ STATE_CAPABILITIES = [
     "repair_plan/v1",
     "migration_extensions/v1",
     "bounded_idempotency/v1",
+    "bounded_active_session/v1",
 ]
+
+
+class ManagedStateError(ValueError):
+    """Stable fail-closed error for an explicitly owner-managed runtime."""
+
+    def __init__(self, status, message, *, hard_errors=None, details=None):
+        super().__init__(message)
+        self.status = status
+        self.message = message
+        self.hard_errors = list(hard_errors or [])
+        self.details = dict(details or {})
+
+    def as_dict(self, state_file):
+        payload = {
+            "ok": False,
+            "engine_version": ENGINE_VERSION,
+            "status": self.status,
+            "state_file": os.path.abspath(os.fspath(state_file)),
+            "message": self.message,
+        }
+        if self.hard_errors:
+            payload["hard_errors"] = self.hard_errors
+        payload.update(self.details)
+        return payload
 
 DEFAULT_IDEMPOTENCY_RETENTION = {
     "scope": "retained_window",
@@ -116,6 +143,17 @@ DEFAULT_IDEMPOTENCY_RETENTION = {
     "pruned_evidence": 0,
     "pruned_settlements": 0,
     "last_pruned_at": None,
+}
+
+
+DEFAULT_ACTIVE_SESSION_RETENTION = {
+    "trajectory_limit": 512,
+    "evidence_limit": 256,
+    "pruned_trajectory_entries": 0,
+    "summarized_evidence_entries": 0,
+    "last_compacted_at": None,
+    "trajectory_summary": None,
+    "evidence_summaries": [],
 }
 
 
@@ -161,6 +199,7 @@ DEFAULT_STATE = {
     "session_ledger": [],
     "processed_event_ids": [],
     "idempotency_retention": deepcopy(DEFAULT_IDEMPOTENCY_RETENTION),
+    "active_session_retention": deepcopy(DEFAULT_ACTIVE_SESSION_RETENTION),
     "log_limit": 200,
 }
 
@@ -428,8 +467,145 @@ def write_json_file_atomic(path, value):
         raise
 
 
-def load_state_from_path(path):
-    return ensure_state_shape(read_json_file(path))
+_RAW_MANAGED_OBJECT_FIELDS = (
+    "identity",
+    "session",
+    "idempotency_retention",
+    "active_session_retention",
+    "emotion",
+    "affective_pulse",
+    "personality_baseline",
+    "character_profile",
+)
+
+_RAW_MANAGED_OBJECT_LIST_FIELDS = (
+    "emotion_trajectory",
+    "emotion_log",
+    "trust_history",
+    "trust_evidence",
+    "trust_settlements",
+    "session_ledger",
+    "trust_reconciliations",
+)
+
+
+def raw_managed_shape_errors(raw):
+    """Return loss-prevention errors before defaults or normalization run."""
+    if not isinstance(raw, dict):
+        return [{
+            "code": "invalid_raw_state_type",
+            "expected": "object",
+            "actual": type(raw).__name__,
+        }]
+
+    errors = []
+
+    def invalid_type(field, expected, value):
+        errors.append({
+            "code": "invalid_raw_field_type",
+            "field": field,
+            "expected": expected,
+            "actual": type(value).__name__,
+        })
+
+    for field in _RAW_MANAGED_OBJECT_FIELDS:
+        if field in raw and not isinstance(raw[field], dict):
+            invalid_type(field, "object", raw[field])
+
+    if "capabilities" in raw:
+        capabilities = raw["capabilities"]
+        if not isinstance(capabilities, list):
+            invalid_type("capabilities", "array", capabilities)
+        else:
+            for index, value in enumerate(capabilities):
+                if not isinstance(value, str):
+                    errors.append({
+                        "code": "invalid_raw_array_entry",
+                        "field": "capabilities",
+                        "index": index,
+                        "expected": "string",
+                        "actual": type(value).__name__,
+                    })
+
+    for field in _RAW_MANAGED_OBJECT_LIST_FIELDS:
+        if field not in raw:
+            continue
+        value = raw[field]
+        if not isinstance(value, list):
+            invalid_type(field, "array", value)
+            continue
+        for index, entry in enumerate(value):
+            if not isinstance(entry, dict):
+                errors.append({
+                    "code": "invalid_raw_array_entry",
+                    "field": field,
+                    "index": index,
+                    "expected": "object",
+                    "actual": type(entry).__name__,
+                })
+
+    if "processed_event_ids" in raw:
+        processed = raw["processed_event_ids"]
+        if not isinstance(processed, list):
+            invalid_type("processed_event_ids", "array", processed)
+        else:
+            for index, value in enumerate(processed):
+                if not isinstance(value, str):
+                    errors.append({
+                        "code": "invalid_raw_array_entry",
+                        "field": "processed_event_ids",
+                        "index": index,
+                        "expected": "string",
+                        "actual": type(value).__name__,
+                    })
+
+    active_retention = raw.get("active_session_retention")
+    if isinstance(active_retention, dict):
+        evidence_summaries = active_retention.get("evidence_summaries")
+        if evidence_summaries is not None:
+            if not isinstance(evidence_summaries, list):
+                invalid_type(
+                    "active_session_retention.evidence_summaries",
+                    "array",
+                    evidence_summaries,
+                )
+            else:
+                for index, entry in enumerate(evidence_summaries):
+                    if not isinstance(entry, dict):
+                        errors.append({
+                            "code": "invalid_raw_array_entry",
+                            "field": "active_session_retention.evidence_summaries",
+                            "index": index,
+                            "expected": "object",
+                            "actual": type(entry).__name__,
+                        })
+        trajectory_summary = active_retention.get("trajectory_summary")
+        if trajectory_summary is not None and not isinstance(trajectory_summary, dict):
+            invalid_type(
+                "active_session_retention.trajectory_summary",
+                "object_or_null",
+                trajectory_summary,
+            )
+
+    return errors
+
+
+def validate_raw_managed_shape(raw):
+    errors = raw_managed_shape_errors(raw)
+    if errors:
+        raise ManagedStateError(
+            "state_integrity_failed",
+            "Emotion Engine state has an invalid raw shape; no normalization or mutation was applied.",
+            hard_errors=errors,
+        )
+    return raw
+
+
+def load_state_from_path(path, *, validate_raw_shape=False):
+    raw = read_json_file(path)
+    if validate_raw_shape:
+        validate_raw_managed_shape(raw)
+    return ensure_state_shape(raw)
 
 
 def backup_current_state(path):
@@ -458,9 +634,11 @@ def recover_state_from_backup(path, error):
     return recovered
 
 
-def load_state_unlocked(path):
+def load_state_unlocked(path, *, validate_raw_shape=False):
     if not os.path.exists(path):
         return default_state()
+    if validate_raw_shape:
+        return load_state_from_path(path, validate_raw_shape=True)
     try:
         return load_state_from_path(path)
     except (json.JSONDecodeError, OSError, TypeError, ValueError) as error:
@@ -476,6 +654,7 @@ def load_state(path):
 
 def save_state_unlocked(path, state):
     state = ensure_state_shape(state)
+    require_current_state_capabilities(state)
     backup_current_state(path)
     write_json_file_atomic(path, state)
 
@@ -623,6 +802,82 @@ def normalize_idempotency_retention(value):
     return retention
 
 
+def _retention_float(value, default=0.0):
+    try:
+        normalized = float(value)
+    except (TypeError, ValueError):
+        return float(default)
+    return normalized if math.isfinite(normalized) else float(default)
+
+
+def normalize_active_session_retention(value):
+    retention = deepcopy(DEFAULT_ACTIVE_SESSION_RETENTION)
+    if isinstance(value, dict):
+        retention.update(value)
+    retention["trajectory_limit"] = max(
+        16, int(retention.get("trajectory_limit", 512) or 512)
+    )
+    retention["evidence_limit"] = max(
+        8, int(retention.get("evidence_limit", 256) or 256)
+    )
+    for key in ["pruned_trajectory_entries", "summarized_evidence_entries"]:
+        retention[key] = max(0, int(retention.get(key, 0) or 0))
+    if retention.get("last_compacted_at") is not None:
+        retention["last_compacted_at"] = str(retention["last_compacted_at"])
+
+    summary = retention.get("trajectory_summary")
+    if not isinstance(summary, dict) or not summary.get("session_id"):
+        retention["trajectory_summary"] = None
+    else:
+        retention["trajectory_summary"] = {
+            "session_id": normalize_identifier(summary.get("session_id"), "session_id"),
+            "count": max(0, int(summary.get("count", 0) or 0)),
+            "first_pleasure": _retention_float(summary.get("first_pleasure")),
+            "last_pleasure": _retention_float(summary.get("last_pleasure")),
+            "sum_pleasure": _retention_float(summary.get("sum_pleasure")),
+            "sum_square_pleasure": _retention_float(summary.get("sum_square_pleasure")),
+            "sum_dominance": _retention_float(summary.get("sum_dominance")),
+            "negative_count": max(0, int(summary.get("negative_count", 0) or 0)),
+            "min_pleasure": _retention_float(summary.get("min_pleasure")),
+            "max_after_min": (
+                None
+                if summary.get("max_after_min") is None
+                else _retention_float(summary.get("max_after_min"))
+            ),
+            "pulse_sum": _retention_float(summary.get("pulse_sum")),
+            "pulse_max": max(0.0, _retention_float(summary.get("pulse_max"))),
+        }
+
+    normalized_evidence = []
+    for item in retention.get("evidence_summaries", []):
+        if not isinstance(item, dict) or not item.get("session_id") or not item.get("digest"):
+            continue
+        normalized_evidence.append({
+            "session_id": normalize_identifier(item.get("session_id"), "session_id"),
+            "count": max(0, int(item.get("count", 0) or 0)),
+            "eligible_count": max(0, int(item.get("eligible_count", 0) or 0)),
+            "signed_weight": _retention_float(item.get("signed_weight")),
+            "digest": str(item.get("digest")),
+            "first_created_at": (
+                str(item["first_created_at"])
+                if item.get("first_created_at") is not None
+                else None
+            ),
+            "last_created_at": (
+                str(item["last_created_at"])
+                if item.get("last_created_at") is not None
+                else None
+            ),
+            "consumed_by_settlement_id": (
+                str(item["consumed_by_settlement_id"])
+                if item.get("consumed_by_settlement_id") is not None
+                else None
+            ),
+        })
+    retention["evidence_summaries"] = normalized_evidence
+    return retention
+
+
 def ensure_state_shape(state):
     raw_schema = state.get("_schema") if isinstance(state, dict) else None
     schema = raw_schema or LEGACY_STATE_SCHEMA
@@ -635,7 +890,12 @@ def ensure_state_shape(state):
 
     merged["_schema"] = schema
     merged["identity"] = normalize_identity(merged.get("identity"))
-    merged["capabilities"] = list(STATE_CAPABILITIES) if schema == STATE_SCHEMA else []
+    source_capabilities = state.get("capabilities") if isinstance(state, dict) else None
+    merged["capabilities"] = (
+        list(source_capabilities)
+        if schema == STATE_SCHEMA and isinstance(source_capabilities, list)
+        else []
+    )
     merged["enabled"] = bool(merged.get("enabled", True))
     runtime_mode = str(merged.get("runtime_mode") or "light").strip().lower()
     merged["runtime_mode"] = runtime_mode if runtime_mode in {"light", "always", "paused"} else "light"
@@ -674,12 +934,81 @@ def ensure_state_shape(state):
     merged["idempotency_retention"] = normalize_idempotency_retention(
         merged.get("idempotency_retention")
     )
+    merged["active_session_retention"] = normalize_active_session_retention(
+        merged.get("active_session_retention")
+    )
 
     for key in ["session_count", "total_turns"]:
         merged[key] = int(merged.get(key, 0) or 0)
 
     merged["log_limit"] = max(25, int(merged.get("log_limit", 200) or 200))
     return merged
+
+
+def missing_state_capabilities(state):
+    """Return required capabilities absent from the stored v3 packet.
+
+    Ordinary loads must preserve the packet's declaration exactly. Adding a
+    capability is a state migration owned exclusively by ``upgrade_state``.
+    """
+    if not isinstance(state, dict) or state.get("_schema") != STATE_SCHEMA:
+        return []
+    capabilities = state.get("capabilities")
+    return [
+        capability
+        for capability in STATE_CAPABILITIES
+        if not isinstance(capabilities, list) or capability not in capabilities
+    ]
+
+
+def require_current_state_capabilities(state):
+    missing = missing_state_capabilities(state)
+    if missing:
+        raise ValueError(
+            "state capability upgrade required before writing: "
+            + ", ".join(missing)
+        )
+    return state
+
+
+def require_managed_state_file(state_file):
+    """Require the installer-owned primary packet without creating a default."""
+    if not os.path.isfile(state_file):
+        raise ManagedStateError(
+            "state_file_missing",
+            "Managed Emotion Engine state file is missing; use the owning installer transaction.",
+        )
+
+
+def require_managed_runtime_writable(state_file, state):
+    """Reject an unsafe managed packet before any business mutator runs."""
+    require_managed_state_file(state_file)
+    if state.get("_schema") != STATE_SCHEMA:
+        raise ManagedStateError(
+            "migration_required",
+            "Managed Emotion Engine state requires an explicit migration transaction.",
+            details={"schema": state.get("_schema")},
+        )
+    missing = missing_state_capabilities(state)
+    if missing:
+        raise ManagedStateError(
+            "capability_upgrade_required",
+            "Managed Emotion Engine state requires an explicit capability upgrade transaction.",
+            details={"missing_capabilities": missing},
+        )
+    if state.get("identity", {}).get("status") != "bound":
+        raise ManagedStateError(
+            "identity_binding_required",
+            "Managed Emotion Engine state requires explicit owner identity binding.",
+        )
+    audit = audit_state_integrity(state)
+    if audit["hard_errors"]:
+        raise ManagedStateError(
+            "state_integrity_failed",
+            "Managed Emotion Engine state failed integrity checks; no mutation was applied.",
+            hard_errors=audit["hard_errors"],
+        )
+    return audit
 
 
 def state_is_v3(state):
@@ -746,6 +1075,7 @@ def bind_state_identity(state, character_id, relationship_id):
 
 def migrate_state_v2(state, character_id, relationship_id, state_id=None):
     """Build a v3 packet from v2 without guessing ownership."""
+    validate_raw_managed_shape(state)
     source = ensure_state_shape(state)
     if source.get("_schema") == STATE_SCHEMA:
         assert_state_identity(source, character_id, relationship_id)
@@ -759,7 +1089,7 @@ def migrate_state_v2(state, character_id, relationship_id, state_id=None):
     engine_controlled_keys = {
         "_schema", "identity", "capabilities", "session", "session_ledger",
         "processed_event_ids", "emotion_trajectory", "trust_evidence", "trust_settlements",
-        "idempotency_retention", "legacy_v2",
+        "idempotency_retention", "active_session_retention", "legacy_v2",
     }
     for key, value in source.items():
         if key not in engine_controlled_keys:
@@ -791,6 +1121,56 @@ def migrate_state_v2(state, character_id, relationship_id, state_id=None):
         "identity": deepcopy(migrated["identity"]),
         "archived_legacy_trajectory_entries": len(source.get("emotion_trajectory", [])),
         "archived_legacy_settlements": len(source.get("trust_settlements", [])),
+    }
+
+
+def upgrade_state_v3(state):
+    """Normalize an older v3 packet to the current capability contract.
+
+    This is intentionally separate from ordinary loads so installers can
+    preview, back up, journal, and verify the upgrade before publishing it.
+    """
+    validate_raw_managed_shape(state)
+    if not isinstance(state, dict) or state.get("_schema") != STATE_SCHEMA:
+        raise ValueError("upgrade_state requires an existing v3 state packet")
+    source = deepcopy(state)
+    source_capabilities = (
+        list(source.get("capabilities"))
+        if isinstance(source.get("capabilities"), list)
+        else []
+    )
+    missing_capabilities = [
+        capability for capability in STATE_CAPABILITIES
+        if capability not in source_capabilities
+    ]
+    initialized_fields = [
+        field for field in ("runtime_mode", "active_session_retention")
+        if field not in source
+    ]
+    upgraded = ensure_state_shape(source)
+    upgraded["capabilities"] = list(STATE_CAPABILITIES)
+    active_session_id = upgraded.get("session", {}).get("active_session_id")
+    if not active_session_id and upgraded.get("emotion_trajectory"):
+        active_session_id = "upgrade:legacy-v3"
+    if active_session_id:
+        upgraded = enforce_active_session_retention(upgraded, active_session_id)
+    upgraded = enforce_idempotency_retention(upgraded)
+    changed = upgraded != source
+    retention = upgraded.get("active_session_retention", {})
+    return upgraded, {
+        "status": "upgrade_ready" if changed else "already_current",
+        "from_schema": STATE_SCHEMA,
+        "to_schema": STATE_SCHEMA,
+        "engine_version": ENGINE_VERSION,
+        "missing_capabilities": missing_capabilities,
+        "initialized_fields": initialized_fields,
+        "trajectory_entries_summarized": int(
+            retention.get("pruned_trajectory_entries", 0) or 0
+        ),
+        "trust_evidence_entries_summarized": int(
+            retention.get("summarized_evidence_entries", 0) or 0
+        ),
+        "changed": changed,
     }
 
 
@@ -1146,6 +1526,7 @@ def public_status(state):
         "schema": state.get("_schema"),
         "identity_status": state.get("identity", {}).get("status"),
         "migration_required": state.get("_schema") != STATE_SCHEMA,
+        "capability_upgrade_required": bool(missing_state_capabilities(state)),
         "capabilities": list(state.get("capabilities", [])),
         "session_status": state.get("session", {}).get("status"),
         "idempotency_retention": deepcopy(state.get("idempotency_retention")),
@@ -1179,6 +1560,19 @@ def activation_check(state, state_file, helper_path="emotion_engine_utils.py"):
                     f"{command_prefix} migrate_state {quoted_state_file} "
                     "--character-id <character-id> --relationship-id <relationship-id> --apply"
                 ),
+            },
+        }
+    missing_capabilities = missing_state_capabilities(state)
+    if missing_capabilities:
+        return {
+            **base,
+            "ok": False,
+            "status": "capability_upgrade_required",
+            "message": "Runtime installed; explicitly upgrade the older v3 capability contract before activation.",
+            "missing_capabilities": missing_capabilities,
+            "next_steps": {
+                "dry_run": f"{command_prefix} upgrade_state {quoted_state_file}",
+                "apply": f"{command_prefix} upgrade_state {quoted_state_file} --apply",
             },
         }
     if state.get("identity", {}).get("status") != "bound":
@@ -2162,49 +2556,90 @@ def extract_patterns(state):
     """Extract emotion trajectory patterns for trust evaluation."""
     state = ensure_state_shape(state)
     trajectory = state.get("emotion_trajectory", [])
-    if len(trajectory) < 2:
+    session_id = (
+        state.get("session", {}).get("active_session_id")
+        or state.get("session", {}).get("last_session_id")
+    )
+    summary = state.get("active_session_retention", {}).get("trajectory_summary")
+    if not isinstance(summary, dict) or summary.get("session_id") != session_id:
+        summary = None
+    archived_count = int(summary.get("count", 0) or 0) if summary else 0
+    turn_count = archived_count + len(trajectory)
+    if turn_count < 2:
         return {
             "sufficient_data": False,
-            "turn_count": len(trajectory),
+            "turn_count": turn_count,
         }
 
-    pleasures = [t["P"] for t in trajectory]
-    dominances = [t["D"] for t in trajectory]
-    pulse_intensities = [
-        normalize_affective_pulse(t.get("pulse"))["intensity"]
-        for t in trajectory
-    ]
+    if summary:
+        first_p = _retention_float(summary.get("first_pleasure"))
+        last_p = _retention_float(summary.get("last_pleasure"))
+        sum_p = _retention_float(summary.get("sum_pleasure"))
+        sum_square_p = _retention_float(summary.get("sum_square_pleasure"))
+        sum_d = _retention_float(summary.get("sum_dominance"))
+        negative_count = int(summary.get("negative_count", 0) or 0)
+        min_p = _retention_float(summary.get("min_pleasure"))
+        max_after_min = summary.get("max_after_min")
+        pulse_sum = _retention_float(summary.get("pulse_sum"))
+        pulse_max = _retention_float(summary.get("pulse_max"))
+        observed = archived_count
+    else:
+        first_p = None
+        last_p = None
+        sum_p = 0.0
+        sum_square_p = 0.0
+        sum_d = 0.0
+        negative_count = 0
+        min_p = None
+        max_after_min = None
+        pulse_sum = 0.0
+        pulse_max = 0.0
+        observed = 0
 
-    p_deltas = [pleasures[i+1] - pleasures[i] for i in range(len(pleasures)-1)]
-    avg_p_delta = sum(p_deltas) / len(p_deltas)
+    for entry in trajectory:
+        pleasure = _retention_float(entry.get("P"))
+        dominance = _retention_float(entry.get("D"))
+        pulse = normalize_affective_pulse(entry.get("pulse"))["intensity"]
+        if observed == 0:
+            first_p = pleasure
+            min_p = pleasure
+            max_after_min = None
+        elif pleasure < min_p:
+            min_p = pleasure
+            max_after_min = None
+        else:
+            max_after_min = pleasure if max_after_min is None else max(max_after_min, pleasure)
+        observed += 1
+        last_p = pleasure
+        sum_p += pleasure
+        sum_square_p += pleasure * pleasure
+        sum_d += dominance
+        negative_count += int(pleasure < 0)
+        pulse_sum += pulse
+        pulse_max = max(pulse_max, pulse)
 
-    had_conflict = any(p < -0.2 for p in pleasures)
+    avg_p_delta = (last_p - first_p) / (turn_count - 1)
+    had_conflict = min_p < -0.2
+    had_repair = bool(
+        had_conflict
+        and max_after_min is not None
+        and max_after_min - min_p > 0.2
+    )
+    v_shape = had_conflict and had_repair and last_p > first_p - 0.1
 
-    had_repair = False
-    if had_conflict:
-        min_p = min(pleasures)
-        min_idx = pleasures.index(min_p)
-        if min_idx < len(pleasures) - 1:
-            post_min_max = max(pleasures[min_idx+1:])
-            if post_min_max - min_p > 0.2:
-                had_repair = True
-
-    v_shape = had_conflict and had_repair and pleasures[-1] > pleasures[0] - 0.1
-
-    avg_d = sum(dominances) / len(dominances)
+    avg_d = sum_d / turn_count
     baseline_d = state["personality_baseline"]["dominance"]
     dominance_suppressed = avg_d < baseline_d - 0.2
 
-    mean_p = sum(pleasures) / len(pleasures)
-    variance = sum((p - mean_p) ** 2 for p in pleasures) / len(pleasures)
+    mean_p = sum_p / turn_count
+    variance = max(0.0, (sum_square_p / turn_count) - mean_p * mean_p)
     mood_volatility = math.sqrt(variance)
-    pulse_mean = sum(pulse_intensities) / len(pulse_intensities)
-    pulse_max = max(pulse_intensities)
+    pulse_mean = pulse_sum / turn_count
 
     too_smooth = mood_volatility < 0.05 and pulse_max < 0.12 and mean_p > 0.3
-    end_vs_start_p = pleasures[-1] - pleasures[0]
+    end_vs_start_p = last_p - first_p
 
-    negative_ratio = sum(1 for p in pleasures if p < 0) / len(pleasures)
+    negative_ratio = negative_count / turn_count
     sustained_negative = negative_ratio > 0.6
 
     log_tags = [
@@ -2220,7 +2655,7 @@ def extract_patterns(state):
 
     return {
         "sufficient_data": True,
-        "turn_count": len(trajectory),
+        "turn_count": turn_count,
         "avg_pleasure_delta": round(avg_p_delta, 4),
         "had_conflict": had_conflict,
         "had_repair": had_repair,
@@ -2293,6 +2728,167 @@ def event_already_processed(state, event_id):
     return bool(event_id) and str(event_id) in state.get("processed_event_ids", [])
 
 
+def _archive_trajectory_entry(summary, entry, session_id):
+    pleasure = _retention_float(entry.get("P"))
+    dominance = _retention_float(entry.get("D"))
+    pulse = normalize_affective_pulse(entry.get("pulse"))["intensity"]
+    if not isinstance(summary, dict) or summary.get("session_id") != session_id:
+        summary = {
+            "session_id": session_id,
+            "count": 0,
+            "first_pleasure": pleasure,
+            "last_pleasure": pleasure,
+            "sum_pleasure": 0.0,
+            "sum_square_pleasure": 0.0,
+            "sum_dominance": 0.0,
+            "negative_count": 0,
+            "min_pleasure": pleasure,
+            "max_after_min": None,
+            "pulse_sum": 0.0,
+            "pulse_max": 0.0,
+        }
+    count = int(summary.get("count", 0) or 0)
+    if count == 0:
+        summary["first_pleasure"] = pleasure
+        summary["min_pleasure"] = pleasure
+        summary["max_after_min"] = None
+    elif pleasure < summary["min_pleasure"]:
+        summary["min_pleasure"] = pleasure
+        summary["max_after_min"] = None
+    else:
+        previous_max = summary.get("max_after_min")
+        summary["max_after_min"] = pleasure if previous_max is None else max(previous_max, pleasure)
+    summary["count"] = count + 1
+    summary["last_pleasure"] = pleasure
+    summary["sum_pleasure"] = _retention_float(summary.get("sum_pleasure")) + pleasure
+    summary["sum_square_pleasure"] = (
+        _retention_float(summary.get("sum_square_pleasure")) + pleasure * pleasure
+    )
+    summary["sum_dominance"] = _retention_float(summary.get("sum_dominance")) + dominance
+    summary["negative_count"] = int(summary.get("negative_count", 0) or 0) + int(pleasure < 0)
+    summary["pulse_sum"] = _retention_float(summary.get("pulse_sum")) + pulse
+    summary["pulse_max"] = max(_retention_float(summary.get("pulse_max")), pulse)
+    return summary
+
+
+def _evidence_archive_id(summary):
+    payload = f"{summary.get('session_id')}\0{summary.get('digest')}"
+    return "archive:" + hashlib.sha256(payload.encode("utf-8")).hexdigest()[:32]
+
+
+def _archive_trust_evidence(summary, evidence, session_id):
+    if not isinstance(summary, dict) or summary.get("session_id") != session_id:
+        summary = {
+            "session_id": session_id,
+            "count": 0,
+            "eligible_count": 0,
+            "signed_weight": 0.0,
+            "digest": hashlib.sha256(session_id.encode("utf-8")).hexdigest(),
+            "first_created_at": evidence.get("created_at"),
+            "last_created_at": evidence.get("created_at"),
+            "consumed_by_settlement_id": None,
+        }
+    canonical = json.dumps(
+        {
+            key: evidence.get(key)
+            for key in [
+                "evidence_id", "event_id", "evidence_type", "direction",
+                "weight", "eligible", "created_at", "consumed_by_settlement_id",
+            ]
+        },
+        ensure_ascii=False,
+        sort_keys=True,
+        separators=(",", ":"),
+    )
+    summary["digest"] = hashlib.sha256(
+        (summary["digest"] + "\0" + canonical).encode("utf-8")
+    ).hexdigest()
+    summary["count"] = int(summary.get("count", 0) or 0) + 1
+    summary["last_created_at"] = evidence.get("created_at")
+    if evidence.get("eligible") is True and not evidence.get("consumed_by_settlement_id"):
+        summary["eligible_count"] = int(summary.get("eligible_count", 0) or 0) + 1
+        summary["signed_weight"] = round(
+            _retention_float(summary.get("signed_weight"))
+            + _retention_float(evidence.get("direction")) * _retention_float(evidence.get("weight")),
+            8,
+        )
+    return summary
+
+
+def enforce_active_session_retention(state, session_id):
+    """Bound live-session detail while preserving pattern and settlement semantics."""
+    retention = normalize_active_session_retention(state.get("active_session_retention"))
+    state["active_session_retention"] = retention
+    compacted = False
+
+    trajectory = state.setdefault("emotion_trajectory", [])
+    overflow = max(0, len(trajectory) - retention["trajectory_limit"])
+    if overflow:
+        summary = retention.get("trajectory_summary")
+        for entry in trajectory[:overflow]:
+            summary = _archive_trajectory_entry(summary, entry, session_id)
+        del trajectory[:overflow]
+        retention["trajectory_summary"] = summary
+        retention["pruned_trajectory_entries"] += overflow
+        compacted = True
+
+    evidence = state.setdefault("trust_evidence", [])
+    session_indexes = [
+        index for index, item in enumerate(evidence)
+        if item.get("session_id") == session_id
+    ]
+    evidence_overflow = max(0, len(session_indexes) - retention["evidence_limit"])
+    if evidence_overflow:
+        indexes_to_archive = set(session_indexes[:evidence_overflow])
+        summary = next(
+            (
+                item for item in retention["evidence_summaries"]
+                if item.get("session_id") == session_id
+            ),
+            None,
+        )
+        for index in sorted(indexes_to_archive):
+            summary = _archive_trust_evidence(summary, evidence[index], session_id)
+        retention["evidence_summaries"] = [
+            item for item in retention["evidence_summaries"]
+            if item.get("session_id") != session_id
+        ] + [summary]
+        state["trust_evidence"] = [
+            item for index, item in enumerate(evidence) if index not in indexes_to_archive
+        ]
+        retention["summarized_evidence_entries"] += evidence_overflow
+        compacted = True
+
+    if compacted:
+        retention["last_compacted_at"] = now_iso()
+    return state
+
+
+def archived_trust_evidence(state, session_id, include_consumed=False):
+    archived = []
+    retention = state.get("active_session_retention", {})
+    for summary in retention.get("evidence_summaries", []):
+        if (
+            summary.get("session_id") != session_id
+            or int(summary.get("eligible_count", 0) or 0) <= 0
+            or (summary.get("consumed_by_settlement_id") and not include_consumed)
+        ):
+            continue
+        signed_weight = _retention_float(summary.get("signed_weight"))
+        archived.append({
+            "evidence_id": _evidence_archive_id(summary),
+            "session_id": session_id,
+            "evidence_type": "archived_summary",
+            "direction": -1 if signed_weight < 0 else 1,
+            "weight": abs(signed_weight),
+            "eligible": True,
+            "archived_count": int(summary.get("eligible_count", 0) or 0),
+            "digest": summary.get("digest"),
+            "consumed_by_settlement_id": summary.get("consumed_by_settlement_id"),
+        })
+    return archived
+
+
 def enforce_idempotency_retention(state):
     """Bound replay ledgers and prune completed session evidence as one bundle.
 
@@ -2333,6 +2929,20 @@ def enforce_idempotency_retention(state):
             if entry.get("session_id") not in pruned_session_ids
         ]
         retention["pruned_evidence"] += len(old_evidence) - len(state["trust_evidence"])
+
+        active_retention = state.setdefault(
+            "active_session_retention", deepcopy(DEFAULT_ACTIVE_SESSION_RETENTION)
+        )
+        old_summaries = active_retention.setdefault("evidence_summaries", [])
+        removed_summaries = [
+            item for item in old_summaries if item.get("session_id") in pruned_session_ids
+        ]
+        active_retention["evidence_summaries"] = [
+            item for item in old_summaries if item.get("session_id") not in pruned_session_ids
+        ]
+        retention["pruned_evidence"] += sum(
+            int(item.get("count", 0) or 0) for item in removed_summaries
+        )
 
         old_settlements = state.setdefault("trust_settlements", [])
         state["trust_settlements"] = [
@@ -2386,7 +2996,7 @@ def assess_trust_settlement(state, session_id=None, patterns=None):
     """Assess trust exclusively from explicit, unconsumed evidence."""
     state = ensure_state_shape(state)
     session_id = session_id or state.get("session", {}).get("last_session_id")
-    evidence = [
+    evidence = archived_trust_evidence(state, session_id) + [
         item for item in state.get("trust_evidence", [])
         if item.get("session_id") == session_id
         and item.get("eligible") is True
@@ -2483,6 +3093,9 @@ def settle_trust(
     for item in state.get("trust_evidence", []):
         if item.get("evidence_id") in evidence_ids:
             item["consumed_by_settlement_id"] = settlement_id
+    for summary in state.get("active_session_retention", {}).get("evidence_summaries", []):
+        if _evidence_archive_id(summary) in evidence_ids:
+            summary["consumed_by_settlement_id"] = settlement_id
     record["status"] = "settled"
     record["settled_at"] = now_iso()
     record["settlement_id"] = settlement_id
@@ -2640,6 +3253,9 @@ def session_start(
     state = compute_trust_time_decay(state)
     after = state["emotion"].copy()
     state["emotion_trajectory"] = []
+    state.setdefault(
+        "active_session_retention", deepcopy(DEFAULT_ACTIVE_SESSION_RETENTION)
+    )["trajectory_summary"] = None
     state["session_count"] = state.get("session_count", 0) + 1
     timestamp = occurred_at or now_iso()
     state["last_interaction_iso"] = timestamp
@@ -2784,7 +3400,12 @@ def record_turn(
         label=appraisal or "turn",
         source="record_turn",
     )
-    turn = len(state["emotion_trajectory"]) + 1
+    active_record = session_record(state, session_id)
+    turn = (
+        int(active_record.get("turn_count", 0) or 0) + 1
+        if active_record
+        else len(state["emotion_trajectory"]) + 1
+    )
     if cue and not situation:
         situation = cue
 
@@ -2846,6 +3467,7 @@ def record_turn(
     if ledger_entry:
         ledger_entry["turn_count"] = int(ledger_entry.get("turn_count", 0)) + 1
     mark_event_processed(state, event_id)
+    enforce_active_session_retention(state, session_id)
     return state, {
         "status": "recorded" if persist_log else "state_only",
         "session_id": session_id,
@@ -3091,6 +3713,28 @@ _legacy_audit_emotion_log = audit_emotion_log
 
 def audit_state_integrity(state):
     """Check hard state invariants separately from heuristic semantic warnings."""
+    raw_shape_errors = raw_managed_shape_errors(state)
+    if raw_shape_errors:
+        identity = state.get("identity") if isinstance(state, dict) else None
+        return {
+            "ok": False,
+            "schema": state.get("_schema") if isinstance(state, dict) else None,
+            "identity_status": identity.get("status") if isinstance(identity, dict) else None,
+            "hard_errors": raw_shape_errors,
+            "semantic_warnings": [],
+            "counts": {
+                "sessions": 0,
+                "processed_events": 0,
+                "trust_evidence": 0,
+                "summarized_trust_evidence": 0,
+                "retained_trajectory": 0,
+                "summarized_trajectory": 0,
+                "trust_settlements": 0,
+                "turns": 0,
+                "task_like_turns": 0,
+                "lifecycle_housekeeping": 0,
+            },
+        }
     state = ensure_state_shape(state)
     hard_errors = []
     semantic_warnings = []
@@ -3100,33 +3744,61 @@ def audit_state_integrity(state):
     elif state.get("identity", {}).get("status") != "bound":
         hard_errors.append({"code": "identity_unbound"})
 
+    missing_capabilities = missing_state_capabilities(state)
+    if missing_capabilities:
+        hard_errors.append({
+            "code": "missing_required_capabilities",
+            "capabilities": missing_capabilities,
+        })
+
     session_ids = [entry.get("session_id") for entry in state.get("session_ledger", [])]
-    duplicate_session_ids = sorted({value for value in session_ids if value and session_ids.count(value) > 1})
+    duplicate_session_ids = sorted(
+        value for value, count in Counter(session_ids).items() if value and count > 1
+    )
     if duplicate_session_ids:
         hard_errors.append({"code": "duplicate_session_ids", "ids": duplicate_session_ids})
 
     processed_ids = [str(value) for value in state.get("processed_event_ids", []) if value]
-    duplicate_event_ids = sorted({value for value in processed_ids if processed_ids.count(value) > 1})
+    processed_id_set = set(processed_ids)
+    duplicate_event_ids = sorted(
+        value for value, count in Counter(processed_ids).items() if value and count > 1
+    )
     if duplicate_event_ids:
         hard_errors.append({"code": "duplicate_processed_event_ids", "ids": duplicate_event_ids})
 
     evidence_ids = [entry.get("evidence_id") for entry in state.get("trust_evidence", [])]
-    duplicate_evidence_ids = sorted({value for value in evidence_ids if value and evidence_ids.count(value) > 1})
+    archived_evidence = [
+        item
+        for summary in state.get("active_session_retention", {}).get("evidence_summaries", [])
+        for item in archived_trust_evidence(
+            state, summary.get("session_id"), include_consumed=True
+        )
+        if item.get("digest") == summary.get("digest")
+    ]
+    archived_evidence_ids = [item.get("evidence_id") for item in archived_evidence]
+    duplicate_evidence_ids = sorted(
+        value for value, count in Counter(evidence_ids).items() if value and count > 1
+    )
     if duplicate_evidence_ids:
         hard_errors.append({"code": "duplicate_evidence_ids", "ids": duplicate_evidence_ids})
 
     settlement_ids = [entry.get("settlement_id") for entry in state.get("trust_settlements", [])]
-    duplicate_settlement_ids = sorted({value for value in settlement_ids if value and settlement_ids.count(value) > 1})
+    duplicate_settlement_ids = sorted(
+        value for value, count in Counter(settlement_ids).items() if value and count > 1
+    )
     if duplicate_settlement_ids:
         hard_errors.append({"code": "duplicate_settlement_ids", "ids": duplicate_settlement_ids})
 
     known_sessions = {value for value in session_ids if value}
     known_settlements = {value for value in settlement_ids if value}
-    known_evidence = {value for value in evidence_ids if value}
+    known_evidence = {
+        value for value in [*evidence_ids, *archived_evidence_ids] if value
+    }
     evidence_by_id = {
         entry.get("evidence_id"): entry for entry in state.get("trust_evidence", [])
         if entry.get("evidence_id")
     }
+    evidence_by_id.update({item["evidence_id"]: item for item in archived_evidence})
     settlements_by_session = {}
     for entry in state.get("trust_settlements", []):
         settlements_by_session.setdefault(entry.get("session_id"), set()).add(
@@ -3159,6 +3831,31 @@ def audit_state_integrity(state):
                 or entry.get("session_id") != settlement.get("session_id")
             ):
                 hard_errors.append({"code": "evidence_settlement_mismatch", "evidence_id": entry.get("evidence_id")})
+    for summary in state.get("active_session_retention", {}).get("evidence_summaries", []):
+        archive_id = _evidence_archive_id(summary)
+        if summary.get("session_id") not in known_sessions:
+            hard_errors.append({
+                "code": "orphan_trust_evidence_summary", "evidence_id": archive_id,
+            })
+        consumed = summary.get("consumed_by_settlement_id")
+        if consumed and consumed not in known_settlements:
+            hard_errors.append({
+                "code": "evidence_summary_consumed_by_missing_settlement",
+                "evidence_id": archive_id,
+            })
+        elif consumed:
+            settlement = next(
+                item for item in state.get("trust_settlements", [])
+                if item.get("settlement_id") == consumed
+            )
+            if (
+                archive_id not in settlement.get("evidence_ids", [])
+                or summary.get("session_id") != settlement.get("session_id")
+            ):
+                hard_errors.append({
+                    "code": "evidence_summary_settlement_mismatch",
+                    "evidence_id": archive_id,
+                })
     for entry in state.get("trust_settlements", []):
         if entry.get("session_id") not in known_sessions:
             hard_errors.append({"code": "orphan_trust_settlement", "settlement_id": entry.get("settlement_id")})
@@ -3306,27 +4003,43 @@ def audit_state_integrity(state):
                 "code": "session_ledger_turn_count_too_small", "session_id": session_id,
             })
 
+    active_retention = state.get("active_session_retention", {})
     trajectory = state.get("emotion_trajectory", [])
+    if len(trajectory) > int(active_retention.get("trajectory_limit", 512) or 512):
+        hard_errors.append({"code": "active_trajectory_retention_exceeded"})
+    evidence_limit = int(active_retention.get("evidence_limit", 256) or 256)
+    evidence_counts = {}
+    for item in state.get("trust_evidence", []):
+        evidence_counts[item.get("session_id")] = evidence_counts.get(item.get("session_id"), 0) + 1
+    if any(count > evidence_limit for count in evidence_counts.values()):
+        hard_errors.append({"code": "active_evidence_retention_exceeded"})
     trajectory_turns = [entry.get("turn") for entry in trajectory]
-    if trajectory_turns != list(range(1, len(trajectory) + 1)):
+    trajectory_summary = active_retention.get("trajectory_summary")
+    archived_turns = (
+        int(trajectory_summary.get("count", 0) or 0)
+        if isinstance(trajectory_summary, dict)
+        else 0
+    )
+    if trajectory_turns != list(range(archived_turns + 1, archived_turns + len(trajectory) + 1)):
         hard_errors.append({"code": "trajectory_turn_sequence", "turns": trajectory_turns})
     trajectory_event_ids = [entry.get("event_id") for entry in trajectory if entry.get("event_id")]
-    duplicate_trajectory_events = sorted({
-        value for value in trajectory_event_ids if trajectory_event_ids.count(value) > 1
-    })
+    duplicate_trajectory_events = sorted(
+        value for value, count in Counter(trajectory_event_ids).items()
+        if value and count > 1
+    )
     if duplicate_trajectory_events:
         hard_errors.append({
             "code": "duplicate_trajectory_event_ids", "ids": duplicate_trajectory_events,
         })
     if not state.get("idempotency_retention", {}).get("pruned_events"):
         missing_trajectory_events = [
-            value for value in trajectory_event_ids if value not in set(processed_ids)
+            value for value in trajectory_event_ids if value not in processed_id_set
         ]
         if missing_trajectory_events:
             hard_errors.append({
                 "code": "trajectory_events_not_processed", "ids": missing_trajectory_events,
             })
-    if int(state.get("total_turns", 0) or 0) < len(trajectory):
+    if int(state.get("total_turns", 0) or 0) < archived_turns + len(trajectory):
         hard_errors.append({"code": "total_turns_below_trajectory"})
     expected_trajectory_session = active_id or current.get("last_session_id")
     mismatched_trajectory_sessions = sorted({
@@ -3370,6 +4083,12 @@ def audit_state_integrity(state):
             "sessions": len(state.get("session_ledger", [])),
             "processed_events": len(processed_ids),
             "trust_evidence": len(state.get("trust_evidence", [])),
+            "summarized_trust_evidence": sum(
+                int(item.get("count", 0) or 0)
+                for item in active_retention.get("evidence_summaries", [])
+            ),
+            "retained_trajectory": len(trajectory),
+            "summarized_trajectory": archived_turns,
             "trust_settlements": len(state.get("trust_settlements", [])),
             "turns": turn_log_count,
             "task_like_turns": task_like_count,
@@ -3583,6 +4302,7 @@ def strip_cli_options(args, option_names, flag_names=None):
 STATE_MUTATING_COMMANDS = {
     "bind_identity",
     "migrate_state",
+    "upgrade_state",
     "configure",
     "tune",
     "pause",
@@ -3601,6 +4321,31 @@ STATE_MUTATING_COMMANDS = {
     "evaluate_turn",
     "reconcile_trust",
 }
+
+MANAGED_RUNTIME_BLOCKED_COMMANDS = {
+    "init",
+    "bind_identity",
+    "migrate_state",
+    "upgrade_state",
+    "reset",
+}
+
+
+def command_will_write(command, args):
+    if command in {"compact_log", "reconcile_trust"}:
+        return "--apply" in args
+    return command in STATE_MUTATING_COMMANDS
+
+
+def parse_runtime_argv(argv):
+    args = list(argv)
+    managed_runtime = False
+    if args and args[0] == "--managed-runtime":
+        managed_runtime = True
+        args = args[1:]
+    if len(args) < 2:
+        raise ValueError("expected <command> <state_file>")
+    return managed_runtime, args
 
 
 def run_command(command, state_file, state):
@@ -3661,6 +4406,8 @@ def run_command(command, state_file, state):
             sys.exit(2)
         if result["status"] == "identity_binding_required":
             sys.exit(3)
+        if result["status"] == "capability_upgrade_required":
+            sys.exit(4)
 
     elif command == "configure":
         args = sys.argv[3:]
@@ -3702,14 +4449,43 @@ def run_command(command, state_file, state):
         print_json(result)
 
     elif command == "pause":
+        current_mode = str(state.get("runtime_mode") or "light").strip().lower()
+        if current_mode in {"light", "always"}:
+            state["runtime_mode_before_pause"] = current_mode
         state["enabled"] = False
+        state["runtime_mode"] = "paused"
         save_state(state_file, state)
-        print_json({"ok": True, "enabled": False, "message": "Emotion Engine paused. State is preserved but no emotion lifecycle updates will be recorded."})
+        print_json({
+            "ok": True,
+            "enabled": False,
+            "runtime_mode": "paused",
+            "message": "Emotion Engine paused. State is preserved but no emotion lifecycle updates will be recorded.",
+        })
 
     elif command == "resume":
+        requested_mode = cli_option(
+            sys.argv[3:],
+            "--mode",
+            state.get("runtime_mode_before_pause") or "light",
+        )
+        requested_mode = str(requested_mode).strip().lower()
+        if requested_mode not in {"light", "always"}:
+            print_json({
+                "ok": False,
+                "status": "invalid_mode",
+                "message": "resume --mode must be light or always",
+            })
+            sys.exit(1)
         state["enabled"] = True
+        state["runtime_mode"] = requested_mode
+        state.pop("runtime_mode_before_pause", None)
         save_state(state_file, state)
-        print_json({"ok": True, "enabled": True, "message": "Emotion Engine resumed."})
+        print_json({
+            "ok": True,
+            "enabled": True,
+            "runtime_mode": requested_mode,
+            "message": "Emotion Engine resumed.",
+        })
 
     elif command == "clear_log":
         state["emotion_log"] = []
@@ -3973,13 +4749,22 @@ def run_command(command, state_file, state):
         sys.exit(1)
 
 
-def main():
-    if len(sys.argv) < 3:
+def _main():
+    try:
+        managed_runtime, args = parse_runtime_argv(sys.argv[1:])
+    except ValueError:
         print(__doc__)
         sys.exit(1)
+    sys.argv = [sys.argv[0], *args]
 
-    command = sys.argv[1]
-    state_file = sys.argv[2]
+    command = args[0]
+    state_file = args[1]
+
+    if managed_runtime and command in MANAGED_RUNTIME_BLOCKED_COMMANDS:
+        raise ManagedStateError(
+            "installer_transaction_required",
+            f"{command} is owned by the installer transaction in managed runtime mode.",
+        )
 
     if command == "init":
         args = sys.argv[3:]
@@ -4000,9 +4785,27 @@ def main():
         })
         return
 
+    if command == "upgrade_state":
+        args = sys.argv[3:]
+        with state_file_lock(state_file):
+            if not os.path.exists(state_file):
+                raise ValueError("upgrade_state requires an existing state file")
+            source = read_json_file(state_file)
+            upgraded, result = upgrade_state_v3(source)
+            apply = "--apply" in args
+            result["dry_run"] = not apply
+            if apply and result["changed"]:
+                save_state_unlocked(state_file, upgraded)
+                result["status"] = "upgraded"
+                result["backup_path"] = state_backup_path(state_file)
+        print_json(result)
+        return
+
     if command in STATE_MUTATING_COMMANDS:
         with state_file_lock(state_file):
-            state = load_state_unlocked(state_file)
+            if managed_runtime:
+                require_managed_state_file(state_file)
+            state = load_state_unlocked(state_file, validate_raw_shape=True)
             if command != "migrate_state" and state.get("_schema") != STATE_SCHEMA:
                 print_json({
                     "ok": False,
@@ -4012,11 +4815,40 @@ def main():
                     "message": "v2 state is read-only; run migrate_state with explicit owner identity",
                 })
                 sys.exit(2)
+            missing_capabilities = missing_state_capabilities(state)
+            if command != "migrate_state" and missing_capabilities:
+                print_json({
+                    "ok": False,
+                    "engine_version": ENGINE_VERSION,
+                    "status": "capability_upgrade_required",
+                    "schema": state.get("_schema"),
+                    "missing_capabilities": missing_capabilities,
+                    "message": "v3 state is read-only until upgrade_state is explicitly applied",
+                })
+                sys.exit(2)
+            if managed_runtime and command_will_write(command, sys.argv[3:]):
+                require_managed_runtime_writable(state_file, state)
+            run_command(command, state_file, state)
+        return
+
+    if managed_runtime:
+        with state_file_lock(state_file):
+            require_managed_state_file(state_file)
+            state = load_state_unlocked(state_file, validate_raw_shape=True)
             run_command(command, state_file, state)
         return
 
     state = load_state(state_file)
     run_command(command, state_file, state)
+
+
+def main():
+    try:
+        return _main()
+    except ManagedStateError as exc:
+        state_file = sys.argv[2] if len(sys.argv) >= 3 else ""
+        print_json(exc.as_dict(state_file))
+        sys.exit(2)
 
 
 if __name__ == "__main__":

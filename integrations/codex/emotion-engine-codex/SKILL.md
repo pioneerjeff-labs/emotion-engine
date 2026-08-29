@@ -34,7 +34,7 @@ If the target only has this skill folder and no project wrapper, use:
 MCP is optional. Use it when a local MCP-capable client should expose Emotion Engine as native tools instead of shell commands. Register the bundled stdio server with the same Codex state file used by the wrapper:
 
 ```bash
-python3 .codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py --state .emotion-engine/codex-state.json
+python3 .codex/skills/emotion-engine-codex/scripts/emotion_engine_mcp.py --state .emotion-engine/codex-state.json --locked-state --managed-runtime
 ```
 
 For local client setup, prefer the registration helper:
@@ -43,7 +43,7 @@ For local client setup, prefer the registration helper:
 python3 .codex/skills/emotion-engine-codex/scripts/register_mcp_client.py codex --project-dir . --state-profile codex
 ```
 
-The MCP server exposes runtime/protocol tools only. Agent Harness owns install refresh, doctor, repair, manifest checks, and sidecar drift checks.
+The MCP server exposes runtime/protocol tools only. `--locked-state` prevents request-level state path overrides, and `--managed-runtime` requires an existing fixed primary state, fails closed on structural integrity errors, and reserves initialization, identity binding, migration, capability upgrade, and reset for Agent Harness. Agent Harness owns install refresh, doctor, repair, manifest checks, and sidecar drift checks.
 
 The wrapper automatically initializes an unbound v3 state file if missing. Before the first emotional mutation, bind it explicitly:
 
